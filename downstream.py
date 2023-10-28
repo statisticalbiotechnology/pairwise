@@ -108,6 +108,9 @@ class DownstreamObj:
     def initialize_encoder_optimizer_weights(self):
         self.opt_encoder.build(self.encoder.trainable_variables)
 
+    def save_head(self, fp='./head.wts'):
+        self.head.save_weights(fp)
+
     def split_labels_str(self, incl_str):
         return [label for label in self.dl.labels if incl_str in label]
 
