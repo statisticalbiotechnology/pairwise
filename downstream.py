@@ -110,6 +110,13 @@ class DownstreamObj:
 
     def save_head(self, fp='./head.wts'):
         self.head.save_weights(fp)
+    
+    def save_encoder(self, fp='./encoder.wts'):
+        self.encoder.save_weights(fp)
+
+    def save_all_weights(self, fp='./'):
+        self.save_head(fp=fp+'head.wts')
+        self.save_encoder(fp=fp+'encoder.wts')
 
     def split_labels_str(self, incl_str):
         return [label for label in self.dl.labels if incl_str in label]
@@ -532,6 +539,7 @@ with open("./yaml/downstream.yaml") as stream:
 print("Denovo sequencing")
 D = DenovoArDSObj(config)
 print("\n".join(D.TrainEval()))
+D.save_all_weights("./")
 #print("Charge evaluation")
 #D = ChargeDSObj(config)
 #print("\n".join(D.TrainEval()))
