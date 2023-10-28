@@ -1,0 +1,53 @@
+encoder_dict:
+  norm_type: 'layer'
+  mz_units: 512
+  subdivide: True
+  running_units: 256
+  att_d: 64
+  att_h: 4
+  depth: 9
+  ffn_multiplier: 1
+  prenorm: True
+  use_charge: False
+  use_energy: False
+  use_mass: False
+  recycling_its: 1
+
+header_dict:
+  trinary_ab:
+    num_classes: 3
+    norm_type: batch
+    penult_units: 512
+    spectrum_wise: False
+  trinary_mz:
+    num_classes: 3
+    norm_type: batch
+    penult_units: 512
+    spectrum_wise: False
+  hidden_mz:
+    out_types: ['mz']
+    norm_type: batch
+    penult_units: 512
+  hidden_ab:
+    out_types: ['ab']
+    norm_type: batch
+    penult_units: 512
+  hidden_spectrum:
+    out_types: ['ab']
+    norm_type: batch
+    penult_units: 256
+  hidden_charge:
+    norm_type: batch
+    penult_units: 512
+    spectrum_wise: True
+  hidden_mass:
+    norm_type: batch
+    penult_units: 512
+    spectrum_wise: True
+  doctored_mz:
+    norm_type: batch
+    penult_units: 512
+    spectrum_wise: True
+  doctored_mz2:
+    norm_type: batch
+    penult_units: 512
