@@ -1,14 +1,15 @@
 batch_size: 100
-lr: 0.0005
+lr: 0.00005
 pretrain_path:
 epochs: 5
 steps_per_epoch: 10000
-train_encoder: False
-encoder_start: 0
+train_encoder: True
+encoder_start: 1000
+save_weights: True
 debug: False
 # Downstream tasks
 # Denovo sequencing
-denovo:
+denovo_bl:
   loader:
     paths:
       train:
@@ -25,6 +26,7 @@ denovo:
   head_dict:
     penult_units: 512
     drop_rate: 0
+  save_weights: False
 denovo_ar:
   loader:
     paths:
@@ -53,6 +55,8 @@ denovo_ar:
     prenorm: True
     preembed: True
     penultimate_units:
+    pool: False
+  save_weights: True
 charge:
   loader:
       paths:

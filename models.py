@@ -423,7 +423,7 @@ class Encoder(K.Model):
                 (x.shape[0], 1)
             ) # bs, seq_len
             mask = grid >= length[:, None]
-            mask = 200*tf.cast(mask, tf.float32)
+            mask = 1e5*tf.cast(mask, tf.float32)
         else:
             mask = None
         
@@ -588,7 +588,7 @@ class Decoder(K.Model):
             # - if predict token is at position 5 (zero-based), mask out 
             #   positions 5 to seq_len, i.e. you can only attend to positions 
             #   0, 1, 2, 3, 4
-            mask = 200 * tf.cast(seqs >= seqlen[:,None], tf.float32)
+            mask = 1e5 * tf.cast(seqs >= seqlen[:,None], tf.float32)
         
         return mask
     
@@ -695,16 +695,11 @@ class DenovoDecoder:
     
         return out
 
-    #def sandwich(self, intseq):
-    #    return self.append_nulltok(self.prepend_startok(intseq))
-
-    def initial_intseq(self, batch_size, seqlen=None, include_predtok=False):
+    def initial_intseq(self, batch_size, seqlen=None):
         seq_length = self.seq_len if seqlen==None else seqlen
         intseq = tf.fill((batch_size, seq_length-1), self.hidden_token)
         out = self.prepend_startok(intseq) # bs, seq_length
         #out = self.set_tokens(out, int(seq_length+1), self.hidden_token)
-        if include_predtok:
-            out = self.set_tokens(out, 1, self.pred_token)
 
         return out
 
@@ -762,7 +757,14 @@ class DenovoDecoder:
 
         return out
 
-    def decinp(self, intseq, enc_out, charge=None, energy=None, mass=None, training=False):
+    def decinp(self, 
+        intseq, 
+        enc_out, 
+        charge=None, 
+        energy=None, 
+        mass=None, 
+        training=False
+        ):
         dec_inp = {
             'intseq': intseq,
             'kv_feats': enc_out['emb'],
@@ -791,7 +793,6 @@ class DenovoDecoder:
         
             index = int(i)
         
-            #intseq = self.set_tokens(intseq, index+1, self.pred_token)
             dec_out = self(intseq, enc_out, batdic, False)
 
             predictions = self.greedy(dec_out[:, index])

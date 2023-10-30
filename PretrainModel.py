@@ -88,6 +88,9 @@ header_dict['hidden_spectrum']['bins'] = config['max_peaks']
 header_dict['hidden_charge']['num_classes'] = tc['hidden_charge']['max_charge']
 header_dict = {task: header_dict[task] for task in config['tasks']}
 header = Header(header_dict)
+# Override downstream saving if log is False
+if config['svwts'] is False:
+    dsconfig['save_weights'] = False
 
 # Call model to create weights
 batch = L.load_batch(labels[:config['batch_size']])
@@ -154,7 +157,8 @@ if not config['debug']:
     allds = {
         'charge': ds.ChargeDSObj,
         'peplen': ds.PeplenDSObj,
-        'denovo': ds.DenovoDSObj,
+        'denovo_ar': ds.DenovoArDSObj,
+        'denovo_bl': ds.DenovoBlDSObj,
     }
 
 ###############################################################################
@@ -205,6 +209,8 @@ def train(epochs=1, runlen=50, svfreq=3600):
         os.mkdir('save/%s/yaml'%svdir)
         os.system("cp ./yaml/*.yaml save/%s/yaml/"%svdir)
         if config['svwts']: save_all_weights(svdir)
+    else:
+        svdir = './' # for establishing ds objects below
     
     # Log starting messages and start collection all lines
     if msg:
@@ -264,16 +270,6 @@ def train(epochs=1, runlen=50, svfreq=3600):
             if time()-svtime > svfreq:
                 if swt:
                     save_all_weights(svdir)
-                """
-                sys.stdout.write("\r\033[KDownstream evlauation: %s\n"%(dstask))
-                line = DS.TrainEval()
-                Line = "Downstream evlauation: %s; "%(dstask) + line
-                sys.stdout.write("\r\033[K%s\n"%Line)
-                if msg:
-                    with open("save/%s/valout.txt"%outnm, 'a') as F:
-                        F.write("Global step %d: %s\n"%(encoder.global_step, line))
-                    allvallines.append(Line)
-                """
                 svtime = time()
 
         # End of epoch
@@ -285,20 +281,20 @@ def train(epochs=1, runlen=50, svfreq=3600):
             epoch, encoder.global_step.numpy(), loss_string, time()-start_epoch
         )
         sys.stdout.write("\r\033[K%s\n"%Line)
-        # Run quick(ish) few shot evaluation
-        #line2 = DS.TrainEval()
-        #sys.std.write('%s\n'%line2)
         if msg:
             U.message_board(Line+'\n', "save/%s/epochout.txt"%svdir)
             allepochlines.append(Line+"\n")
     
     # End of pre-training
-    # Save weights, perahps
+    # Save weights, perhaps
     if swt:
         save_all_weights(svdir)
     # Run quick(ish) few shot downstream evaluation
     for dstask in config['downstream']:
-        DS = allds[dstask](dsconfig, base_model=encoder)
+        DS = allds[dstask](
+            dsconfig, base_model=encoder, 
+            svdir='save/%s/dswts/%s/'%(svdir, dstask)
+        )
         sys.stdout.write("\r\033[KDownstream evlauation: %s\n"%(dstask))
         line = DS.TrainEval()
         Line = "Downstream evlauation: %s; "%(dstask) + line[-1]

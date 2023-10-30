@@ -1,7 +1,6 @@
 """
 TODO
-- Consider speeding up training function by replacing choice with epochs and permutation
-- Make sure mask_length is consistent with trained model (it currently isn't)
+- Fix error of variables created on non-first call when training encoder
 """
 import tensorflow as tf
 import yaml
@@ -25,7 +24,7 @@ class DownstreamObj:
         
         self.config = config
         self.task = task
-        assert task in config.keys()
+        #assert task in config.keys()
         # Optimizer(s)
         self.opt_head = tf.keras.optimizers.Adam(learning_rate=config['lr'])
         self.opt_encoder = tf.keras.optimizers.Adam(learning_rate=config['lr'])
@@ -85,13 +84,14 @@ class DownstreamObj:
         }
         out = self.encoder(**model_inp) # forward pass in eval mode
         
-        # Special function for inference if special, else just standard
+        # Special function for inference if special==True, else just standard
         # encoder_embedding as input to call function
         if special:
             self.head.initialize_variables(batch, out['emb'])
         else:
             head_out = self.head(out['emb'], training=False)
         self.opt_head.build(self.head.trainable_variables)
+        
         # If the encoder is imported, assume this is pretraining and encoder is
         # already trained, i.e. do not change its weights in this program.
         # ELSE: change its weights all you desire
@@ -100,10 +100,11 @@ class DownstreamObj:
                 self.encoder.load_weights(
                     self.config['pretrain_path'] + '/weights/model_encoder.wts'
                 )
-            # This option will be true if you plan to allow the encoder weights
-            # to float during downstream training; else just train the head.
-            if self.config['train_encoder']:
-                self.initialize_encoder_optimizer_weights()
+        
+        # This option will be true if you plan to allow the encoder weights
+        # to float during downstream training; else just train the head.
+        if self.config['train_encoder']:
+            self.initialize_encoder_optimizer_weights()
 
     def initialize_encoder_optimizer_weights(self):
         self.opt_encoder.build(self.encoder.trainable_variables)
@@ -114,14 +115,16 @@ class DownstreamObj:
     def save_encoder(self, fp='./encoder.wts'):
         self.encoder.save_weights(fp)
 
-    def save_all_weights(self, fp='./'):
-        self.save_head(fp=fp+'head.wts')
-        self.save_encoder(fp=fp+'encoder.wts')
+    def save_all_weights(self, der='./'):
+        self.save_head(der=der+'head.wts')
+        self.save_encoder(der=der+'encoder.wts')
 
     def split_labels_str(self, incl_str):
         return [label for label in self.dl.labels if incl_str in label]
 
-    def encinp(self, batch, mask_length=True, training=False):
+    def encinp(
+        self, batch, mask_length=True, return_mask=False, training=False
+    ):
         mzab = tf.concat([batch['mz'][...,None], batch['ab'][...,None]], -1)
         model_inp = {
             'x': mzab,
@@ -136,7 +139,10 @@ class DownstreamObj:
                 None
             ),
             'length': batch['length'] if mask_length else None,
-            'training': True if (self.config['train_encoder'] and training) else False
+            'return_mask': return_mask,
+            'training': (
+                True if (self.config['train_encoder'] and training) else False
+            )
         }
 
         return model_inp
@@ -195,7 +201,7 @@ class DownstreamObj:
                 True 
                 if (
                     self.config['train_encoder'] and 
-                    (self.global_step>self.config['encoder_start'])
+                    (self.global_step >= self.config['encoder_start'])
                 ) else 
                 False
             ) # boolean argument into train_step (graph)
@@ -204,12 +210,22 @@ class DownstreamObj:
             running_loss.append(loss.numpy())
             
             if step%50==0:
-                T.set_description("Loss: %.6f"%np.mean(running_loss), refresh=True)
+                T.set_description(
+                    "Loss: %.6f"%np.mean(running_loss), refresh=True
+                )
 
 class BaseDenovo(DownstreamObj):
-    def __init__(self, config, base_model=None, ar=False):
-        super().__init__(config=config, base_model=base_model)
+    def __init__(self, 
+                 config, 
+                 task='denovo', 
+                 base_model=None, 
+                 ar=False, 
+                 svdir='./dswts/'
+                 ):
+        super().__init__(config=config, task=task, base_model=base_model)
         self.ar = ar
+        if svdir[-1] != '/': svdir += '/'
+        self.svdir = svdir
         """
         func = self.head.predict_sequence if self.ar else self.call
         self.egraph = (
@@ -245,7 +261,7 @@ class BaseDenovo(DownstreamObj):
             # Fork in the code for the 2 types of denovo models I created
             if self.ar:
                 enc_input, seqint, target = self.inptarg(
-                    batch, training=False, full_seqint=True
+                    batch, training=False, full_seqint=True,
                 )
                 embedding = self.encoder(**enc_input)
                 prediction = graph(embedding, batch)
@@ -281,16 +297,22 @@ class BaseDenovo(DownstreamObj):
             )
             line += " (%.1f s)"%(time()-start_time)
             lines.append(line)
+            if self.config['save_weights']:
+                self.save_head(self.svdir+'head.wts')
+                if self.config['train_encoder']:
+                    self.save_encoder(self.svdir+'encoder.wts')
             print(line)
         
         return lines
 
 class DenovoArDSObj(BaseDenovo):
-    def __init__(self, config, base_model=None):
-        super().__init__(config=config, base_model=base_model, ar=True)
-
+    def __init__(self, config, base_model=None, svdir='./dswts/'):
         task = 'denovo_ar'
-        
+        super().__init__(
+            config=config, task=task, base_model=base_model, ar=True, 
+            svdir=svdir
+        )
+
         # Dataloader
         self.dl = LoaderDS(self.config[task]['loader'])
         self.predcats = len(self.dl.amod_dic)
@@ -307,7 +329,7 @@ class DenovoArDSObj(BaseDenovo):
 
     def inptarg(self, batch, training=True, full_seqint=False):
 
-        enc_input = self.encinp(batch, training=training)
+        enc_input = self.encinp(batch, return_mask=True, training=training)
         
         # Take the variable batch['seqint'] and add a start token to the 
         # beginning and null on the end
@@ -331,26 +353,19 @@ class DenovoArDSObj(BaseDenovo):
         )
         inds = tf.cast(tf.math.round(inds), tf.int32)
 
-        # Set the predict token and fill with hidden tokens to the end
+        # Fill with hidden tokens to the end
         # - this will be the decoder's input
-        #dec_inp = self.head.set_tokens(intseq, inds2, self.head.pred_token)
         dec_inp = self.head.fill_hidden(intseq, inds)
         
         # Indices of chosen predict tokens
         # - save for LossFunction
-        all_inds = tf.tile(
-            tf.range(tf.shape(intseq)[1], dtype=tf.int32)[None],
-            [tf.shape(intseq)[0], 1]
+        inds_ = tf.concat(
+            [tf.range(tf.shape(inds)[0], dtype=tf.int32)[:,None], inds[:,None]], 
+            axis=1
         )
-        inds_ = tf.where(all_inds <= inds[:,None])
-        #inds_ = tf.concat(
-        #    [tf.range(tf.shape(inds)[0], dtype=tf.int32)[:,None], inds[:,None]], 
-        #    axis=1
-        #)
         self.inds = inds_
 
         # Target is the actual (intseq) identity of the chosen predict indices
-        #intseq_ = self.head.append_nulltok(batch['seqint'])
         targ = batch['seqint'] if full_seqint else tf.gather_nd(batch['seqint'], inds_)
 
         return enc_input, dec_inp, targ
@@ -382,13 +397,14 @@ class DenovoArDSObj(BaseDenovo):
 
         return loss
 
-class DenovoDSObj(BaseDenovo):
-    def __init__(self, config, base_model=None):
-        super().__init__(config=config, base_model=base_model)
+class DenovoBlDSObj(BaseDenovo):
+    def __init__(self, config, base_model=None, svdir='./dswts/'):
+        task='denovo_bl'
+        super().__init__(
+            config=config, task=task, base_model=base_model, svdir=svdir
+        )
 
-        # fork in the code for task
-        task = 'denovo'
-        head_dict = self.config['denovo']['head_dict']  
+        head_dict = self.config[task]['head_dict']  
         # Dataloader
         self.dl = LoaderDS(self.config[task]['loader'])
         
@@ -403,13 +419,13 @@ class DenovoDSObj(BaseDenovo):
         self.initialize_weights()
     
     def inptarg(self, batch, training=True):
-        enc_input = self.encinp(batch, training=training)
+        enc_input = self.encinp(batch, return_mask=True, training=training)
         target = batch['seqint']
 
         return enc_input, target
     
 class AttributeDSObj(DownstreamObj):
-    def __init__(self, config, base_model=None):
+    def __init__(self, config, base_model=None, svdir=None):
         super().__init__(config=config, base_model=base_model)
 
     def evaluation(self, dset='val'):
@@ -467,7 +483,7 @@ class AttributeDSObj(DownstreamObj):
         return lines
 
 class ChargeDSObj(AttributeDSObj):
-    def __init__(self, config, base_model=None):
+    def __init__(self, config, base_model=None, svdir=None):
         super().__init__(config=config, base_model=base_model)
 
         # fork in the code for task
@@ -479,7 +495,9 @@ class ChargeDSObj(AttributeDSObj):
         # Head model
         # Place values into head dictionary that can't be determined beforehand
         self.config['sl'] = self.config[task]['loader']['pep_length'][1] + 1
-        self.predcats = np.concatenate([np.unique(df.precursor_charge) for df in self.dl.dfs.values()])#self.config['loader']['charge'][-1]
+        self.predcats = np.concatenate([
+            np.unique(df.precursor_charge) for df in self.dl.dfs.values()
+        ])
         self.predcats = np.max(self.predcats)
         head_dict['num_classes'] = self.predcats
         self.head = ClassifierHead(**head_dict)
@@ -493,7 +511,7 @@ class ChargeDSObj(AttributeDSObj):
         return enc_input, target
 
 class PeplenDSObj(AttributeDSObj):
-    def __init__(self, config, base_model=None):
+    def __init__(self, config, base_model=None, svdir=None):
         super().__init__(config=config, base_model=base_model)
         
         # fork in the code for the task
@@ -504,7 +522,10 @@ class PeplenDSObj(AttributeDSObj):
 
         # Head model
         self.config['sl'] = self.config[task]['loader']['pep_length'][1] + 1
-        self.predcats = np.concatenate([np.unique(np.vectorize(len)(df.sequence)) for df in self.dl.dfs.values()])#self.config['loader']['charge'][-1]
+        self.predcats = np.concatenate([
+            np.unique(np.vectorize(len)(df.sequence)) 
+            for df in self.dl.dfs.values()
+        ])
         self.predcats = np.max(self.predcats)
         head_dict['num_classes'] = self.predcats
         self.head = ClassifierHead(**head_dict)
@@ -530,7 +551,7 @@ def build_downstream_object(task, yaml='./yaml/downstream.yaml', base_model=None
 
     return DS
 
-#"""
+"""
 # Read downstream yaml
 with open("./yaml/downstream.yaml") as stream:
     config = yaml.safe_load(stream)
@@ -539,11 +560,10 @@ with open("./yaml/downstream.yaml") as stream:
 print("Denovo sequencing")
 D = DenovoArDSObj(config)
 print("\n".join(D.TrainEval()))
-D.save_all_weights("./")
 #print("Charge evaluation")
 #D = ChargeDSObj(config)
 #print("\n".join(D.TrainEval()))
 #print("Peptide length evaluation")
 #D = PeplenDSObj(config)
 #print("\n".join(D.TrainEval()))
-#"""
+"""

@@ -26,5 +26,5 @@ source ~/miniconda3/etc/profile.d/conda.sh
 conda activate tf
 
 
-#CUDA_VISIBLE_DEVICES=1 python -u PretrainModel.py &> logger$1.log
-CUDA_VISIBLE_DEVICES=2 python -u downstream.py &> logger$1.log
+CUDA_VISIBLE_DEVICES=1 python -u PretrainModel.py &> logger$1.log
+#CUDA_VISIBLE_DEVICES=2 python -u downstream.py &> logger$1.log
