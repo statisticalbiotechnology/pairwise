@@ -1,0 +1,89 @@
+batch_size: 100
+lr: 0.0005
+pretrain_path:
+epochs: 5
+steps_per_epoch: 10000
+train_encoder: False
+encoder_start: 0
+debug: False
+# Downstream tasks
+# Denovo sequencing
+denovo:
+  loader:
+    paths:
+      train:
+        - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet
+        - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/train-00000-of-00002-ca1fbc3de7c99259.parquet
+      val: 
+        - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/validation-00000-of-00001-b84568f5bf3ba95d.parquet
+      test: 
+        - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/test-00000-of-00001-15be7bb3864037e7.parquet
+    pep_length: [0, 30]
+    charge: [0, 10]
+    top_pks: 100
+    add_mass: True
+  head_dict:
+    penult_units: 512
+    drop_rate: 0
+denovo_ar:
+  loader:
+    paths:
+      train:
+        - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet
+        - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/train-00000-of-00002-ca1fbc3de7c99259.parquet
+      val: 
+        - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/validation-00000-of-00001-b84568f5bf3ba95d.parquet
+      test: 
+        - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/test-00000-of-00001-15be7bb3864037e7.parquet
+    pep_length: [0, 30]
+    charge: [0, 10]
+    top_pks: 100
+    add_mass: True
+  head_dict:
+    embedding_units: 256
+    depth: 9
+    d: 64
+    h: 4
+    ffn_multiplier: 1
+    ce_units: 256
+    use_charge: False
+    use_energy: False
+    use_mass: False
+    norm_type: 'layer'
+    prenorm: True
+    preembed: True
+    penultimate_units:
+charge:
+  loader:
+      paths:
+        train:
+          - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet
+          - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/train-00000-of-00002-ca1fbc3de7c99259.parquet
+        val: 
+          - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/validation-00000-of-00001-b84568f5bf3ba95d.parquet
+        test: 
+          - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/test-00000-of-00001-15be7bb3864037e7.parquet
+      pep_length: [0, 30]
+      charge: [0, 10]
+      top_pks: 100
+      add_mass: True
+  head_dict:
+    penult_units: 512
+    spectrum_wise: True
+peplen:
+  loader:
+      paths:
+        train:
+          - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet
+          - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/train-00000-of-00002-ca1fbc3de7c99259.parquet
+        val: 
+          - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/validation-00000-of-00001-b84568f5bf3ba95d.parquet
+        test: 
+          - /cmnfs/data/proteomics/foundational_model/ninespecies_xy/test-00000-of-00001-15be7bb3864037e7.parquet
+      pep_length: [0, 30]
+      charge: [0, 10]
+      top_pks: 100
+      add_mass: True
+  head_dict:
+    penult_units: 512
+    spectrum_wise: True
