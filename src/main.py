@@ -11,14 +11,14 @@ from parse_args import parse_args_and_config, create_output_dirs
 from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
 from pl_wrappers import ReconstructionPLWrapper
 
-import models
-import heads
+import models.encoders.dummy_encoders as encoders
+import models.heads.dummy_heads as heads
 
 ENCODER_DICT = {
-    # **models.__dict__, #TODO: replace with actual models
+    **encoders.__dict__, #TODO: replace with actual models
 }
 HEAD_DICT = {
-    # **heads.__dict__, #TODO: replace with actual models
+    **heads.__dict__, #TODO: replace with actual models
 }
 
 def update_args(args, config_dict):
