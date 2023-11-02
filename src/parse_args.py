@@ -15,7 +15,6 @@ def get_args_parser(conf_parser):
         type=str,
         help="Name of the encoder model to train",
     )
-    # Model parameters
     parser.add_argument(
         "--head_model",
         default="abc",
@@ -84,16 +83,16 @@ def get_args_parser(conf_parser):
     # Dataset parameters
     parser.add_argument(
         "--data_path",
-        default="/datasets01/imagenet_full_size/061417/",
+        default="../../datasets/imagenet1k",
         type=str,
         help="dataset path",
     )
-
     parser.add_argument(
         "--output_dir",
         default="./output_dir",
-        help="path where to save, empty for no saving",
+        help="path where to save",
     )
+    parser.add_argument("--log_dir", default="./log_dir", help="path where to log")
     parser.add_argument(
         "--save_top_k",
         type=int,
@@ -118,7 +117,6 @@ def get_args_parser(conf_parser):
         default=0,
         help="(int) If >0, early stop with patience = this int",
     )
-    parser.add_argument("--log_dir", default="./output_dir", help="path where to log")
     parser.add_argument("--seed", default=0, type=int)
     # parser.add_argument("--resume", default="", help="resume from checkpoint")
 
@@ -168,7 +166,10 @@ def get_args_parser(conf_parser):
 
     parser.add_argument("--clip_grad", type=float, default=None, help="")
     parser.add_argument(
-        "--wandb", default=None, help="Specify project name to log using WandB"
+        "--log_wandb", default=1, type=int, help="Disable WandB logging by setting to 0"
+    )
+    parser.add_argument(
+        "--wandb_project", default=None, help="Specify project name to log using WandB"
     )
     parser.add_argument(
         "--wandb_entity", default="kall", help="Entity to log as on WandB"
@@ -196,6 +197,7 @@ def get_args_parser(conf_parser):
 
 def sanity_checks(args):
     # add sanity checks, i.e. for args that should be mutually exclusive here
+    args.log_wandb = bool(args.log_wandb)
     pass
 
 

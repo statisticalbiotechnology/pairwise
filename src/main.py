@@ -33,12 +33,13 @@ def main(args):
     # Wandb stuff
     run = None
     logger = None
-    if args.wandb and utils.get_rank() == 0:
+    if args.log_wandb and utils.get_rank() == 0:
         run = wandb.init(
-            project=args.wandb,
+            project=args.wandb_project,
             entity=args.wandb_entity,
             config=vars(args),
             dir=args.output_dir,
+            anonymous="allow"
         )
         # this step is for automated hparam sweeping
         update_args(
@@ -109,11 +110,11 @@ def main(args):
 
     pl_model = ReconstructionPLWrapper(encoder, head, loss_fn=loss_fn, args=args, datasets=datasets)
 
-    if run is not None and utils.get_rank() == 0:  # TODO: implement get_rank
-        run.log({"num_parameters": utils.get_num_parameters(model)}) # TODO: implement get_num_parameters
-
     if args.early_stop > 0:
         callbacks += [EarlyStopping("val_loss", patience=args.early_stop)]
+
+    if run is not None and utils.get_rank() == 0:  # TODO: implement get_rank
+        run.log({"num_parameters": utils.get_num_parameters(model)}) # TODO: implement get_num_parameters
 
     # Define trainer
     distributed = args.num_devices > 1 or args.num_nodes > 1
@@ -147,7 +148,7 @@ def main(args):
         trainer.test(ckpt_path="best")
 
     # Flag the run as finished to the wandb server
-    if args.wandb and utils.get_rank() == 0:
+    if run is not None and utils.get_rank() == 0:
         wandb.finish()
 
 
