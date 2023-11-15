@@ -26,9 +26,9 @@ def gather_file_md(filepath, typ=None):
             if typ=='mgf':
                 if line == 'BEGIN IONS':
                     spectra[spec_ticker] = {}
-                #elif line.split('=')[0] == 'SCANS':
-                #    scan = int(line.split('=')[-1])
-                #    spectra[spec_ticker]['scan'] = scan
+                elif line.split('=')[0] == 'SCANS':
+                    scan = int(line.split('=')[-1])
+                    spectra[spec_ticker]['scan'] = scan
                 elif line.split('=')[0] == 'RTINSECONDS':
                     rt = float(line.split('=')[-1])
                     spectra[spec_ticker]['rt'] = rt
@@ -46,7 +46,7 @@ def gather_file_md(filepath, typ=None):
                         line = f.readline().strip()
                     spectra[spec_ticker]['nmpks'] = peak_ticker
 
-                    assert len(spectra[spec_ticker].keys()) == 5
+                    assert len(spectra[spec_ticker].keys()) == 6
                     spec_ticker += 1
                 
                 pos_prev = pos
@@ -146,7 +146,8 @@ class LoadObj:
                  preopen=True, 
                  mdsaved_path='./mdsaved', 
                  top_pks=100, 
-                 save_md=True
+                 save_md=True,
+                 filter_psms=False,
                  ):
         # cut out possible mdsaved directory from path search
         self.paths = [path for path in paths if 'evidence' not in path]
@@ -159,6 +160,9 @@ class LoadObj:
             os.mkdir(mdsaved_path)
         
         self.gather_md()
+        if filter_psms:
+            self.filter_psms()
+
         self.gather_labels()
         if self.preopen:
             self.open_files()
@@ -179,6 +183,7 @@ class LoadObj:
                 spec_dic = gather_file_md(path)
                 df = pd.DataFrame(spec_dic).transpose() # transpose alters dtypes
                 # Save these (2) entries as integers
+                df['scan'] = df['scan'].astype("int32")
                 df['pos'] = df['pos'].astype("int32")
                 df['nmpks'] = df['nmpks'].astype('int32')
                 if self.save_md:
@@ -186,6 +191,10 @@ class LoadObj:
 
             self.md[filename] = df
         self.filenames = list(self.md.keys())
+
+    def filter_psms(self):
+        for filename in self.md.keys():
+            filename
 
     def gather_labels(self):
         # index.values needs df.loc, enumerate needs df.iloc
