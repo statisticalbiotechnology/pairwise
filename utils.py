@@ -44,7 +44,7 @@ def NonnullInds(SIArray, null_value):
     return tf.where( SIArray != null_value )
 
 def AccRecPrec(target, prediction, null_value):
-    pred = tf.cast(tf.argmax(prediction, axis=-1), tf.int32) # bs, sl
+    pred = prediction # tf.cast(tf.argmax(prediction, axis=-1), tf.int32) # bs, sl
     boolean = tf.cast(target==pred, tf.int32)
     accsum = tf.reduce_sum(boolean)
     recall_inds = NonnullInds(target, null_value)

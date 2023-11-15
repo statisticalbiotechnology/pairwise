@@ -33,6 +33,33 @@ with open("./yaml/downstream.yaml") as stream:
     dsconfig = yaml.safe_load(stream)
 config['lr'] = float(config['lr'])
 
+# NOTE about trading information between yaml files:
+# I don't want to have to specify inputs in 2 different yaml files that must be 
+# consistent with each other. Instead, 1 yaml file can have all relevant input 
+# specifications, and share its information with the configuration of the other.
+# For example, specify bin size in yaml/tasks.yaml and use that value to set
+# number of bins in hidden mz head model
+
+# Header model
+header_dict = mconf['header_dict']
+mzh = tc['hidden_mz']
+header_dict['hidden_mz']['bins'] = int( 
+    (mzh['mzlims'][1] - mzh['mzlims'][0]) / mzh['binsz']
+) # hidden mz needs binsz and mz range apriori
+abh = tc['hidden_ab']
+header_dict['hidden_ab']['bins'] = int(1 / abh['binsz']) # so does hidden ab
+header_dict['hidden_spectrum']['bins'] = config['max_peaks']
+# hidden charge needs max charge to set the number of classes
+header_dict['hidden_charge']['num_classes'] = tc['hidden_charge']['max_charge']
+header_dict = {task: header_dict[task] for task in config['tasks']}
+# Override downstream saving if log is False
+if config['svwts'] is False:
+    dsconfig['save_weights'] = False
+# Override downstream top_pks
+dsconfig['loader']['top_pks'] = config['max_peaks']
+# set downstream encoder_dict
+dsconfig['encoder_dict'] = mconf['encoder_dict']
+
 ###############################################################################
 #                                  Loader                                     #
 ###############################################################################
@@ -64,33 +91,9 @@ labels = deepcopy(L.labels)
 from models import Encoder, Header
 from utils import *
 
-# NOTE about trading information between yaml files:
-# I don't want to have to specity inputs in 2 different yaml files that are con-
-# sistent with each other. Instead, 1 yaml file can have all relevant input spe-
-# cifications, and share its information with the configuration of the other.
-# For example, specify bin size in yaml/tasks.yaml and use that value to set
-# number of bins in hidden mz head model
-
 # Encoder model
 encoder_dic = mconf['encoder_dict']
 encoder = Encoder(**encoder_dic)
-
-# Header model
-header_dict = mconf['header_dict']
-mzh = tc['hidden_mz']
-header_dict['hidden_mz']['bins'] = int( 
-    (mzh['mzlims'][1] - mzh['mzlims'][0]) / mzh['binsz']
-) # hidden mz needs binsz and mz range apriori
-abh = tc['hidden_ab']
-header_dict['hidden_ab']['bins'] = int(1 / abh['binsz']) # so does hidden ab
-header_dict['hidden_spectrum']['bins'] = config['max_peaks']
-# hidden charge needs max charge to set the number of classes
-header_dict['hidden_charge']['num_classes'] = tc['hidden_charge']['max_charge']
-header_dict = {task: header_dict[task] for task in config['tasks']}
-header = Header(header_dict)
-# Override downstream saving if log is False
-if config['svwts'] is False:
-    dsconfig['save_weights'] = False
 
 # Call model to create weights
 batch = L.load_batch(labels[:config['batch_size']])
@@ -103,6 +106,8 @@ model_inp = {
     'training': False
 }
 out = encoder(**model_inp)
+
+header = Header(header_dict)
 head_out = header(out['emb'], 'all')
 print("Total encoder parameters: %d"%encoder.total_params())
 

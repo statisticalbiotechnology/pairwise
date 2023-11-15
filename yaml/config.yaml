@@ -24,4 +24,4 @@ svwts: True
 svfreq: 1800
 log: True
 debug: False
-header: "Base model with downstream denovo_ar; encoder training starting after 1000 steps"
+header: "Large model for both encoder and decoder"

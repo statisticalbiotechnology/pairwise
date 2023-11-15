@@ -20,8 +20,9 @@ cross_entropy = tf.keras.losses.CategoricalCrossentropy(
 choice = np.random.choice
 
 class DownstreamObj:
-    def __init__(self, config, task='denovo', base_model=None):
+    def __init__(self, config, task='denovo_ar', base_model=None):
         
+        # Config is entire downstream yaml
         self.config = config
         self.task = task
         #assert task in config.keys()
@@ -42,26 +43,33 @@ class DownstreamObj:
         self.imported = True if imported_encoder is not None else False
         
         # If encoder model passed in as argument OR no saved weights
-        if self.imported or (self.config['pretrain_path'] is None):
-            # Get configuration settings from current pretrain yaml files
-            yaml_config_path = './yaml/config.yaml'
-            yaml_model_path = './yaml/models.yaml'
-        
-        # If encoder is loaded from saved weights
+        # Assert that the dsconfig top_pks has the encoder's value
+        if self.imported:
+            assert self.config['loader']['top_pks'] == imported_encoder.sl
+            #self.config['loader']['top_pks'] == imported_encoder.sl
         else:
-            # Get configuration settings from saved experiment
-            assert os.path.exists(self.config['pretrain_path'])
-            yaml_config_path = self.config['pretrain_path']+'/yaml/config.yaml'
-            yaml_model_path = self.config['pretrain_path']+'/yaml/models.yaml'
+            # If no saved pretraining model
+            # Get configuration settings from current pretrain yaml files
+            if self.config['pretrain_path'] is None:
+                yaml_config_path = './yaml/config.yaml'
+                yaml_model_path = './yaml/models.yaml'
         
-        # Open yaml files
-        with open(yaml_config_path) as stream:
-            ptconf = yaml.safe_load(stream)
-        with open(yaml_model_path) as stream:
-            ptmodconf = yaml.safe_load(stream)
-        # Transfer over settings to self.config
-        self.config[self.task]['loader']['top_pks'] = ptconf['max_peaks']
-        self.config['encoder_dict'] = ptmodconf['encoder_dict']
+            # If encoder is loaded from saved pretraining path
+            # Get configuration settings from saved experiment
+            else:
+                assert os.path.exists(self.config['pretrain_path'])
+                yaml_config_path = self.config['pretrain_path']+'/yaml/config.yaml'
+                yaml_model_path = self.config['pretrain_path']+'/yaml/models.yaml'
+        
+            # Open yaml files
+            with open(yaml_config_path) as stream:
+                ptconf = yaml.safe_load(stream)
+            with open(yaml_model_path) as stream:
+                ptmodconf = yaml.safe_load(stream)
+            # Transfer over settings to self.config
+            self.config['loader']['top_pks'] = ptconf['max_peaks']
+            self.config['encoder_dict'] = ptmodconf['encoder_dict']
+        
         # Set self.encoder
         self.encoder = (
             imported_encoder 
@@ -242,6 +250,7 @@ class BaseDenovo(DownstreamObj):
             if self.config['debug'] else
             tf.function(func)
         )
+        #if not self.config['debug']: AccRecPrec = tf.function(AccRecPrec)
         totsz = self.dl.dfs[dset].shape[0]
         steps = totsz // self.config['batch_size']
         steps += 0 if (totsz % self.config['batch_size'])==0 else 1
@@ -314,12 +323,12 @@ class DenovoArDSObj(BaseDenovo):
         )
 
         # Dataloader
-        self.dl = LoaderDS(self.config[task]['loader'])
+        self.dl = LoaderDS(self.config['loader'])
         self.predcats = len(self.dl.amod_dic)
 
         # Head model
         head_dict = self.config[task]['head_dict']
-        self.config['sl'] = self.config[task]['loader']['pep_length'][1]
+        self.config['sl'] = self.config['loader']['pep_length'][1]
         self.head = DenovoDecoder(
             token_dict=self.dl.amod_dic, dec_config=head_dict, 
             encoder=base_model
@@ -355,7 +364,7 @@ class DenovoArDSObj(BaseDenovo):
 
         # Fill with hidden tokens to the end
         # - this will be the decoder's input
-        dec_inp = self.head.fill_hidden(intseq, inds)
+        dec_inp = self.head.fill_hidden(intseq, inds) # fill_2c
         
         # Indices of chosen predict tokens
         # - save for LossFunction
@@ -406,11 +415,11 @@ class DenovoBlDSObj(BaseDenovo):
 
         head_dict = self.config[task]['head_dict']  
         # Dataloader
-        self.dl = LoaderDS(self.config[task]['loader'])
+        self.dl = LoaderDS(self.config['loader'])
         
         # Head model
         # Place values into head dictionary that can't be determined beforehand 
-        self.config['sl'] = self.config[task]['loader']['pep_length'][1]# + 1
+        self.config['sl'] = self.config['loader']['pep_length'][1]# + 1
         head_dict['final_seq_len'] = self.config['sl']
         self.predcats = len(self.dl.amod_dic)
         head_dict['final_units'] = len(self.dl.amod_dic)
@@ -488,13 +497,13 @@ class ChargeDSObj(AttributeDSObj):
 
         # fork in the code for task
         task = 'charge'
-        head_dict = self.config['charge']['head_dict']  
+        head_dict = self.config[task]['head_dict']  
         # Dataloader
-        self.dl = LoaderDS(self.config[task]['loader'])
+        self.dl = LoaderDS(self.config['loader'])
         
         # Head model
         # Place values into head dictionary that can't be determined beforehand
-        self.config['sl'] = self.config[task]['loader']['pep_length'][1] + 1
+        self.config['sl'] = self.config['loader']['pep_length'][1] + 1
         self.predcats = np.concatenate([
             np.unique(df.precursor_charge) for df in self.dl.dfs.values()
         ])
@@ -518,10 +527,10 @@ class PeplenDSObj(AttributeDSObj):
         task = 'peplen'
         head_dict = self.config[task]['head_dict']
         # Dataloader
-        self.dl = LoaderDS(self.config[task]['loader'])
+        self.dl = LoaderDS(self.config)
 
         # Head model
-        self.config['sl'] = self.config[task]['loader']['pep_length'][1] + 1
+        self.config['sl'] = self.config['loader']['pep_length'][1] + 1
         self.predcats = np.concatenate([
             np.unique(np.vectorize(len)(df.sequence)) 
             for df in self.dl.dfs.values()
@@ -551,7 +560,7 @@ def build_downstream_object(task, yaml='./yaml/downstream.yaml', base_model=None
 
     return DS
 
-"""
+#"""
 # Read downstream yaml
 with open("./yaml/downstream.yaml") as stream:
     config = yaml.safe_load(stream)
@@ -566,4 +575,4 @@ print("\n".join(D.TrainEval()))
 #print("Peptide length evaluation")
 #D = PeplenDSObj(config)
 #print("\n".join(D.TrainEval()))
-"""
+#"""

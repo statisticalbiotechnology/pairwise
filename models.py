@@ -717,6 +717,9 @@ class DenovoDecoder:
         dec_inp = {
             'intseq': intseq,
             'kv_feats': enc_emb,
+            'charge': batch['charge'] if self.decoder.use_charge else None,
+            'energy': batch['energy'] if self.decoder.use_energy else None,
+            'mass': batch['mass'] if self.decoder.use_mass else None,
             'seqlen': seqlens
         }
         dec_out = self.decoder(**dec_inp)

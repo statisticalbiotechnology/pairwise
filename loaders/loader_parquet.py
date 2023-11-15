@@ -19,6 +19,7 @@ from utils import Scale, partition_seq
 
 class LoaderDS:
     def __init__(self, config):
+        # configuration is loader subsection of downstream yaml file
         self.config = config
         
         self.dfs = {}
@@ -40,10 +41,13 @@ class LoaderDS:
 
     def add_mass_to_dfs(self):
         for key in self.dfs.keys():
-            self.dfs[key]['mass'] = [
-                self.scale.modseq2mass(seq) for seq in 
-                self.dfs[key].modified_sequence
-            ]
+            #self.dfs[key]['mass'] = [
+            #    self.scale.modseq2mass(seq) for seq in 
+            #    self.dfs[key].modified_sequence
+            #]
+            self.dfs[key]['mass'] = (
+                self.dfs[key]['precursor_mz']*self.dfs[key]['precursor_charge']
+            )
 
     def load_parquet(self, fullpaths):
         df = pd.concat([pd.read_parquet(path) for path in fullpaths])
