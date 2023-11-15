@@ -135,3 +135,4 @@ class Scale:
             self.tok2mass[tok] for tok in partition_seq(modified_sequence)['seq']
         )
 
+deltaPPM = lambda mprec, mpred: abs(mprec - mpred) * 1e6 / mprec

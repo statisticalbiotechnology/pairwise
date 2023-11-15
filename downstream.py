@@ -566,9 +566,9 @@ with open("./yaml/downstream.yaml") as stream:
     config = yaml.safe_load(stream)
 
 # Downstream object
-print("Denovo sequencing")
-D = DenovoArDSObj(config)
-print("\n".join(D.TrainEval()))
+#print("Denovo sequencing")
+#D = DenovoArDSObj(config)
+#print("\n".join(D.TrainEval()))
 #print("Charge evaluation")
 #D = ChargeDSObj(config)
 #print("\n".join(D.TrainEval()))
