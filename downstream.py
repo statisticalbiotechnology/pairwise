@@ -364,7 +364,7 @@ class DenovoArDSObj(BaseDenovo):
 
         # Fill with hidden tokens to the end
         # - this will be the decoder's input
-        dec_inp = self.head.fill_hidden(intseq, inds) # fill_2c
+        dec_inp = self.head.fill2c(intseq, inds)
         
         # Indices of chosen predict tokens
         # - save for LossFunction
