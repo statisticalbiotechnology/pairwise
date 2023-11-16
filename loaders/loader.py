@@ -45,6 +45,10 @@ def gather_file_md(filepath, typ=None):
                         peak_ticker += 1
                         line = f.readline().strip()
                     spectra[spec_ticker]['nmpks'] = peak_ticker
+                    # turn m/z into mass
+                    #spectra[spec_ticker]['mass'] *= (
+                    #    spectra[spec_ticker]['charge']
+                    #)
 
                     assert len(spectra[spec_ticker].keys()) == 6
                     spec_ticker += 1
@@ -102,6 +106,16 @@ def gather_file_md(filepath, typ=None):
 
     return spectra
 
+def gather_evid_data(filepath):
+    with open(filepath) as f:
+        header = f.readline().strip().split('\t')
+        dic = {m: [] for m in header}
+        for line in f:
+            for m,n in zip(dic.keys(), line.strip().split('\t')):
+                dic[m].append(n)
+
+    return dic
+
 def filter_length(df, len_rng):
     assert hasattr(df, 'seq')
     boolean = (
@@ -143,15 +157,29 @@ def filter_mod(df, mod_list):
 class LoadObj:
     def __init__(self, 
                  paths=None, 
-                 preopen=True, 
+                 train_dirs=None,
+                 preopen_files=True, 
                  mdsaved_path='./mdsaved', 
                  top_pks=100, 
                  save_md=True,
                  filter_psms=False,
                  ):
+        self.is_filter_psms = filter_psms
+
+        # Get paths from train_dirs if paths not provided
+        if paths == None:
+            self.paths = {fp: path.glob.glob(fp+'/*.mgf') for fp in train_dirs}
+            self.dir_lookup = {}
+            for d in self.paths.keys():
+                for f in self.paths[d]:
+                    fn = f.split('/')[-1].split('.')[0]
+                    self.dir_lookup[fn] = d
+            all_paths = [m for n in self.paths.values() for m in n]
+        self.train_dirs = train_dirs
+
         # cut out possible mdsaved directory from path search
-        self.paths = [path for path in paths if 'evidence' not in path]
-        self.preopen = preopen
+        self.all_paths = [path for path in all_paths if 'evidence' not in path]
+        self.preopen = preopen_files
         self.mdsaved_path = mdsaved_path
         self.top_pks = top_pks
         self.save_md = save_md
@@ -160,8 +188,6 @@ class LoadObj:
             os.mkdir(mdsaved_path)
         
         self.gather_md()
-        if filter_psms:
-            self.filter_psms()
 
         self.gather_labels()
         if self.preopen:
@@ -170,12 +196,15 @@ class LoadObj:
     def gather_md(self):
         self.md = {}
         self.fn2full = {}
-        for path in self.paths:
+        for path in self.all_paths:
+            
             # Snip off the filename
             filename = path.split('/')[-1].split('.')[0]
             self.fn2full[filename] = path
+            
             # Create the (potential) full path to the saved md data
             fullpath = '%s/%s_md.pkl'%(self.mdsaved_path, filename)
+            
             if os.path.exists(fullpath):
                 df = pd.read_pickle(fullpath)
             else:
@@ -190,12 +219,80 @@ class LoadObj:
                     df.to_pickle('%s/%s_md.pkl'%(self.mdsaved_path, filename))
 
             self.md[filename] = df
+            if self.is_filter_psms:
+                assert hasattr(self, 'dir_lookup')
+                self.filter_psms(filename)
+
         self.filenames = list(self.md.keys())
+    
+    def filter_psms(self, filename):
+        # In place altering of metadata dataframe
+        bdir = self.dir_lookup[filename]
+        evid_path = bdir + '/evidence/'
+        assert os.path.exists(evid_path)
+        Evid = evid_path + filename + '.evid'
+        assert os.path.exists(Evid)
+        dic = gather_evid_data(Evid)
+        if "MS/MS Scan Number" in dic.keys():
+            sns = np.array(dic['MS/MS Scan Number'], dtype=int)
+        else:
+            sns = np.array(dic["Scan number" ], dtype=int)
+        
+        fullpath = '%s/%s_index.txt'%(self.mdsaved_path, filename)
+        if os.path.exists(fullpath):
+            I = np.loadtxt(fullpath).astype(int)
+        else:
+            I = np.array(
+                [self.md[filename].query('scan == %d'%sn).index for sn in sns]
+            ).squeeze()
+            if self.save_md:
+                np.savetxt(fullpath, I, fmt='%d')
 
+        assert len(I)>0
+        self.md[filename] = self.md[filename].iloc[I]
+        self.md[filename] = pd.DataFrame({
+            'scan': self.md[filename]['scan'],
+            'rt': self.md[filename]['rt'],
+            'charge': self.md[filename]['charge'],
+            'mass': self.md[filename]['mass'],
+            'pos': self.md[filename]['pos'],
+            'nmpks': self.md[filename]['nmpks'],
+            'Seq': dic['Sequence'],
+            'Mod': dic['Modifications'],
+            'Modseq': dic['Modified sequence'],
+            'Mass': np.array(dic['Mass'], dtype=float),
+            'MassError': np.array(dic['Mass Error [ppm]'], dtype=float),
+            'Score': np.array(dic['Score'], dtype=float)
+        })
+        
+    """
     def filter_psms(self):
-        for filename in self.md.keys():
-            filename
-
+        for dir_path in self.paths.keys():
+            evid_path = dir_path+'/evidence/'
+            assert os.path.exists(evid_path)
+            for F in self.paths[dir_path]:
+                bname = F.split('/')[-1].split('.')[0]
+                Evid = evid_path + bname + '.evid'
+                assert os.path.exists(Evid)
+                dic = gather_evid_data(Evid)
+                sns = np.array(dic['MS/MS Scan Number'], dtype=int)
+                I = np.array(
+                    [self.md[bname].query('scan == %d'%sn).index for sn in sns]
+                ).squeeze()
+                assert len(I)>0
+                self.md[bname] = self.md[bname].iloc[I]
+                for key in [
+                    'Sequence',
+                    'Modifications',
+                    "Modified sequence",
+                    "Mass",
+                    'Mass Error [ppm]',
+                    "Score"
+                ]:
+                    dtype = str if key in ['Sequence', 'Modifications', 'Modified sequence'] else float
+                    self.md[bname][key] = np.array(dic[key], dtype=dtype)
+                print()
+    """
     def gather_labels(self):
         # index.values needs df.loc, enumerate needs df.iloc
         listoflists = [

@@ -20,8 +20,8 @@ downstream:
   - denovo_ar
 load: False
 loadpath: save/2023-09-27_06-24-36.363775/weights/
-svwts: True
+svwts: False
 svfreq: 1800
 log: True
 debug: False
-header: "Large model for both encoder and decoder"
+header: "base model on psm filtered dataset"

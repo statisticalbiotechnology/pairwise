@@ -560,7 +560,7 @@ def build_downstream_object(task, yaml='./yaml/downstream.yaml', base_model=None
 
     return DS
 
-#"""
+"""
 # Read downstream yaml
 with open("./yaml/downstream.yaml") as stream:
     config = yaml.safe_load(stream)
@@ -575,4 +575,4 @@ with open("./yaml/downstream.yaml") as stream:
 #print("Peptide length evaluation")
 #D = PeplenDSObj(config)
 #print("\n".join(D.TrainEval()))
-#"""
+"""
