@@ -88,7 +88,8 @@ labels = deepcopy(L.labels)
 #                                   Model                                     #
 ###############################################################################
 
-from models import Encoder, Header
+from models.encoder import Encoder
+from models.heads import Header
 from utils import *
 
 # Encoder model

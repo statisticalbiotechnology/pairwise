@@ -209,11 +209,11 @@ class LoadObj:
         fp = self.fps[filename] if self.preopen else open(self.fn2full[filename])
         md = self.md[filename] # calling the sample automatically casts dtypes
         fp.seek(md['pos'].iloc[index])
-
         pks = np.array([
                 [float(m) for m in fp.readline().strip().split()] 
                 for _ in range(md['nmpks'].iloc[index])
         ])
+   
         #mz, ab = np.split(pks, 2, -1)
         mz = pks[:,0];ab = pks[:,1]
         output = {

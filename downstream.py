@@ -8,7 +8,8 @@ import path
 from loaders.loader import LoadObjDNV, LoadObjSC
 from loaders.loader_parquet import LoaderDS
 import numpy as np
-from models import SequenceHead, Encoder, ClassifierHead, DenovoDecoder
+from models.encoder import Encoder
+from models.heads import SequenceHead, ClassifierHead, DenovoDecoder
 import os
 from tqdm import tqdm
 from collections import deque
@@ -364,7 +365,7 @@ class DenovoArDSObj(BaseDenovo):
 
         # Fill with hidden tokens to the end
         # - this will be the decoder's input
-        dec_inp = self.head.fill_hidden(intseq, inds) # fill_2c
+        dec_inp = self.head.fill2c(intseq, inds)
         
         # Indices of chosen predict tokens
         # - save for LossFunction
@@ -560,19 +561,19 @@ def build_downstream_object(task, yaml='./yaml/downstream.yaml', base_model=None
 
     return DS
 
-#"""
+"""
 # Read downstream yaml
 with open("./yaml/downstream.yaml") as stream:
     config = yaml.safe_load(stream)
 
 # Downstream object
-#print("Denovo sequencing")
-#D = DenovoArDSObj(config)
-#print("\n".join(D.TrainEval()))
+print("Denovo sequencing")
+D = DenovoArDSObj(config)
+print("\n".join(D.TrainEval()))
 #print("Charge evaluation")
 #D = ChargeDSObj(config)
 #print("\n".join(D.TrainEval()))
 #print("Peptide length evaluation")
 #D = PeplenDSObj(config)
 #print("\n".join(D.TrainEval()))
-#"""
+"""
