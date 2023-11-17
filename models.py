@@ -752,7 +752,9 @@ class DenovoDecoder:
         return out
 
     def fill2c(self, int_array, inds, tokentyp='X', output=True):
-        tokint = self.NT if output else self.inpdict['X']
+        # output=True: map the tokentyp to the outdict
+        # ouput=False: map the tokentyp to the inpdict
+        tokint = self.outdict[tokentyp] if output else self.inpdict[tokentyp]
         all_inds = tf.tile(
             tf.range(tf.shape(int_array)[1], dtype=tf.int32)[None],
             [tf.shape(int_array)[0], 1]
