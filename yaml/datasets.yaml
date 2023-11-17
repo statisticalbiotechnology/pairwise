@@ -5,7 +5,7 @@ pretrain:
     - /cmnfs/data/proteomics/foundational_model/PXD021013
   mdsaved_path: ./save/mdsaved
   preopen_files: False
-  filter_psms: True
+  filter_psms: False
   save_md: True
 downstream:
   train_dir: /cmnfs/home/j.lapin/datasets/downstream/train
