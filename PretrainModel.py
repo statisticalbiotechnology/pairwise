@@ -55,8 +55,9 @@ header_dict = {task: header_dict[task] for task in config['tasks']}
 # Override downstream saving if log is False
 if config['svwts'] is False:
     dsconfig['save_weights'] = False
-# Override downstream top_pks
+# Override/add to downstream/dataset top_pks
 dsconfig['loader']['top_pks'] = config['max_peaks']
+dc['pretrain']['top_pks'] = config['max_peaks']
 # set downstream encoder_dict
 dsconfig['encoder_dict'] = mconf['encoder_dict']
 
@@ -64,24 +65,10 @@ dsconfig['encoder_dict'] = mconf['encoder_dict']
 #                                  Loader                                     #
 ###############################################################################
 
-import pathlib
-import path
 from loaders.loader import LoadObj
 from copy import deepcopy
 
-#HOME = str(pathlib.Path.home())
-paths = [
-    path.glob.glob(fp+'/*') for fp in dc['pretrain']['train_dirs']
-]
-paths = [m for n in paths for m in n]
-
-L = LoadObj(
-    paths, 
-    preopen=dc['pretrain']['preopen_files'], 
-    mdsaved_path=dc['pretrain']['mdsaved_path'], 
-    top_pks=config['max_peaks']
-)
-
+L = LoadObj(**dc['pretrain'])
 labels = deepcopy(L.labels)
 
 ###############################################################################
