@@ -1,20 +1,8 @@
-config = {
-    'paths': {
-        'train': [
-            '/cmnfs/data/proteomics/foundational_model/ninespecies_xy/train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet',
-            '/cmnfs/data/proteomics/foundational_model/ninespecies_xy/train-00000-of-00002-ca1fbc3de7c99259.parquet'
-        ],
-        'val': ['/cmnfs/data/proteomics/foundational_model/ninespecies_xy/validation-00000-of-00001-b84568f5bf3ba95d.parquet'],
-        'test': ['/cmnfs/data/proteomics/foundational_model/ninespecies_xy/test-00000-of-00001-15be7bb3864037e7.parquet'],
-    },
-    'pep_length': [0, 30],
-    'charge': [0, 10],
-    'top_pks': 100,
-}
+
 
 import pandas as pd
 import numpy as np
-import tensorflow as tf
+import torch as th
 from utils import Scale, partition_seq
 
 class LoaderDS:
@@ -139,23 +127,35 @@ class LoaderDS:
                 )
             
         output = {
-            'mz': tf.constant(mz, tf.float32),
-            'ab': tf.constant(ab/ab.max(-1, keepdims=True), tf.float32),
-            'charge': tf.constant(charge, tf.int32),
+            'mz': th.tensor(mz, dtype=th.float32),
+            'ab': th.tensor(ab/ab.max(-1, keepdims=True), dtype=th.float32),
+            'charge': th.tensor(charge, dtype=th.int32),
             'mass': (
-                tf.constant(mass, tf.float32) 
+                th.tensor(mass, dtype=th.float32) 
                 if self.config['add_mass'] else None
             ),
-            'length': tf.constant(lengths, tf.int32),
-            'seqint': tf.constant(seqints, tf.int32),
-            'peplen': tf.constant(pep_lengths, tf.int32)
+            'length': th.tensor(lengths, dtype=th.int32),
+            'seqint': th.tensor(seqints, dtype=th.int32),
+            'peplen': th.tensor(pep_lengths, dtype=th.int32)
         }
 
         return output
-
 """
+config = {
+    'paths': {
+        'train': [
+            '/cmnfs/data/proteomics/foundational_model/ninespecies_xy/train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet',
+            '/cmnfs/data/proteomics/foundational_model/ninespecies_xy/train-00000-of-00002-ca1fbc3de7c99259.parquet'
+        ],
+        'val': ['/cmnfs/data/proteomics/foundational_model/ninespecies_xy/validation-00000-of-00001-b84568f5bf3ba95d.parquet'],
+        'test': ['/cmnfs/data/proteomics/foundational_model/ninespecies_xy/test-00000-of-00001-15be7bb3864037e7.parquet'],
+    },
+    'pep_length': [0, 30],
+    'charge': [0, 10],
+    'top_pks': 100,
+    'add_mass': True
+}
 L = LoaderDS(config)
 spec = L.load_batch(np.arange(100))
 print(spec)
 """
-
