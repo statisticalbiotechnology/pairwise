@@ -78,8 +78,8 @@ class BaseAttentionLayer(nn.Module):
         self.attention_layer = QKVAttention(h, d)
         shape = (d*h, self.out_units)
         self.Wo = nn.Linear(*shape, bias=False)
-        self.Wo.kernel = nn.Parameter( 
-            nn.init.normal_(th.empty(shape), 0.0, 0.3*(h*d)**-0.5)
+        self.Wo.weight = nn.Parameter( 
+            nn.init.normal_(th.empty(self.Wo.weight.shape), 0.0, 0.3*(h*d)**-0.5)
         )
         self.shortcut = (
             nn.Identity()
@@ -158,9 +158,9 @@ class FFN(nn.Module):
         self.out_units = indim if out_units==None else out_units
         
         self.W1 = nn.Linear(indim, indim*self.mult)
-        self.W2 = nn.Linear(indim, self.out_units, bias=False)
+        self.W2 = nn.Linear(indim*self.mult, self.out_units, bias=False)
         shape = self.W2.weight.shape
-        self.W2.kernel = nn.Parameter( 
+        self.W2.weight = nn.Parameter( 
             nn.init.normal_(th.empty(shape), 0.0, 0.3*(indim*self.mult)**-0.5)
         )
     

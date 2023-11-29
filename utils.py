@@ -26,8 +26,8 @@ def message_board(line, path):
 
 def discretize_mz(mz, binsz, totbins):
     indices = th.maximum(
-        th.zeros_lilke(mz), (mz / binsz).round().type(th.int32) - 1
-    )
+        th.zeros_like(mz), (mz / binsz).round().type(th.int32) - 1
+    ).type(th.int64)
     
     return th.nn.functional.one_hot(indices, totbins)
 
