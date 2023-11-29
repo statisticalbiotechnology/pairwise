@@ -14,6 +14,7 @@ encoder_dict:
   recycling_its: 1
 
 header_dict:
+  in_units: 256
   trinary_ab:
     num_classes: 3
     norm_type: batch
@@ -44,10 +45,4 @@ header_dict:
     norm_type: batch
     penult_units: 512
     spectrum_wise: True
-  doctored_mz:
-    norm_type: batch
-    penult_units: 512
-    spectrum_wise: True
-  doctored_mz2:
-    norm_type: batch
-    penult_units: 512
+

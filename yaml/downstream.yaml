@@ -28,7 +28,8 @@ denovo_bl:
     drop_rate: 0
 denovo_ar:
   head_dict:
-    embedding_units: 512
+    running_units: 512
+    sequence_length: 30
     depth: 9
     d: 64
     h: 4

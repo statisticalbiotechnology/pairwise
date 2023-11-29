@@ -12,12 +12,12 @@ def load_optimizer_state(opt, fn, device):
     opt.load_state_dict(th.load(fn), map_location=device)
 
 def save_full_model(model, optimizer, svdir):
-    torch.save(
+    th.save(
         model.state_dict(), 
         "save/%s/weights/model_%s.wts"%(svdir, '0')
     )
     save_optimizer_state(
-        optimizer, 'save/%s/weights/opt_%s.wts'%(svdir, '0')
+        optimizer, 'save/%s/weights/opt_encopt.wts'%(svdir)
     )
 
 def message_board(line, path):

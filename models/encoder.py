@@ -1,5 +1,5 @@
 
-import model_parts as mp
+import models.model_parts as mp
 import torch as th
 from torch import nn
 

@@ -1,23 +1,23 @@
 ###############################################################################
-#                                  Todo                                       #
+#                                  todo                                       #
 ###############################################################################
 """
-Add mask charge/mass tasks
-Add task where you add m/z to each peak and model must guess systematic error
-Add a intensity rank task --> one_hot(x.shape[1]-argsort(argsort(x,-1),-1))
+add mask charge/mass tasks
+add task where you add m/z to each peak and model must guess systematic error
+add a intensity rank task --> one_hot(x.shape[1]-argsort(argsort(x,-1),-1))
 """
 # dependencies used throughout the program
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
-import tensorflow as tf
+import torch as th
 import yaml
-import utils as U
+import utils as u
 import re
-Adam = tf.keras.optimizers.Adam
-# slurm doesn't always manage GPUs well -> cublas error
-# You may need to set CUDA_VISIBLE_DEVICES={#} before python in shellscript.sh
-print(tf.config.list_physical_devices())
+Adam = th.optim.Adam
+# slurm doesn't always manage gpus well -> cublas error
+# you may need to set cuda_visible_devices={#} before python in shellscript.sh
+device = th.device("cuda" if th.cuda.is_available() else "cpu")
+print(device)
 
 # Immediately read in yaml files to prevent unintended changes to the
 # experiment while I am changing the files outside of the shellscript
@@ -43,6 +43,8 @@ config['lr'] = float(config['lr'])
 # Header model
 header_dict = mconf['header_dict']
 mzh = tc['hidden_mz']
+# pass encoder_dict's running_units to header_dict as in_units
+header_dict['in_units'] - mconf['encoder_dict']['running_units']
 header_dict['hidden_mz']['bins'] = int( 
     (mzh['mzlims'][1] - mzh['mzlims'][0]) / mzh['binsz']
 ) # hidden mz needs binsz and mz range apriori
@@ -60,6 +62,8 @@ dsconfig['loader']['top_pks'] = config['max_peaks']
 dc['pretrain']['top_pks'] = config['max_peaks']
 # set downstream encoder_dict
 dsconfig['encoder_dict'] = mconf['encoder_dict']
+# set kv_indim in decoder_dict to the enocoder's running_units
+dsconfig['denovo_ar']['head_dict'] = mconf['encoder_dict']['running_units']
 
 ###############################################################################
 #                                  Loader                                     #
@@ -82,31 +86,21 @@ from utils import *
 # Encoder model
 encoder_dic = mconf['encoder_dict']
 encoder = Encoder(**encoder_dic)
-
-# Call model to create weights
-batch = L.load_batch(labels[:config['batch_size']])
-mzab = tf.concat([batch['mz'][...,None], batch['ab'][...,None]], -1)
-model_inp = {
-    'x': mzab,
-    'charge': batch['charge'],
-    'mass': batch['mass'],
-    'length': batch['length'],
-    'training': False
-}
-out = encoder(**model_inp)
-
-header = Header(header_dict)
-head_out = header(out['emb'], 'all')
 print("Total encoder parameters: %d"%encoder.total_params())
 
+# Header model(s)
+header = Header(header_dict)
+assert hasattr(header, 'name')
+
+
 # Optimizers
-optencoder = Adam(learning_rate=config['lr'],name='encopt')
+optencoder = Adam(encoder.parameters(), eval(config['lr']))
 header.initialize_optimizers()
 
 def save_all_weights(svdir):
     U.save_full_model(encoder, optencoder, svdir)
     # Save all header weights in one file
-    header.save_weights("save/%s/weights/model_%s.wts"%(svdir, header.name))
+    th.save(header.state_dict(), "save/%s/weights/model_%s.wts"%(svdir, header.name))
     # Save header optimizer weights individually
     for task_name in config['tasks']:
         # optimizer.name should have opt_ already in it (see Header in models)
@@ -115,18 +109,18 @@ def save_all_weights(svdir):
 
 if config['load']:
     ldpth = config['loadpath']
-    encoder.load_weights(ldpth + 'model_encoder.wts')
+    model.load_state_dict(th.load(ldpth + 'model_encoder.wts'))
     U.load_optimizer_state(
-        optencoder, encoder.trainable_variables, ldpth + 'opt_encopt.wts.npy'
+        optencoder, ldpth + 'opt_encopt.wts', device
     )
-    header.load_weights(ldpth + 'model_header.wts')
+    header.load_state_dict(th.load(ldpth + 'model_header.wts'))
     for task_name in config['tasks']:
         # ASSUMPTION: header optimizers follow name convention 
         # opt_{task}.wts.npy
         U.load_optimizer_state(
             header.opts[task_name], 
-            header.heads[task_name].trainable_variables, 
-            ldpth + 'opt_%s.wts.npy'%task_name
+            ldpth + 'opt_%s.wts'%task_name,
+            device
         )
 
 ###############################################################################
@@ -143,6 +137,7 @@ loss_spec = " ".join(['%s: %%7.5f'%task_name for task_name in T.keys()])
 ###############################################################################
 #                           Downstream evaluation                             #
 ###############################################################################
+"""
 if not config['debug']:
     import downstream as ds
 
@@ -153,7 +148,7 @@ if not config['debug']:
         'denovo_ar': ds.DenovoArDSObj,
         'denovo_bl': ds.DenovoBlDSObj,
     }
-
+"""
 ###############################################################################
 #                                  Training                                   #
 ###############################################################################
@@ -164,29 +159,26 @@ import sys
 import datetime
 
 def train_step(batch, task, enc_opt, head_opt):
+    encoder.train()
+    header.train()
+
     inp = T[task].inptarg(batch)
     
     inp['length'] = batch['length']
     head_outputs = [task]
-    with tf.GradientTape(persistent=True) as tape:
-        enc_output = encoder(training=True, **inp)
-        prediction = header(enc_output['emb'], head_outputs, training=True)
-        loss = T[task].loss(prediction[task])
-        loss = tf.reduce_mean(loss)
-
-    grads = tape.gradient(loss, encoder.trainable_variables)
-    enc_opt.apply_gradients(zip(grads, encoder.trainable_variables))
-    grads = tape.gradient(loss, header.heads[task].trainable_variables)
-    head_opt.apply_gradients(zip(grads, header.heads[task].trainable_variables))
+    enc_output = encoder(**inp)
+    prediction = header(enc_output['emb'], head_outputs, training=True)
+    loss = T[task].loss(prediction[task])
+    loss = loss.mean()
+    
+    loss.backward()
+    enc_opt.step()
+    head_opt.step()
     
     encoder.global_step.assign_add(1)
 
     return loss
 
-def test():
-    print()
-
-graph = train_step if config['debug'] else tf.function(train_step)
 def train(epochs=1, runlen=50, svfreq=3600):
     
     # Shorthand
@@ -236,12 +228,12 @@ def train(epochs=1, runlen=50, svfreq=3600):
             TT = time();batch = L.load_batch(
                 random_labels
             );load_time.append(time()-TT) # load time sandwich
-            TT=time();loss = graph(
+            TT=time();loss = train_step(
                 batch, random_task, optencoder, header.opts[random_task]
             );graph_time.append(time()-TT) # graph time sandwich
             
             # Save running stats
-            T[random_task].log_loss(loss.numpy())
+            T[random_task].log_loss(loss.detach().numpy())
             running_time.append(time()-start_step)
             
             # Stdout
@@ -302,6 +294,6 @@ def train(epochs=1, runlen=50, svfreq=3600):
     print()
 
 np.random.seed(config['seed'])
-tf.random.set_seed(config['seed'])
+th.manual_seed(config['seed'])
 train(epochs=config['epochs'], runlen=100, svfreq=config['svfreq'])
 
