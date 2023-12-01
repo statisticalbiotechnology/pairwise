@@ -23,6 +23,7 @@ class Encoder(nn.Module):
                  norm_type='layer', # normalization type
                  preembed=True, # embed/add charge/energy/mass before FFN 
                  recycling_its=1, # recycling iterations
+                 device=th.device('cpu')
                  ):
         super(Encoder, self).__init__()
         self.run_units = running_units
@@ -41,6 +42,7 @@ class Encoder(nn.Module):
         self.norm_type = norm_type
         self.preembed = preembed
         self.its = recycling_its
+        self.device = device
         
         # Position modulation
         self.alpha = nn.Parameter(th.tensor(0.1), requires_grad=True)
@@ -98,9 +100,10 @@ class Encoder(nn.Module):
         
         self.global_step = nn.Parameter(th.tensor(0), requires_grad=False)
         
-        self.pos = mp.FourierFeatures(
+        pos = mp.FourierFeatures(
             th.arange(self.sl, dtype=th.float32), self.run_units, 5.*self.sl
         )
+        self.pos = nn.Parameter(pos, requires_grad=False)
     
     def total_params(self):
         return sum([m.numel() for m in self.parameters()])
@@ -112,9 +115,9 @@ class Encoder(nn.Module):
         if self.subdivide:
             mz = mp.subdivide_float(mz)
             minidim = self.mz_units//4
-            mz_emb = mp.FourierFeatures(mz, minidim, 1000.)
+            mz_emb = mp.FourierFeatures(mz, minidim, 1000.).to(x.device)
         else:
-            mz_emb = mp.FourierFeatures(mz, self.mz_units, 10000.)
+            mz_emb = mp.FourierFeatures(mz, self.mz_units, 10000.).to(x.device)
         mz_emb = self.MzSeq(mz_emb) # multiply sequential to mz fourier feature
         mz_emb = mz_emb.reshape(x.shape[0], x.shape[1], -1)
         # ASSUME ab comes in 0-1, multiply by 100 (0-100) before expansion
@@ -151,7 +154,7 @@ class Encoder(nn.Module):
         # Create mask
         if length!=None:
             grid = th.tile(
-                th.arange(self.sl, dtype=th.int32)[None], 
+                th.arange(self.sl, dtype=th.int32)[None].to(x.device), 
                 (x.shape[0], 1)
             ) # bs, seq_len
             mask = grid >= length[:, None]
@@ -215,7 +218,7 @@ class Encoder(nn.Module):
             emb 
             if emb is not None else 
             th.zeros(x.shape[0], self.sl, self.run_units)
-        )
+        ).to(x.device)
         
         for _ in range(its):
             output = self.UpdateEmbed(

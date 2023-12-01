@@ -24,7 +24,7 @@ class ClassifierHead(nn.Module):
 
         self.penult = nn.Sequential(
             nn.Linear(in_units, penult_units),
-            nn.GELU(),
+            nn.ReLU(), # GELU was blowing up the gradients at the beginning
             norm(penult_units),
         )
         
@@ -174,6 +174,7 @@ class Header(nn.Module):
                  ):
         super(Header, self).__init__()
         self.head_dic = head_dic
+        self.name = 'head'
 
         IU = head_dic['in_units']
         self.heads = {}
@@ -216,15 +217,11 @@ class Header(nn.Module):
             self.heads.keys()
         }
 
-    def forward(self, emb, outs='all', training=True):
+    def forward(self, emb, outs='all'):
         out = {}
         if outs=='all': outs = self.heads.keys()
         
         for head_type in outs:
-            if training:
-                out[head_type].train() 
-            else:
-                out[head_type].eval()
             out[head_type] = self.heads[head_type](emb)
         
         return out

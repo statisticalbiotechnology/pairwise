@@ -2,23 +2,24 @@
 TODO
 - Fix error of variables created on non-first call when training encoder
 """
-import tensorflow as tf
+import torch as th
 import yaml
 import path
 from loaders.loader import LoadObjDNV, LoadObjSC
 from loaders.loader_parquet import LoaderDS
 import numpy as np
 from models.encoder import Encoder
-from models.heads import SequenceHead, ClassifierHead, DenovoDecoder
+from models.heads import SequenceHead, ClassifierHead
+from models.decoder import DenovoDecoder
 import os
 from tqdm import tqdm
 from collections import deque
 from time import time
-from utils import AccRecPrec
-cross_entropy = tf.keras.losses.CategoricalCrossentropy(
-    from_logits=True, reduction='none'
-)
+import utils as U
+nn = th.nn
+F = nn.functional
 choice = np.random.choice
+device = th.device("cuda" if th.cuda.is_available() else "cpu")
 
 class DownstreamObj:
     def __init__(self, config, task='denovo_ar', base_model=None):
@@ -26,11 +27,7 @@ class DownstreamObj:
         # Config is entire downstream yaml
         self.config = config
         self.task = task
-        #assert task in config.keys()
-        # Optimizer(s)
-        self.opt_head = tf.keras.optimizers.Adam(learning_rate=config['lr'])
-        self.opt_encoder = tf.keras.optimizers.Adam(learning_rate=config['lr'])
-
+        
         # Base model
         # - must do base model beforehand dataloader in order to transfer over 
         #   its configuration settings to self.config
@@ -75,54 +72,19 @@ class DownstreamObj:
         self.encoder = (
             imported_encoder 
             if imported_encoder is not None else
-            Encoder(**self.config['encoder_dict'])
+            Encoder(**self.config['encoder_dict'], device=device)
         )
-    
-    def initialize_weights(self, special=False):
-        
-        # Next 13 lines establish initial weights in head (and maybe encoder)
-        indices = self.dl.inds['train'][:self.config['batch_size']]
-        batch = self.dl.load_batch(indices)
-        mzab = tf.concat([batch['mz'][...,None], batch['ab'][...,None]], -1)
-        model_inp = {
-            'x': mzab,
-            'charge': batch['charge'],
-            'mass': batch['mass'],
-            'length': batch['length'],
-            'training': False
-        }
-        out = self.encoder(**model_inp) # forward pass in eval mode
-        
-        # Special function for inference if special==True, else just standard
-        # encoder_embedding as input to call function
-        if special:
-            self.head.initialize_variables(batch, out['emb'])
-        else:
-            head_out = self.head(out['emb'], training=False)
-        self.opt_head.build(self.head.trainable_variables)
-        
-        # If the encoder is imported, assume this is pretraining and encoder is
-        # already trained, i.e. do not change its weights in this program.
-        # ELSE: change its weights all you desire
-        if self.imported == False:
-            if self.config['pretrain_path'] is not None:
-                self.encoder.load_weights(
-                    self.config['pretrain_path'] + '/weights/model_encoder.wts'
-                )
-        
-        # This option will be true if you plan to allow the encoder weights
-        # to float during downstream training; else just train the head.
-        if self.config['train_encoder']:
-            self.initialize_encoder_optimizer_weights()
+        self.encoder.to(device)
 
-    def initialize_encoder_optimizer_weights(self):
-        self.opt_encoder.build(self.encoder.trainable_variables)
+        self.opt_encoder = th.optim.Adam(
+            self.encoder.parameters(), self.config['lr']
+        )
 
     def save_head(self, fp='./head.wts'):
-        self.head.save_weights(fp)
+        th.save(self.head.model_dict(), fp)
     
     def save_encoder(self, fp='./encoder.wts'):
-        self.encoder.save_weights(fp)
+        th.save(self.encoder.model_dict(), fp)
 
     def save_all_weights(self, der='./'):
         self.save_head(der=der+'head.wts')
@@ -131,14 +93,17 @@ class DownstreamObj:
     def split_labels_str(self, incl_str):
         return [label for label in self.dl.labels if incl_str in label]
 
-    def encinp(
-        self, batch, mask_length=True, return_mask=False, training=False
-    ):
-        mzab = tf.concat([batch['mz'][...,None], batch['ab'][...,None]], -1)
+    def encinp(self, 
+               batch, 
+               mask_length=True, 
+               return_mask=False, 
+               ):
+
+        mzab = th.cat([batch['mz'][...,None], batch['ab'][...,None]], -1)
         model_inp = {
-            'x': mzab,
+            'x': mzab.to(device),
             'charge': (
-                batch['charge'] 
+                batch['charge']
                 if self.config['encoder_dict']['use_charge'] else 
                 None
             ),
@@ -149,52 +114,57 @@ class DownstreamObj:
             ),
             'length': batch['length'] if mask_length else None,
             'return_mask': return_mask,
-            'training': (
-                True if (self.config['train_encoder'] and training) else False
-            )
         }
 
         return model_inp
     
     def call(self, enc_inp_dict, training=False):
-        enc_inp_dict['training'] = training
+        if training: 
+            self.encoder.train()
+            self.head.train()
+        else: 
+            self.encoder.eval()
+            self.head.eval()
+        
         embedding = self.encoder(**enc_inp_dict)['emb']
-        out = self.head(embedding, training=training)
+        out = self.head(embedding)
 
         return out
     
     def LossFunction(self, target, prediction):
-        targ_one_hot = tf.one_hot(target, self.predcats)
-        all_loss = cross_entropy(targ_one_hot, prediction)
-
+        targ_one_hot = F.one_hot(target, self.predcats).type(th.float32)
+        all_loss = F.cross_entropy(prediction, targ_one_hot)
+        
         return all_loss
     
     def train_step(self, batch, trenc=True):
-        enc_input, target = self.inptarg(batch, training=True)
+        U.Dict2dev(batch, device)
+        enc_input, target = self.inptarg(batch)
         
-        if trenc==False:
-            embedding = self.encoder(**enc_input)['emb']
-        with tf.GradientTape(persistent=True) as tape:
-            if trenc==True:
-                embedding = self.encoder(**enc_input)['emb']
-            head_out = self.head(embedding, training=True)
-            all_loss = self.LossFunction(target, head_out)
-            loss = tf.reduce_mean(all_loss)
-
-        grads = tape.gradient(loss, self.head.trainable_variables)
-        self.opt_head.apply_gradients(zip(grads, self.head.trainable_variables))
         if trenc:
-            grads = tape.gradient(loss, self.encoder.trainable_variables)
-            self.opt_encoder.apply_gradients(zip(grads, self.encoder.trainable_variables))
+            self.encoder.train()
+            self.encoder.zero_grad()
+            embedding = self.encoder(**enc_input)['emb']
+        else:
+            self.encoder.eval()
+            with th.no_grad():
+                embedding = self.encoder(**enc_input)['emb']
+        
+        self.head.train()
+        self.head.decoder.zero_grad()
+        head_out = self.head(embedding)
+        all_loss = self.LossFunction(target, head_out)
+        loss = all_loss.mean()
+        
+        loss.backward()
+        self.opt_head.step()
+        if trenc:
+            self.opt_encoder.step()
 
         return loss
 
     def train_epoch(self, SeqInts=False):
-        graph = (
-            self.train_step
-            if self.config['debug'] else 
-            tf.function(self.train_step)
-        )
+        
         bs = self.config['batch_size']
         spe = self.config['steps_per_epoch']
         running_loss = deque(maxlen=50)
@@ -213,10 +183,10 @@ class DownstreamObj:
                     (self.global_step >= self.config['encoder_start'])
                 ) else 
                 False
-            ) # boolean argument into train_step (graph)
-            loss = graph(batch, train_encoder)
+            ) # boolean argument into train_step
+            loss = self.train_step(batch, train_encoder)
             self.global_step += 1
-            running_loss.append(loss.numpy())
+            running_loss.append(loss.detach().cpu().numpy())
             
             if step%50==0:
                 T.set_description(
@@ -235,57 +205,51 @@ class BaseDenovo(DownstreamObj):
         self.ar = ar
         if svdir[-1] != '/': svdir += '/'
         self.svdir = svdir
-        """
-        func = self.head.predict_sequence if self.ar else self.call
-        self.egraph = (
-            func
-            if self.config['debug'] else
-            tf.function(func)
-        )
-        """
 
     def evaluation(self, dset='val'):
+        
         func = self.head.predict_sequence if self.ar else self.call
-        graph = (
-            func
-            if self.config['debug'] else
-            tf.function(func)
-        )
-        #if not self.config['debug']: AccRecPrec = tf.function(AccRecPrec)
+        
+        # counters
         totsz = self.dl.dfs[dset].shape[0]
         steps = totsz // self.config['batch_size']
         steps += 0 if (totsz % self.config['batch_size'])==0 else 1
         
+        # losses
         out = {'ce': 0, 'accuracy': 0, 'recall': 0, 'precision': 0}
         tots = {
             'accuracy': {'sum': 0,'total': 0},
             'recall': {'sum': 0,'total': 0},
             'precision': {'sum': 0,'total': 0},
         }
+
+        self.encoder.eval()
+        self.head.eval()
         for step in tqdm(range(steps)):
             first = step*self.config['batch_size']
             last = np.minimum((step+1)*self.config['batch_size'], totsz)
             batch_inds = np.arange(first, last, 1)
             batch = self.dl.load_batch(batch_inds, dset=dset, SeqInts=True)
-            
+            batch = U.Dict2dev(batch, device)
             # Fork in the code for the 2 types of denovo models I created
-            if self.ar:
-                enc_input, seqint, target = self.inptarg(
-                    batch, training=False, full_seqint=True,
-                )
-                embedding = self.encoder(**enc_input)
-                prediction = graph(embedding, batch)
-            else:
-                enc_input, target = self.inptarg(batch, training=False)
-                pred = graph(enc_input, training=False) # logits
-                prediction = tf.cast(tf.argmax(pred, axis=-1), tf.int32) # bs, sl
+            with th.no_grad():
+                if self.ar:
+                    enc_input, seqint, target = self.inptarg(
+                        batch, full_seqint=True,
+                    )
+                    embedding = self.encoder(**enc_input)
+                    prediction = self.head.predict_sequence(embedding, batch)
+                else:
+                    enc_input, target = self.inptarg(batch)
+                    pred = func(enc_input) # logits
+                    prediction = pred.argmax(-1).type(th.int32) # bs, sl
             
             out['ce'] += (
                 0 if self.ar else 
-                tf.reduce_sum(self.LossFunction(target, pred))
+                self.LossFunction(target, pred).sum()
             )
             
-            stats = AccRecPrec(target, prediction, self.dl.amod_dic['X'])
+            stats = U.AccRecPrec(target, prediction, self.dl.amod_dic['X'])
             for metric in stats.keys():
                 for key, val in stats[metric].items():
                     tots[metric][key] += val
@@ -334,77 +298,80 @@ class DenovoArDSObj(BaseDenovo):
             token_dict=self.dl.amod_dic, dec_config=head_dict, 
             encoder=base_model
         )
+        self.head.decoder.to(device)
         
-        self.initialize_weights(special=True)
+        self.opt_head = th.optim.Adam(self.head.parameters(), config['lr'])
+        
 
-    def inptarg(self, batch, training=True, full_seqint=False):
-
-        enc_input = self.encinp(batch, return_mask=True, training=training)
+    def inptarg(self, batch, full_seqint=False):
+        
+        bs, sl = batch['seqint'].shape
+        enc_input = self.encinp(batch, return_mask=True)
         
         # Take the variable batch['seqint'] and add a start token to the 
         # beginning and null on the end
         intseq = self.head.prepend_startok(batch['seqint'][...,:-1])
         
         # Find the indices first null tokens so that when you choose random
-        # token you avoid trivial trailing null tokens (beyoond final null)
-        nonnull = tf.reduce_sum(
-            tf.cast(intseq != self.head.inpdict['X'], tf.int32), axis=1
-        )
+        # token you avoid trivial trailing null tokens (beyond final null)
+        nonnull = (intseq != self.head.inpdict['X']).type(th.int32).sum(1)
         
         # Choose random tokens to predict
         # - the values of inds will be final non-hidden value in decoder input
         # - batch['seqint'](inds) will be the target for decoder output
-        # - must use combination of uniform() and round() because int32 is not
+        # - must use combination of rand() and round() because int32 is not
         #   yet implemented when feeding vectors into low/high arguments
-        inds = tf.random.uniform(
-            (tf.shape(intseq)[0], ), 
-            tf.fill((tf.shape(intseq)[0], ), -0.5), 
-            tf.cast(nonnull, tf.float32) - 0.5
-        )
-        inds = tf.cast(tf.math.round(inds), tf.int32)
-
+        uniform = th.rand(bs, device=nonnull.device) * nonnull
+        inds = uniform.floor().type(th.int32)
+        
         # Fill with hidden tokens to the end
         # - this will be the decoder's input
         dec_inp = self.head.fill2c(intseq, inds, '<h>', output=False)
         
         # Indices of chosen predict tokens
         # - save for LossFunction
-        inds_ = tf.concat(
-            [tf.range(tf.shape(inds)[0], dtype=tf.int32)[:,None], inds[:,None]], 
-            axis=1
-        )
+        inds_ = [th.arange(inds.shape[0], dtype=th.int32), inds]
         self.inds = inds_
 
         # Target is the actual (intseq) identity of the chosen predict indices
-        targ = batch['seqint'] if full_seqint else tf.gather_nd(batch['seqint'], inds_)
+        targ = (
+            batch['seqint'] if full_seqint else batch['seqint'][inds_]
+        ).type(th.int64)
 
         return enc_input, dec_inp, targ
 
     def LossFunction(self, target, decout):
-        targ_one_hot = tf.one_hot(target, self.predcats)
-        logits = tf.gather_nd(decout, self.inds)
-        loss = cross_entropy(targ_one_hot, logits)
+        targ_one_hot = F.one_hot(target, self.predcats).type(th.float32)
+        logits = decout[self.inds]
+        loss = F.cross_entropy(logits, targ_one_hot)
 
         return loss
 
     def train_step(self, batch, trenc=True):
-        enc_input, seqint, target = self.inptarg(batch, training=True)
+        batch = U.Dict2dev(batch, device)
+        enc_input, seqint, target = self.inptarg(batch)
         
-        if trenc==False:
-            embedding = self.encoder(**enc_input)
-        with tf.GradientTape(persistent=True) as tape:
-            if trenc==True:
-                embedding = self.encoder(**enc_input)
-            head_out = self.head(seqint, embedding, batch, training=True)
-            all_loss = self.LossFunction(target, head_out)
-            loss = tf.reduce_mean(all_loss)
-
-        grads = tape.gradient(loss, self.head.trainable_variables)
-        self.opt_head.apply_gradients(zip(grads, self.head.trainable_variables))
+        self.encoder.to(device)
         if trenc:
-            grads = tape.gradient(loss, self.encoder.trainable_variables)
-            self.opt_encoder.apply_gradients(zip(grads, self.encoder.trainable_variables))
-
+            self.encoder.train()
+            self.encoder.zero_grad()
+            embedding = self.encoder(**enc_input)
+        else:
+            self.encoder.eval()
+            with th.no_grad():
+                embedding = self.encoder(**enc_input)
+        
+        self.head.train()
+        self.head.decoder.zero_grad()
+        head_out = self.head(seqint, embedding, batch, training=True)
+        all_loss = self.LossFunction(target, head_out)
+        loss = all_loss.mean()
+        
+        loss.backward()
+        self.opt_head.step()
+        if trenc:
+            self.opt_encoder.step()
+        
         return loss
 
 class DenovoBlDSObj(BaseDenovo):
@@ -426,14 +393,15 @@ class DenovoBlDSObj(BaseDenovo):
         head_dict['final_units'] = len(self.dl.amod_dic)
         self.head = SequenceHead(**head_dict)
         
-        self.initialize_weights()
-    
-    def inptarg(self, batch, training=True):
-        enc_input = self.encinp(batch, return_mask=True, training=training)
-        target = batch['seqint']
+        self.opt_head = th.optim.Adam(self.head.parameters(), config['lr'])
+
+    def inptarg(self, batch):
+        enc_input = self.encinp(batch, return_mask=True)
+        target = batch['seqint'].type(th.int64)
 
         return enc_input, target
-    
+
+"""   
 class AttributeDSObj(DownstreamObj):
     def __init__(self, config, base_model=None, svdir=None):
         super().__init__(config=config, base_model=base_model)
@@ -560,14 +528,14 @@ def build_downstream_object(task, yaml='./yaml/downstream.yaml', base_model=None
         DS = SpecclassObj(config, base_model)
 
     return DS
-
 """
+""""
 # Read downstream yaml
 with open("./yaml/downstream.yaml") as stream:
     config = yaml.safe_load(stream)
 
 # Downstream object
-print("Denovo sequencing")
+#print("Denovo sequencing")
 D = DenovoArDSObj(config)
 print("\n".join(D.TrainEval()))
 #print("Charge evaluation")

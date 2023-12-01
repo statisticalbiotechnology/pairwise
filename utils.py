@@ -14,7 +14,7 @@ def load_optimizer_state(opt, fn, device):
 def save_full_model(model, optimizer, svdir):
     th.save(
         model.state_dict(), 
-        "save/%s/weights/model_%s.wts"%(svdir, '0')
+        "save/%s/weights/model_enc.wts"%(svdir)
     )
     save_optimizer_state(
         optimizer, 'save/%s/weights/opt_encopt.wts'%(svdir)
@@ -37,16 +37,16 @@ def NonnullInds(SIArray, null_value):
 def AccRecPrec(target, prediction, null_value):
     boolean = (target==prediction).type(th.int32)
     accsum = boolean.sum()
-    #recall_inds = NonnullInds(target, null_value)
+    recall_bool = target != null_value
     #recsum = tf.reduce_sum(tf.gather_nd(boolean, recall_inds))
-    recsum = boolean[target != null_value].sum()
-    #prec_inds = NonnullInds(pred, null_value)
+    recsum = boolean[recall_bool].sum()
+    prec_bool = prediction != null_value
     #precsum = tf.reduce_sum(tf.gather_nd(boolean, prec_inds))
-    precsum = boolean[prediction != null_value].sum()
+    precsum = boolean[prec_bool].sum()
     out = {
         'accuracy': {'sum': accsum, 'total': target.shape[0]*target.shape[1]},
-        'recall': {'sum': recsum, 'total': recall_inds.shape[0]},
-        'precision': {'sum': precsum, 'total': prec_inds.shape[0]},
+        'recall': {'sum': recsum, 'total': recall_bool.sum()},
+        'precision': {'sum': precsum, 'total': prec_bool.sum()},
     }
 
     return out
@@ -128,3 +128,11 @@ class Scale:
         )
 
 deltaPPM = lambda mprec, mpred: abs(mprec - mpred) * 1e6 / mprec
+
+def Dict2dev(Dict, device, inplace=False):
+    if inplace:
+        for key in Dict.keys():
+            Dict[key] = Dict[key].to(device)
+        return True
+    else:
+        return {a: b.to(device) for a,b in Dict.items()}

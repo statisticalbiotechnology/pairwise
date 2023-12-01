@@ -11,13 +11,13 @@ import os
 import numpy as np
 import torch as th
 import yaml
-import utils as u
+import utils as U
 import re
 Adam = th.optim.Adam
 # slurm doesn't always manage gpus well -> cublas error
 # you may need to set cuda_visible_devices={#} before python in shellscript.sh
 device = th.device("cuda" if th.cuda.is_available() else "cpu")
-print(device)
+print("Device:", device)
 
 # Immediately read in yaml files to prevent unintended changes to the
 # experiment while I am changing the files outside of the shellscript
@@ -43,17 +43,17 @@ config['lr'] = float(config['lr'])
 # Header model
 header_dict = mconf['header_dict']
 mzh = tc['hidden_mz']
-# pass encoder_dict's running_units to header_dict as in_units
-header_dict['in_units'] - mconf['encoder_dict']['running_units']
-header_dict['hidden_mz']['bins'] = int( 
+header_dict['tasks']['hidden_mz']['bins'] = int( 
     (mzh['mzlims'][1] - mzh['mzlims'][0]) / mzh['binsz']
 ) # hidden mz needs binsz and mz range apriori
 abh = tc['hidden_ab']
-header_dict['hidden_ab']['bins'] = int(1 / abh['binsz']) # so does hidden ab
-header_dict['hidden_spectrum']['bins'] = config['max_peaks']
+header_dict['tasks']['hidden_ab']['bins'] = int(1 / abh['binsz']) # so does hidden ab
+header_dict['tasks']['hidden_spectrum']['bins'] = config['max_peaks']
 # hidden charge needs max charge to set the number of classes
-header_dict['hidden_charge']['num_classes'] = tc['hidden_charge']['max_charge']
-header_dict = {task: header_dict[task] for task in config['tasks']}
+header_dict['tasks']['hidden_charge']['num_classes'] = tc['hidden_charge']['max_charge']
+header_dict = {task: header_dict['tasks'][task] for task in config['tasks']}
+# pass encoder_dict's running_units to header_dict as in_units
+header_dict['in_units'] = mconf['encoder_dict']['running_units']
 # Override downstream saving if log is False
 if config['svwts'] is False:
     dsconfig['save_weights'] = False
@@ -63,7 +63,7 @@ dc['pretrain']['top_pks'] = config['max_peaks']
 # set downstream encoder_dict
 dsconfig['encoder_dict'] = mconf['encoder_dict']
 # set kv_indim in decoder_dict to the enocoder's running_units
-dsconfig['denovo_ar']['head_dict'] = mconf['encoder_dict']['running_units']
+dsconfig['denovo_ar']['head_dict']['running_units'] = mconf['encoder_dict']['running_units']
 
 ###############################################################################
 #                                  Loader                                     #
@@ -86,16 +86,16 @@ from utils import *
 # Encoder model
 encoder_dic = mconf['encoder_dict']
 encoder = Encoder(**encoder_dic)
+encoder.to(device) # model shouldn't need to come off of GPU entire run
 print("Total encoder parameters: %d"%encoder.total_params())
 
 # Header model(s)
 header = Header(header_dict)
+for task in header.heads.keys(): header.heads[task].to(device)
 assert hasattr(header, 'name')
 
-
 # Optimizers
-optencoder = Adam(encoder.parameters(), eval(config['lr']))
-header.initialize_optimizers()
+optencoder = Adam(encoder.parameters(), config['lr'])
 
 def save_all_weights(svdir):
     U.save_full_model(encoder, optencoder, svdir)
@@ -104,7 +104,7 @@ def save_all_weights(svdir):
     # Save header optimizer weights individually
     for task_name in config['tasks']:
         # optimizer.name should have opt_ already in it (see Header in models)
-        fn = 'save/%s/weights/%s.wts'%(svdir, header.opts[task_name].name)
+        fn = 'save/%s/weights/opt_%s.wts'%(svdir, task_name)
         U.save_optimizer_state(header.opts[task_name], fn)
 
 if config['load']:
@@ -137,18 +137,18 @@ loss_spec = " ".join(['%s: %%7.5f'%task_name for task_name in T.keys()])
 ###############################################################################
 #                           Downstream evaluation                             #
 ###############################################################################
-"""
+
 if not config['debug']:
     import downstream as ds
 
     # Downstream object
     allds = {
-        'charge': ds.ChargeDSObj,
-        'peplen': ds.PeplenDSObj,
+        #'charge': ds.ChargeDSObj,
+        #'peplen': ds.PeplenDSObj,
         'denovo_ar': ds.DenovoArDSObj,
-        'denovo_bl': ds.DenovoBlDSObj,
+        #'denovo_bl': ds.DenovoBlDSObj,
     }
-"""
+
 ###############################################################################
 #                                  Training                                   #
 ###############################################################################
@@ -160,14 +160,18 @@ import datetime
 
 def train_step(batch, task, enc_opt, head_opt):
     encoder.train()
+    encoder.zero_grad()
     header.train()
+    header.zero_grad()
+    batch = U.Dict2dev(batch, device, inplace=False)
 
     inp = T[task].inptarg(batch)
-    
     inp['length'] = batch['length']
+    
+
     head_outputs = [task]
     enc_output = encoder(**inp)
-    prediction = header(enc_output['emb'], head_outputs, training=True)
+    prediction = header(enc_output['emb'], head_outputs)
     loss = T[task].loss(prediction[task])
     loss = loss.mean()
     
@@ -175,7 +179,7 @@ def train_step(batch, task, enc_opt, head_opt):
     enc_opt.step()
     head_opt.step()
     
-    encoder.global_step.assign_add(1)
+    encoder.global_step +=1 
 
     return loss
 
@@ -193,7 +197,9 @@ def train(epochs=1, runlen=50, svfreq=3600):
         os.mkdir('save/%s'%svdir);
         os.mkdir('save/%s/yaml'%svdir)
         os.system("cp ./yaml/*.yaml save/%s/yaml/"%svdir)
-        if config['svwts']: save_all_weights(svdir)
+        if config['svwts']: 
+            os.mkdir('save/%s/weights'%svdir)
+            save_all_weights(svdir)
     else:
         svdir = './' # for establishing ds objects below
     
@@ -224,7 +230,7 @@ def train(epochs=1, runlen=50, svfreq=3600):
             
             # Train model for a step
             random_labels = perm[step*bs : (step+1)*bs]
-            random_task = np.random.choice(list(header_dict.keys()), 1)[0]
+            random_task = np.random.choice(list(header.heads.keys()), 1)[0]
             TT = time();batch = L.load_batch(
                 random_labels
             );load_time.append(time()-TT) # load time sandwich
@@ -233,7 +239,7 @@ def train(epochs=1, runlen=50, svfreq=3600):
             );graph_time.append(time()-TT) # graph time sandwich
             
             # Save running stats
-            T[random_task].log_loss(loss.detach().numpy())
+            T[random_task].log_loss(loss.detach().cpu().numpy())
             running_time.append(time()-start_step)
             
             # Stdout
@@ -263,7 +269,7 @@ def train(epochs=1, runlen=50, svfreq=3600):
         ])
         loss_string = loss_spec%tot_losses
         Line = 'Epoch %d, Global step %d: mean_loss=%s (%d s)'%(
-            epoch, encoder.global_step.numpy(), loss_string, time()-start_epoch
+            epoch, encoder.global_step.cpu().detach().numpy(), loss_string, time()-start_epoch
         )
         sys.stdout.write("\r\033[K%s\n"%Line)
         if msg:
@@ -293,7 +299,8 @@ def train(epochs=1, runlen=50, svfreq=3600):
     
     print()
 
-np.random.seed(config['seed'])
-th.manual_seed(config['seed'])
+if config['seed'] is not None:
+    np.random.seed(config['seed'])
+    th.manual_seed(config['seed'])
 train(epochs=config['epochs'], runlen=100, svfreq=config['svfreq'])
 

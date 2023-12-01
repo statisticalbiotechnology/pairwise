@@ -85,9 +85,10 @@ class Decoder(nn.Module):
         self.pool = pool
         
         # Positional embedding
-        self.pos = mp.FourierFeatures(
+        pos = mp.FourierFeatures(
             th.arange(self.sl, dtype=th.float32), self.run_units, 5.*self.sl
         )
+        self.pos = nn.Parameter(pos, requires_grad=False)
     
     def total_params(self):
         return sum([m.numel() for m in self.parameters()])
@@ -98,7 +99,7 @@ class Decoder(nn.Module):
             mask = th.zeros(1, self.sl, dtype=th.float32)
         else:
             seqs = th.tile(
-                th.arange(self.sl)[None], (seqlen.shape[0], 1)
+                th.arange(self.sl, device=seqlen.device)[None], (seqlen.shape[0], 1)
             )
             # Only mask out sequence positions greater than or equal to predict
             # token
@@ -200,9 +201,15 @@ class DenovoDecoder:
 
     def load_weights(self, fp='./decoder.wts'):
         self.decoder.load_state_dict(th.load(fp))
-        
+    
+    def train(self):
+        self.decoder.train()
+
+    def eval(self):
+        self.decoder.eval()
+
     def prepend_startok(self, intseq):
-        hold = th.zeros(intseq.shape[0], 1, dtype=th.int32)
+        hold = th.zeros(intseq.shape[0], 1, dtype=th.int32, device=intseq.device)
         start = th.fill(hold, self.start_token)
         out = th.cat([start, intseq], dim=1)
 
@@ -249,9 +256,10 @@ class DenovoDecoder:
         return int_array
 
     def fill2c(self, int_array, inds, tokentyp='X', output=True):
-        tokint = self.NT if output else self.inpdict['X']
+        dev = int_array.device
+        tokint = self.NT if output else self.inpdict[tokentyp]
         all_inds = th.tile(
-            th.arange(int_array.shape[1], dtype=th.int32)[None],
+            th.arange(int_array.shape[1], dtype=th.int32, device=dev)[None],
             [int_array.shape[0], 1]
         )
         # hidden_inds = th.where(all_inds > inds[:, None])
@@ -270,16 +278,17 @@ class DenovoDecoder:
         enc_out, 
         charge=None, 
         energy=None, 
-        mass=None, 
+        mass=None,
+        device=th.device('cpu'),
         ):
         dec_inp = {
-            'intseq': intseq,
-            'kv_feats': enc_out['emb'],
-            'charge': charge if self.decoder.use_charge else None,
-            'energy': energy if self.decoder.use_energy else None,
-            'mass': mass if self.decoder.use_mass else None,
-            'seqlen': self.num_reg_tokens(intseq), # for the seq. mask
-            'specmask': enc_out['mask'],
+            'intseq': intseq.to(device),
+            'kv_feats': enc_out['emb'].to(device),
+            'charge': charge.to(device) if self.decoder.use_charge else None,
+            'energy': energy.to(device) if self.decoder.use_energy else None,
+            'mass': mass.to(device) if self.decoder.use_mass else None,
+            'seqlen': self.num_reg_tokens(intseq.to(device)), # for the seq. mask
+            'specmask': enc_out['mask'].to(device),
         }
 
         return dec_inp
@@ -518,9 +527,11 @@ class DenovoDecoder:
     # the decoder.
     #@tf.function
     def predict_sequence(self, enc_out, batdic):
+
+        dev = enc_out['emb'].device
         bs = enc_out['emb'].shape[0]
         # starting intseq array
-        intseq = self.initial_intseq(bs, self.seq_len)
+        intseq = self.initial_intseq(bs, self.seq_len).to(dev)
         for i in range(self.seq_len):
         
             index = int(i)
@@ -568,10 +579,16 @@ class DenovoDecoder:
 
         return rank, prob #UNNECESSARY
 
-    def __call__(self, intseq, enc_out, batdic, training=False, softmax=False):
+    def __call__(self, 
+                 intseq, 
+                 enc_out, 
+                 batdic, 
+                 training=False, 
+                 softmax=False,
+                 ):
         dec_inp = self.decinp(
             intseq, enc_out, charge=batdic['charge'], mass=batdic['mass'], 
-            energy=None,
+            energy=None, device=self.decoder.pos.device
         )
         if training:
             self.decoder.train()

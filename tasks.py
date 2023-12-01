@@ -59,6 +59,8 @@ class TrinaryTask(Task):
 
     def inptarg(self, batch, freq=None, std=None):
         
+        dev = batch['mz'].device
+
         freq = self.freq if freq==None else freq
         std = self.stdev if std==None else std
 
@@ -66,7 +68,7 @@ class TrinaryTask(Task):
         mzab = deepcopy(batch[self.typ])
         
         # Random sequence indices to change
-        inds_boolean = th.empty(mzab.shape).uniform_(0, 1) < freq
+        inds_boolean = th.empty(mzab.shape, device=dev).uniform_(0, 1) < freq
         inds = th.cat(th.where(inds_boolean)).reshape(2, -1).T
         
         # Get their mz values
@@ -100,15 +102,15 @@ class TrinaryTask(Task):
         
         # Create target one-hot classification tensor
         # by default, everything starts with same/1
-        target = th.ones(mzab.shape, dtype=th.int64)
+        target = th.ones(mzab.shape, dtype=th.int64, device=dev)
         
         # Separate nx2 indices into (2,) tuple
         target[zero_inds.split(1,1)] = th.zeros(
-            zero.sum(), dtype=th.int64
+            zero.sum(), dtype=th.int64, device=dev
         )[:,None]
         
         target[two_inds.split(1,1)] = 2*th.ones(
-            two.sum(), dtype=th.int64
+            two.sum(), dtype=th.int64, device=dev
         )[:,None]
         
         self.target = F.one_hot(target, 3).type(th.float32)
@@ -117,6 +119,7 @@ class TrinaryTask(Task):
 
     def loss(self, prediction):
         # logits dimension (length 3: trinary) must be after batch
+        #target = self.target.to(prediction.device).transpose(-1,-2)
         loss = F.cross_entropy(
             prediction.transpose(-1,-2), self.target.transpose(-1,-2)
         )
@@ -138,17 +141,19 @@ class HiddenPeak(Task):
 
     def inptarg(self, batch, freq=None):
         
+        dev = batch['mz'].device
+
         freq = self.freq if freq==None else freq
         
         mzab = deepcopy(batch[self.typ])
 
         # Random inds to mask out
         elig_inds_bool = th.tile(
-            th.arange(mzab.shape[1])[None], [mzab.shape[0], 1]
+            th.arange(mzab.shape[1], device=dev)[None], [mzab.shape[0], 1]
         ) < batch['length'][:,None]
         elig_inds = th.cat(th.where(elig_inds_bool)).reshape(2,-1).T
         # choose <freq> percent of those eligible inds
-        indsinds = th.empty(elig_inds_bool.sum(),).uniform_(0, 1) < freq
+        indsinds = th.empty(elig_inds_bool.sum(), device=dev).uniform_(0, 1) < freq
         inds = elig_inds[indsinds].split(1,1)
         # Create a mask that will multiply by mz/ab fourier vectors inside MzAb 
         #mask = tf.ones((tf.shape(mzab)[0], tf.shape(mzab)[1], 2))
@@ -158,7 +163,7 @@ class HiddenPeak(Task):
         #)
         # Also mask out original values, just to be safe
         inputmzab = deepcopy(mzab)
-        inputmzab[inds] = th.zeros(inds[0].shape[0], 1)
+        inputmzab[inds] = th.zeros(inds[0].shape[0], 1, device=dev)
         #inputmzab = tf.tensor_scatter_nd_update(
         #    mzab, inds, tf.zeros((tf.shape(inds)[0]))
         #)

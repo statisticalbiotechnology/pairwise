@@ -2,11 +2,18 @@ import torch as th
 from torch import nn
 from math import log
 
+class BatchTorch1d(nn.Module):
+    def __init__(self, units):
+        super(BatchTorch1d, self).__init__()
+        self.norm = nn.BatchNorm1d(units)
+    def forward(self, x):
+        return self.norm(x.transpose(-1,-2)).transpose(-1,-2)
+
 def get_norm_type(string):
     if string.lower() == 'layer':
         return nn.LayerNorm
     elif string.lower() == 'batch':
-        return nn.BatchNorm1d
+        return BatchTorch1d
 
 class QKVAttention(nn.Module):
     def __init__(self,
@@ -245,7 +252,7 @@ def FourierFeatures(t, embedsz, freq=10000.):
         t[..., None] * 
         th.exp(
             -log(float(freq)) * 
-            th.arange(embedsz//2).type(th.float32) / 
+            th.arange(embedsz//2).type(th.float32).to(t.device) / 
             (embedsz//2)
         )[None]
     )
