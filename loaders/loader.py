@@ -163,6 +163,7 @@ class LoadObj:
                  top_pks=100, 
                  save_md=True,
                  filter_psms=False,
+                 **kwargs
                  ):
         self.is_filter_psms = filter_psms
 
@@ -190,8 +191,20 @@ class LoadObj:
         self.gather_md()
 
         self.gather_labels()
+        
+        if kwargs['scratch']['use']:
+            pth = kwargs['scratch']['path']
+            if os.path.exists(pth):
+                self.fn2full = {
+                    key: pth + self.fn2full[key].split("/")[-1]  
+                    for key in self.fn2full.keys()
+                }
+            else:
+                print("Scratch directory not found. Using original paths.")
+
         if self.preopen:
             self.open_files()
+
     
     def gather_md(self):
         self.md = {}
