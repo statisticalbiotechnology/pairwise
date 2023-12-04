@@ -24,7 +24,7 @@ class ClassifierHead(nn.Module):
 
         self.penult = nn.Sequential(
             nn.Linear(in_units, penult_units),
-            nn.ReLU(), # GELU was blowing up the gradients at the beginning
+            nn.GELU(), # GELU was blowing up the gradients at the beginning
             norm(penult_units),
         )
         

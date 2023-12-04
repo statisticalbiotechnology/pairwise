@@ -2,6 +2,29 @@
 import models.model_parts as mp
 import torch as th
 from torch import nn
+I = nn.init
+
+def init_encoder_weights(module):
+    if hasattr(module, 'MzSeq'):
+        module.MzSeq[0].weight = I.xavier_uniform_(module.MzSeq[0].weight)
+        if module.MzSeq[0].bias is not None:
+            module.MzSeq[0].bias = I.zeros_(module.MzSeq[0].bias)
+    if hasattr(module, 'first'):
+        module.first.weight = I.xavier_uniform_(module.first.weight)
+        if module.first.bias is not None: 
+            module.first.bias = I.zeros_(module.first.bias)
+    elif isinstance(module, mp.SelfAttention):
+        maxmin = (6 / (module.qkv.in_features + module.d))**0.5
+        module.qkv.weight = I.uniform_(module.qkv.weight, -maxmin, maxmin)
+        module.Wo.weight = I.normal_(module.Wo.weight, 0.0, 0.3*(module.h*module.d)**-0.5)
+    elif isinstance(module, mp.FFN):
+        module.W1.weight = I.xavier_uniform_(module.W1.weight)
+        module.W1.bias = I.zeros_(module.W1.bias)
+        module.W2.weight = I.normal_(module.W2.weight, 0.0, 0.3*(module.indim*module.mult)**-0.5)
+    elif isinstance(module, nn.Linear):
+        module.weight = I.xavier_uniform_(module.weight)
+        if module.bias is not None:
+            module.bias = I.zeros_(module.bias)
 
 class Encoder(nn.Module):
     def __init__(self,
@@ -104,10 +127,12 @@ class Encoder(nn.Module):
             th.arange(self.sl, dtype=th.float32), self.run_units, 5.*self.sl
         )
         self.pos = nn.Parameter(pos, requires_grad=False)
+
+        self.apply(init_encoder_weights)
     
     def total_params(self):
         return sum([m.numel() for m in self.parameters()])
-    
+
     def MzAb(self, x, inp_mask=None):
         mz, ab = th.split(x, 1, -1)
         
@@ -231,3 +256,5 @@ class Encoder(nn.Module):
         if return_mask: Output['mask'] = mask
         
         return Output
+
+            

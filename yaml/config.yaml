@@ -1,9 +1,10 @@
 seed: 10
 max_peaks: 100
 epochs: 5
-steps_per_epoch: 10
+steps_per_epoch: 10000
 batch_size: 100
 lr: 4e-5
+headclip: 5
 tasks:
   - trinary_mz
   #- trinary_ab
@@ -20,8 +21,9 @@ downstream:
   - denovo_ar
 load: False
 loadpath: save/2023-09-27_06-24-36.363775/weights/
+log: False
 svwts: False
 svfreq: 1800
-log: False
+svgrad: False
 debug: False
 header: "First full test of pytorch (beat recall=0.37)"

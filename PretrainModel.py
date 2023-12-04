@@ -177,6 +177,10 @@ def train_step(batch, task, enc_opt, head_opt):
     
     loss.backward()
     enc_opt.step()
+    if config['headclip'] is not None:
+        th.nn.utils.clip_grad_norm_(
+            header.heads['trinary_mz'].parameters(), config['headclip']
+        )
     head_opt.step()
     
     encoder.global_step +=1 
@@ -213,6 +217,16 @@ def train(epochs=1, runlen=50, svfreq=3600):
         line = "%s\n%s\n"%(svdir, config['header'])
         allepochlines = [line]
         #allvallines = [line]
+
+    # Variables needed for saving gradient infomration
+    if config['svgrad']:
+        parms_enc = [str(tuple(parm.shape)) for parm in encoder.parameters()]
+        parms_head = [
+            str(tuple(parm.shape)) for parm in header.heads['trinary_mz'].parameters()
+        ]
+        parmshapes = parms_enc + parms_head
+        parmgrads = []
+        all_loss = []
     
     # Train
     running_time = deque(maxlen=runlen) # Full time
@@ -220,6 +234,7 @@ def train(epochs=1, runlen=50, svfreq=3600):
     graph_time = deque(maxlen=runlen) # train_step time
     svtime = time()
     sys.stdout.write("Starting training for %d epochs\n"%epochs)
+    
     for epoch in range(epochs):
         start_epoch = time()
         perm = np.random.permutation(L.labels)
@@ -241,6 +256,17 @@ def train(epochs=1, runlen=50, svfreq=3600):
             # Save running stats
             T[random_task].log_loss(loss.detach().cpu().numpy())
             running_time.append(time()-start_step)
+            
+            # Gradient tracking
+            if config['svgrad']:
+                grads = (
+                    [float(parm.grad.norm().detach().cpu().numpy()) 
+                     for parm in encoder.parameters() if parm.requires_grad] +
+                    [float(parm.grad.norm().detach().cpu().numpy()) 
+                     for parm in header.heads['trinary_mz'].parameters() if parm.requires_grad]
+                )
+                parmgrads.append(grads)
+                all_loss.append(T[random_task].running_loss['main'][-1])
             
             # Stdout
             if step%50==0:
@@ -280,6 +306,13 @@ def train(epochs=1, runlen=50, svfreq=3600):
     # Save weights, perhaps
     if swt:
         save_all_weights(svdir)
+    # Save gradients, perhaps
+    if config['svgrad']:
+        with open('save/'+svdir+"/parmshapes", 'w') as f: 
+            f.write("|".join(parmshapes))
+        np.savetxt('save/'+svdir+"/allloss", np.array(all_loss))
+        np.savetxt('save/'+svdir+"/parmgrads", np.array(parmgrads))
+
     # Run quick(ish) few shot downstream evaluation
     for dstask in config['downstream']:
         DS = allds[dstask](
