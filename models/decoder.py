@@ -65,7 +65,8 @@ class Decoder(nn.Module):
                 is_embed,
                 ce_units,
                 preembed, 
-                is_cross=True
+                is_cross=True,
+                kvindim=kv_indim
             ) 
             for _ in range(depth)
         ])

@@ -293,6 +293,7 @@ class DenovoArDSObj(BaseDenovo):
 
         # Head model
         head_dict = self.config[task]['head_dict']
+        head_dict['kv_indim'] = self.encoder.run_units
         self.config['sl'] = self.config['loader']['pep_length'][1]
         self.head = DenovoDecoder(
             token_dict=self.dl.amod_dic, dec_config=head_dict, 
@@ -529,19 +530,19 @@ def build_downstream_object(task, yaml='./yaml/downstream.yaml', base_model=None
 
     return DS
 """
-"""
+#"""
 # Read downstream yaml
 with open("./yaml/downstream.yaml") as stream:
     config = yaml.safe_load(stream)
 
 # Downstream object
 #print("Denovo sequencing")
-D = DenovoArDSObj(config)
-print("\n".join(D.TrainEval()))
+#D = DenovoArDSObj(config)
+#print("\n".join(D.TrainEval()))
 #print("Charge evaluation")
 #D = ChargeDSObj(config)
 #print("\n".join(D.TrainEval()))
 #print("Peptide length evaluation")
 #D = PeplenDSObj(config)
 #print("\n".join(D.TrainEval()))
-"""
+#"""

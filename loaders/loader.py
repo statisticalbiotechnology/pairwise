@@ -192,15 +192,16 @@ class LoadObj:
 
         self.gather_labels()
         
-        if kwargs['scratch']['use']:
-            pth = kwargs['scratch']['path']
-            if os.path.exists(pth):
-                self.fn2full = {
-                    key: pth + self.fn2full[key].split("/")[-1]  
-                    for key in self.fn2full.keys()
-                }
-            else:
-                print("Scratch directory not found. Using original paths.")
+        if 'scratch' in kwargs.keys():
+            if kwargs['scratch']['use']:
+                pth = kwargs['scratch']['path']
+                if os.path.exists(pth):
+                    self.fn2full = {
+                        key: pth + self.fn2full[key].split("/")[-1]  
+                        for key in self.fn2full.keys()
+                    }
+                else:
+                    print("Scratch directory not found. Using original paths.")
 
         if self.preopen:
             self.open_files()
