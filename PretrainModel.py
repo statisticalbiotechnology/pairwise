@@ -33,6 +33,12 @@ with open("./yaml/downstream.yaml") as stream:
     dsconfig = yaml.safe_load(stream)
 config['lr'] = float(config['lr'])
 
+clip_op = (
+    th.nn.utils.clip_grad_value_
+    if config['headclip']['type'] == 'value' else
+    th.nn.utils.clip_grad_norm_
+)
+
 # NOTE about trading information between yaml files:
 # I don't want to have to specify inputs in 2 different yaml files that must be 
 # consistent with each other. Instead, 1 yaml file can have all relevant input 
@@ -64,6 +70,8 @@ dc['pretrain']['top_pks'] = config['max_peaks']
 dsconfig['encoder_dict'] = mconf['encoder_dict']
 # set kv_indim in decoder_dict to the enocoder's running_units
 dsconfig['denovo_ar']['head_dict']['running_units'] = mconf['encoder_dict']['running_units']
+
+
 
 ###############################################################################
 #                                  Loader                                     #
@@ -177,10 +185,9 @@ def train_step(batch, task, enc_opt, head_opt):
     
     loss.backward()
     enc_opt.step()
-    if config['headclip'] is not None:
-        th.nn.utils.clip_grad_norm_(
-            header.heads['trinary_mz'].parameters(), config['headclip']
-        )
+    if config['headclip']['use']: 
+        parms = header.heads[task].parameters()
+        clip_op(parms, config['headclip']['max'])
     head_opt.step()
     
     encoder.global_step +=1 
