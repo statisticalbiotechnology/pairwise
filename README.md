@@ -1,8 +1,20 @@
+#### Recursively clone repo
+We attach depthcharge as a submodule due to the latest version not being available on pip. Therefore, this repository needs to be recursively cloned:
+`git clone --recursive git@github.com:statisticalbiotechnology/bedrock.git`
 
-#### Install requirements (Conda)
+`cd bedrock`
+
+#### Install dependencies (Conda)
 `conda env create -f environment.yml`
 
-`conda activate MS2transformers`
+`conda activate Foundation`
+
+#### Install Depthcharge
+`conda activate Foundation`
+
+`cd depthcharge`
+
+`pip install .`
 
 ### Framework/structure
 We utilize Pytorch Lightning. We define the models in `src/models/`, and wrap them with Lightning modules that contain the training code. The training wrappers are found in `src/pl_wrappers.py`.

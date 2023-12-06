@@ -1,5 +1,5 @@
 # create a conda env with 'conda env create -f environment.yml'
-name: MS2transformers
+name: Foundation
 channels:
   - conda-forge
 dependencies:
