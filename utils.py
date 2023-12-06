@@ -1,34 +1,23 @@
 """
 Functions that I don't want to define in Pretrainmodel.py
 """
-import tensorflow as tf
+import torch as th
 import numpy as np
 from difflib import get_close_matches as gcm
 
 def save_optimizer_state(opt, fn):
-    optdict = {w.name: w.numpy() for w in opt.variables}
-    np.save(fn, optdict)
+    th.save(opt.state_dict(), fn)
 
-def load_optimizer_state(opt, Vars, fn):
-    
-    opt_weights = np.load(fn, allow_pickle=True).ravel()[0]
-    grad_vars = Vars#model.trainable_variables
-    zero_grads = [tf.zeros_like(w) for w in grad_vars]
-    opt.apply_gradients(zip(zero_grads, grad_vars))
-    
-    matched = 0
-    for opt_var in opt.variables:
-        if opt_var.name not in opt_weights.keys():
-            continue
-        else:
-            matched += 1
-            opt_var.assign(opt_weights[opt_var.name])
-    print("%d of %d variables matched"%(matched, len(opt.variables)))
+def load_optimizer_state(opt, fn, device):
+    opt.load_state_dict(th.load(fn), map_location=device)
 
 def save_full_model(model, optimizer, svdir):
-    model.save_weights("save/%s/weights/model_%s.wts"%(svdir, model.name))
+    th.save(
+        model.state_dict(), 
+        "save/%s/weights/model_enc.wts"%(svdir)
+    )
     save_optimizer_state(
-        optimizer, 'save/%s/weights/opt_%s.wts'%(svdir, optimizer.name)
+        optimizer, 'save/%s/weights/opt_encopt.wts'%(svdir)
     )
 
 def message_board(line, path):
@@ -36,25 +25,28 @@ def message_board(line, path):
         F.write(line)
 
 def discretize_mz(mz, binsz, totbins):
-    indices = tf.maximum(0, tf.cast(tf.round(mz / binsz), tf.int32) - 1)
+    indices = th.maximum(
+        th.zeros_like(mz), (mz / binsz).round().type(th.int32) - 1
+    ).type(th.int64)
     
-    return tf.one_hot(indices, totbins)
+    return th.nn.functional.one_hot(indices, totbins)
 
 def NonnullInds(SIArray, null_value):
-    return tf.where( SIArray != null_value )
+    return th.where( SIArray != null_value )
 
 def AccRecPrec(target, prediction, null_value):
-    pred = prediction # tf.cast(tf.argmax(prediction, axis=-1), tf.int32) # bs, sl
-    boolean = tf.cast(target==pred, tf.int32)
-    accsum = tf.reduce_sum(boolean)
-    recall_inds = NonnullInds(target, null_value)
-    recsum = tf.reduce_sum(tf.gather_nd(boolean, recall_inds))
-    prec_inds = NonnullInds(pred, null_value)
-    precsum = tf.reduce_sum(tf.gather_nd(boolean, prec_inds))
+    boolean = (target==prediction).type(th.int32)
+    accsum = boolean.sum()
+    recall_bool = target != null_value
+    #recsum = tf.reduce_sum(tf.gather_nd(boolean, recall_inds))
+    recsum = boolean[recall_bool].sum()
+    prec_bool = prediction != null_value
+    #precsum = tf.reduce_sum(tf.gather_nd(boolean, prec_inds))
+    precsum = boolean[prec_bool].sum()
     out = {
-        'accuracy': {'sum': accsum, 'total': tf.shape(target)[0]*tf.shape(target)[1]},
-        'recall': {'sum': recsum, 'total': tf.shape(recall_inds)[0]},
-        'precision': {'sum': precsum, 'total': tf.shape(prec_inds)[0]},
+        'accuracy': {'sum': accsum, 'total': target.shape[0]*target.shape[1]},
+        'recall': {'sum': recsum, 'total': recall_bool.sum()},
+        'precision': {'sum': precsum, 'total': prec_bool.sum()},
     }
 
     return out
@@ -119,7 +111,7 @@ class Scale:
                     int2mass[integer] = 0
 
         self.tok2mass = {key: int2mass[amod_dict[key]] for key in amod_dict.keys()}
-        self.mp = tf.constant(int2mass, dtype=tf.float32)
+        self.mp = th.tensor(int2mass, dtype=th.float32)
         """self.mp = tf.lookup.StaticVocabularyTable(
             tf.lookup.KeyValueTensorInitializer(
                 list(int2mass.keys()), list(int2mass.values()),
@@ -128,7 +120,7 @@ class Scale:
         )"""
     
     def intseq2mass(self, intseq):
-        return tf.reduce_sum(tf.gather(self.mp, intseq), 1)
+        return th.gather(self.mp, 0, intseq).sum(1)
 
     def modseq2mass(self, modified_sequence):
         return np.sum(
@@ -136,3 +128,11 @@ class Scale:
         )
 
 deltaPPM = lambda mprec, mpred: abs(mprec - mpred) * 1e6 / mprec
+
+def Dict2dev(Dict, device, inplace=False):
+    if inplace:
+        for key in Dict.keys():
+            Dict[key] = Dict[key].to(device)
+        return True
+    else:
+        return {a: b.to(device) for a,b in Dict.items()}

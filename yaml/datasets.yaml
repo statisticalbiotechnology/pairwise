@@ -7,6 +7,9 @@ pretrain:
   preopen_files: False
   filter_psms: False
   save_md: True
+  scratch:
+    use: True
+    path: /media/storage/scratch/
 downstream:
   train_dir: /cmnfs/home/j.lapin/datasets/downstream/train
   test_dir: /cmnfs/home/j.lapin/datasets/downstream/test

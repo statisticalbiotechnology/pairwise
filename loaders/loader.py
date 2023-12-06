@@ -1,5 +1,5 @@
 import numpy as np
-import tensorflow as tf
+import torch as th
 import os
 import pandas as pd
 import re
@@ -163,6 +163,7 @@ class LoadObj:
                  top_pks=100, 
                  save_md=True,
                  filter_psms=False,
+                 **kwargs
                  ):
         self.is_filter_psms = filter_psms
 
@@ -190,8 +191,21 @@ class LoadObj:
         self.gather_md()
 
         self.gather_labels()
+        
+        if 'scratch' in kwargs.keys():
+            if kwargs['scratch']['use']:
+                pth = kwargs['scratch']['path']
+                if os.path.exists(pth):
+                    self.fn2full = {
+                        key: pth + self.fn2full[key].split("/")[-1]  
+                        for key in self.fn2full.keys()
+                    }
+                else:
+                    print("Scratch directory not found. Using original paths.")
+
         if self.preopen:
             self.open_files()
+
     
     def gather_md(self):
         self.md = {}
@@ -353,11 +367,11 @@ class LoadObj:
             lengths[i] = len(mzsort)
 
         output = {
-                'mz': tf.constant(mz, tf.float32), 
-                'ab': tf.constant(ab/ab.max(-1, keepdims=True), tf.float32),
-                'charge': tf.constant(charge, tf.int32),
-                'mass': tf.constant(mass, tf.float32),
-                'length': tf.constant(lengths, tf.int32)
+                'mz': th.tensor(mz, dtype=th.float32), 
+                'ab': th.tensor(ab/ab.max(-1, keepdims=True), dtype=th.float32),
+                'charge': th.tensor(charge, dtype=th.int32),
+                'mass': th.tensor(mass, dtype=th.float32),
+                'length': th.tensor(lengths, dtype=th.int32)
         }
 
         return output
@@ -513,16 +527,14 @@ class LoadObjDNV(LoadObjDS):
                 (maxsl-len(spec_dic['intseq']))*[self.diclen-1]
             )
         
-        #target = tf.one_hot(seq_ints, self.diclen)
-
         output = {
-            'mz': tf.constant(mz, tf.float32), 
-            'ab': tf.constant(ab/ab.max(-1, keepdims=True), tf.float32),
-            'charge': tf.constant(charge, tf.int32),
-            'mass': tf.constant(mass, tf.float32),
-            'length': tf.constant(lengths, tf.int32),
+            'mz': th.tensor(mz, dtype=th.float32), 
+            'ab': th.tensor(ab/ab.max(-1, keepdims=True), dtype=th.float32),
+            'charge': th.tensor(charge, dtype=th.int32),
+            'mass': th.tensor(mass, dtype=th.float32),
+            'length': th.tensor(lengths, dtype=th.int32),
 
-            'target': tf.constant(seqints, tf.int32)
+            'target': th.tensor(seqints, dtype=th.int32)
         }
 
         return output
@@ -605,25 +617,24 @@ class LoadObjSC(LoadObjDS):
 
             classes[i] = spec_dic['class']
 
-        #target = tf.one_hot(classes, self.predcats)
-
         output = {
-            'mz': tf.constant(mz, tf.float32), 
-            'ab': tf.constant(ab/ab.max(-1, keepdims=True), tf.float32),
-            'charge': tf.constant(charge, tf.int32),
-            'mass': tf.constant(mass, tf.float32),
-            'length': tf.constant(lengths, tf.int32),
+            'mz': th.tensor(mz, dtype=th.float32), 
+            'ab': th.tensor(ab/ab.max(-1, keepdims=True), dtype=th.float32),
+            'charge': th.tensor(charge, dtype=th.int32),
+            'mass': th.tensor(mass, dtype=th.float32),
+            'length': th.tensor(lengths, dtype=th.int32),
 
-            'target': tf.constant(classes, tf.int32)
+            'target': th.tensor(classes, dtype=th.int32)
         }
 
         return output
+
 """
 import yaml
 
-with open("yaml/downstream.yaml") as stream:
+with open("/cmnfs/home/j.lapin/projects/foundational/yaml/datasets.yaml") as stream:
     config = yaml.safe_load(stream)
-config['specclass']['datasets']['top_pks'] = 100
 
-L = LoadObjSC(config['specclass'])
+L = LoadObj(**config['pretrain'])
+print(L.load_batch(L.labels[:100]))
 """

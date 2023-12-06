@@ -1,23 +1,23 @@
 ###############################################################################
-#                                  Todo                                       #
+#                                  todo                                       #
 ###############################################################################
 """
-Add mask charge/mass tasks
-Add task where you add m/z to each peak and model must guess systematic error
-Add a intensity rank task --> one_hot(x.shape[1]-argsort(argsort(x,-1),-1))
+add mask charge/mass tasks
+add task where you add m/z to each peak and model must guess systematic error
+add a intensity rank task --> one_hot(x.shape[1]-argsort(argsort(x,-1),-1))
 """
 # dependencies used throughout the program
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
-import tensorflow as tf
+import torch as th
 import yaml
 import utils as U
 import re
-Adam = tf.keras.optimizers.Adam
-# slurm doesn't always manage GPUs well -> cublas error
-# You may need to set CUDA_VISIBLE_DEVICES={#} before python in shellscript.sh
-print(tf.config.list_physical_devices())
+Adam = th.optim.Adam
+# slurm doesn't always manage gpus well -> cublas error
+# you may need to set cuda_visible_devices={#} before python in shellscript.sh
+device = th.device("cuda" if th.cuda.is_available() else "cpu")
+print("Device:", device)
 
 # Immediately read in yaml files to prevent unintended changes to the
 # experiment while I am changing the files outside of the shellscript
@@ -33,6 +33,12 @@ with open("./yaml/downstream.yaml") as stream:
     dsconfig = yaml.safe_load(stream)
 config['lr'] = float(config['lr'])
 
+clip_op = (
+    th.nn.utils.clip_grad_value_
+    if config['headclip']['type'] == 'value' else
+    th.nn.utils.clip_grad_norm_
+)
+
 # NOTE about trading information between yaml files:
 # I don't want to have to specify inputs in 2 different yaml files that must be 
 # consistent with each other. Instead, 1 yaml file can have all relevant input 
@@ -43,15 +49,17 @@ config['lr'] = float(config['lr'])
 # Header model
 header_dict = mconf['header_dict']
 mzh = tc['hidden_mz']
-header_dict['hidden_mz']['bins'] = int( 
+header_dict['tasks']['hidden_mz']['bins'] = int( 
     (mzh['mzlims'][1] - mzh['mzlims'][0]) / mzh['binsz']
 ) # hidden mz needs binsz and mz range apriori
 abh = tc['hidden_ab']
-header_dict['hidden_ab']['bins'] = int(1 / abh['binsz']) # so does hidden ab
-header_dict['hidden_spectrum']['bins'] = config['max_peaks']
+header_dict['tasks']['hidden_ab']['bins'] = int(1 / abh['binsz']) # so does hidden ab
+header_dict['tasks']['hidden_spectrum']['bins'] = config['max_peaks']
 # hidden charge needs max charge to set the number of classes
-header_dict['hidden_charge']['num_classes'] = tc['hidden_charge']['max_charge']
-header_dict = {task: header_dict[task] for task in config['tasks']}
+header_dict['tasks']['hidden_charge']['num_classes'] = tc['hidden_charge']['max_charge']
+header_dict = {task: header_dict['tasks'][task] for task in config['tasks']}
+# pass encoder_dict's running_units to header_dict as in_units
+header_dict['in_units'] = mconf['encoder_dict']['running_units']
 # Override downstream saving if log is False
 if config['svwts'] is False:
     dsconfig['save_weights'] = False
@@ -60,6 +68,10 @@ dsconfig['loader']['top_pks'] = config['max_peaks']
 dc['pretrain']['top_pks'] = config['max_peaks']
 # set downstream encoder_dict
 dsconfig['encoder_dict'] = mconf['encoder_dict']
+# set kv_indim in decoder_dict to the enocoder's running_units
+dsconfig['denovo_ar']['head_dict']['running_units'] = mconf['encoder_dict']['running_units']
+
+
 
 ###############################################################################
 #                                  Loader                                     #
@@ -82,51 +94,41 @@ from utils import *
 # Encoder model
 encoder_dic = mconf['encoder_dict']
 encoder = Encoder(**encoder_dic)
-
-# Call model to create weights
-batch = L.load_batch(labels[:config['batch_size']])
-mzab = tf.concat([batch['mz'][...,None], batch['ab'][...,None]], -1)
-model_inp = {
-    'x': mzab,
-    'charge': batch['charge'],
-    'mass': batch['mass'],
-    'length': batch['length'],
-    'training': False
-}
-out = encoder(**model_inp)
-
-header = Header(header_dict)
-head_out = header(out['emb'], 'all')
+encoder.to(device) # model shouldn't need to come off of GPU entire run
 print("Total encoder parameters: %d"%encoder.total_params())
 
+# Header model(s)
+header = Header(header_dict)
+for task in header.heads.keys(): header.heads[task].to(device)
+assert hasattr(header, 'name')
+
 # Optimizers
-optencoder = Adam(learning_rate=config['lr'],name='encopt')
-header.initialize_optimizers()
+optencoder = Adam(encoder.parameters(), config['lr'])
 
 def save_all_weights(svdir):
     U.save_full_model(encoder, optencoder, svdir)
     # Save all header weights in one file
-    header.save_weights("save/%s/weights/model_%s.wts"%(svdir, header.name))
+    th.save(header.state_dict(), "save/%s/weights/model_%s.wts"%(svdir, header.name))
     # Save header optimizer weights individually
     for task_name in config['tasks']:
         # optimizer.name should have opt_ already in it (see Header in models)
-        fn = 'save/%s/weights/%s.wts'%(svdir, header.opts[task_name].name)
+        fn = 'save/%s/weights/opt_%s.wts'%(svdir, task_name)
         U.save_optimizer_state(header.opts[task_name], fn)
 
 if config['load']:
     ldpth = config['loadpath']
-    encoder.load_weights(ldpth + 'model_encoder.wts')
+    model.load_state_dict(th.load(ldpth + 'model_encoder.wts'))
     U.load_optimizer_state(
-        optencoder, encoder.trainable_variables, ldpth + 'opt_encopt.wts.npy'
+        optencoder, ldpth + 'opt_encopt.wts', device
     )
-    header.load_weights(ldpth + 'model_header.wts')
+    header.load_state_dict(th.load(ldpth + 'model_header.wts'))
     for task_name in config['tasks']:
         # ASSUMPTION: header optimizers follow name convention 
         # opt_{task}.wts.npy
         U.load_optimizer_state(
             header.opts[task_name], 
-            header.heads[task_name].trainable_variables, 
-            ldpth + 'opt_%s.wts.npy'%task_name
+            ldpth + 'opt_%s.wts'%task_name,
+            device
         )
 
 ###############################################################################
@@ -143,15 +145,16 @@ loss_spec = " ".join(['%s: %%7.5f'%task_name for task_name in T.keys()])
 ###############################################################################
 #                           Downstream evaluation                             #
 ###############################################################################
+
 if not config['debug']:
     import downstream as ds
 
     # Downstream object
     allds = {
-        'charge': ds.ChargeDSObj,
-        'peplen': ds.PeplenDSObj,
+        #'charge': ds.ChargeDSObj,
+        #'peplen': ds.PeplenDSObj,
         'denovo_ar': ds.DenovoArDSObj,
-        'denovo_bl': ds.DenovoBlDSObj,
+        #'denovo_bl': ds.DenovoBlDSObj,
     }
 
 ###############################################################################
@@ -164,29 +167,33 @@ import sys
 import datetime
 
 def train_step(batch, task, enc_opt, head_opt):
-    inp = T[task].inptarg(batch)
-    
-    inp['length'] = batch['length']
-    head_outputs = [task]
-    with tf.GradientTape(persistent=True) as tape:
-        enc_output = encoder(training=True, **inp)
-        prediction = header(enc_output['emb'], head_outputs, training=True)
-        loss = T[task].loss(prediction[task])
-        loss = tf.reduce_mean(loss)
+    encoder.train()
+    encoder.zero_grad()
+    header.train()
+    header.zero_grad()
+    batch = U.Dict2dev(batch, device, inplace=False)
 
-    grads = tape.gradient(loss, encoder.trainable_variables)
-    enc_opt.apply_gradients(zip(grads, encoder.trainable_variables))
-    grads = tape.gradient(loss, header.heads[task].trainable_variables)
-    head_opt.apply_gradients(zip(grads, header.heads[task].trainable_variables))
+    inp = T[task].inptarg(batch)
+    inp['length'] = batch['length']
     
-    encoder.global_step.assign_add(1)
+
+    head_outputs = [task]
+    enc_output = encoder(**inp)
+    prediction = header(enc_output['emb'], head_outputs)
+    loss = T[task].loss(prediction[task])
+    loss = loss.mean()
+    
+    loss.backward()
+    enc_opt.step()
+    if config['headclip']['use']: 
+        parms = header.heads[task].parameters()
+        clip_op(parms, config['headclip']['max'])
+    head_opt.step()
+    
+    encoder.global_step +=1 
 
     return loss
 
-def test():
-    print()
-
-graph = train_step if config['debug'] else tf.function(train_step)
 def train(epochs=1, runlen=50, svfreq=3600):
     
     # Shorthand
@@ -201,7 +208,9 @@ def train(epochs=1, runlen=50, svfreq=3600):
         os.mkdir('save/%s'%svdir);
         os.mkdir('save/%s/yaml'%svdir)
         os.system("cp ./yaml/*.yaml save/%s/yaml/"%svdir)
-        if config['svwts']: save_all_weights(svdir)
+        if config['svwts']: 
+            os.mkdir('save/%s/weights'%svdir)
+            save_all_weights(svdir)
     else:
         svdir = './' # for establishing ds objects below
     
@@ -215,6 +224,16 @@ def train(epochs=1, runlen=50, svfreq=3600):
         line = "%s\n%s\n"%(svdir, config['header'])
         allepochlines = [line]
         #allvallines = [line]
+
+    # Variables needed for saving gradient infomration
+    if config['svgrad']:
+        parms_enc = [str(tuple(parm.shape)) for parm in encoder.parameters()]
+        parms_head = [
+            str(tuple(parm.shape)) for parm in header.heads['trinary_mz'].parameters()
+        ]
+        parmshapes = parms_enc + parms_head
+        parmgrads = []
+        all_loss = []
     
     # Train
     running_time = deque(maxlen=runlen) # Full time
@@ -222,6 +241,7 @@ def train(epochs=1, runlen=50, svfreq=3600):
     graph_time = deque(maxlen=runlen) # train_step time
     svtime = time()
     sys.stdout.write("Starting training for %d epochs\n"%epochs)
+    
     for epoch in range(epochs):
         start_epoch = time()
         perm = np.random.permutation(L.labels)
@@ -232,17 +252,28 @@ def train(epochs=1, runlen=50, svfreq=3600):
             
             # Train model for a step
             random_labels = perm[step*bs : (step+1)*bs]
-            random_task = np.random.choice(list(header_dict.keys()), 1)[0]
+            random_task = np.random.choice(list(header.heads.keys()), 1)[0]
             TT = time();batch = L.load_batch(
                 random_labels
             );load_time.append(time()-TT) # load time sandwich
-            TT=time();loss = graph(
+            TT=time();loss = train_step(
                 batch, random_task, optencoder, header.opts[random_task]
             );graph_time.append(time()-TT) # graph time sandwich
             
             # Save running stats
-            T[random_task].log_loss(loss.numpy())
+            T[random_task].log_loss(loss.detach().cpu().numpy())
             running_time.append(time()-start_step)
+            
+            # Gradient tracking
+            if config['svgrad']:
+                grads = (
+                    [float(parm.grad.norm().detach().cpu().numpy()) 
+                     for parm in encoder.parameters() if parm.requires_grad] +
+                    [float(parm.grad.norm().detach().cpu().numpy()) 
+                     for parm in header.heads['trinary_mz'].parameters() if parm.requires_grad]
+                )
+                parmgrads.append(grads)
+                all_loss.append(T[random_task].running_loss['main'][-1])
             
             # Stdout
             if step%50==0:
@@ -271,7 +302,7 @@ def train(epochs=1, runlen=50, svfreq=3600):
         ])
         loss_string = loss_spec%tot_losses
         Line = 'Epoch %d, Global step %d: mean_loss=%s (%d s)'%(
-            epoch, encoder.global_step.numpy(), loss_string, time()-start_epoch
+            epoch, encoder.global_step.cpu().detach().numpy(), loss_string, time()-start_epoch
         )
         sys.stdout.write("\r\033[K%s\n"%Line)
         if msg:
@@ -282,6 +313,13 @@ def train(epochs=1, runlen=50, svfreq=3600):
     # Save weights, perhaps
     if swt:
         save_all_weights(svdir)
+    # Save gradients, perhaps
+    if config['svgrad']:
+        with open('save/'+svdir+"/parmshapes", 'w') as f: 
+            f.write("|".join(parmshapes))
+        np.savetxt('save/'+svdir+"/allloss", np.array(all_loss))
+        np.savetxt('save/'+svdir+"/parmgrads", np.array(parmgrads))
+
     # Run quick(ish) few shot downstream evaluation
     for dstask in config['downstream']:
         DS = allds[dstask](
@@ -301,7 +339,8 @@ def train(epochs=1, runlen=50, svfreq=3600):
     
     print()
 
-np.random.seed(config['seed'])
-tf.random.set_seed(config['seed'])
+if config['seed'] is not None:
+    np.random.seed(config['seed'])
+    th.manual_seed(config['seed'])
 train(epochs=config['epochs'], runlen=100, svfreq=config['svfreq'])
 

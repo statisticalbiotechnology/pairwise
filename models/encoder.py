@@ -1,18 +1,36 @@
 
-from copy import deepcopy
-import numpy as np
-from utils import Scale
 import models.model_parts as mp
-import tensorflow as tf
-K = tf.keras
-L = K.layers
-A = K.activations
-I = K.initializers
-gelu = tf.keras.activations.gelu
+import torch as th
+from torch import nn
+I = nn.init
 
-class Encoder(K.Model):
+def init_encoder_weights(module):
+    if hasattr(module, 'MzSeq'):
+        module.MzSeq[0].weight = I.xavier_uniform_(module.MzSeq[0].weight)
+        if module.MzSeq[0].bias is not None:
+            module.MzSeq[0].bias = I.zeros_(module.MzSeq[0].bias)
+    if hasattr(module, 'first'):
+        module.first.weight = I.xavier_uniform_(module.first.weight)
+        if module.first.bias is not None: 
+            module.first.bias = I.zeros_(module.first.bias)
+    elif isinstance(module, mp.SelfAttention):
+        maxmin = (6 / (module.qkv.in_features + module.d))**0.5
+        module.qkv.weight = I.uniform_(module.qkv.weight, -maxmin, maxmin)
+        module.Wo.weight = I.normal_(module.Wo.weight, 0.0, 0.3*(module.h*module.d)**-0.5)
+    elif isinstance(module, mp.FFN):
+        module.W1.weight = I.xavier_uniform_(module.W1.weight)
+        module.W1.bias = I.zeros_(module.W1.bias)
+        module.W2.weight = I.normal_(module.W2.weight, 0.0, 0.3*(module.indim*module.mult)**-0.5)
+    elif isinstance(module, nn.Linear):
+        module.weight = I.xavier_uniform_(module.weight)
+        if module.bias is not None:
+            module.bias = I.zeros_(module.bias)
+
+class Encoder(nn.Module):
     def __init__(self,
+                 in_units=2, # input units from mz/ab tensor
                  running_units=512, # num units running throughout model
+                 sequence_length=100, # maximum number of peaks
                  mz_units=512, # units in mz fourier vector
                  ab_units=256, # units in ab fourier vector
                  subdivide=False, # subdivide mz units in 2s and expand-concat
@@ -28,9 +46,11 @@ class Encoder(K.Model):
                  norm_type='layer', # normalization type
                  preembed=True, # embed/add charge/energy/mass before FFN 
                  recycling_its=1, # recycling iterations
+                 device=th.device('cpu')
                  ):
         super(Encoder, self).__init__()
         self.run_units = running_units
+        self.sl = sequence_length
         self.mz_units = mz_units
         self.ab_units = ab_units
         self.subdivide = subdivide
@@ -45,46 +65,54 @@ class Encoder(K.Model):
         self.norm_type = norm_type
         self.preembed = preembed
         self.its = recycling_its
+        self.device = device
         
         # Position modulation
-        self.alpha = tf.Variable(0.1, trainable=True)
+        self.alpha = nn.Parameter(th.tensor(0.1), requires_grad=True)
         
-        self.MzSeq = K.Sequential([
-            L.Dense(mz_units // 4),
-            mp.KerasActLayer(tf.nn.swish),
-        ])
-
+        mdim = mz_units//4 if subdivide else mz_units
+        self.MzSeq = nn.Sequential(
+            nn.Linear(mdim, mdim), nn.SiLU()
+        )
+        
         # charge/energy/mass embedding transformation
         self.atleast1 = use_charge or use_energy or use_mass
         if self.atleast1:
-            self.ce_emb = K.Sequential([
-                L.Dense(ce_units), mp.KerasActLayer(tf.nn.swish)
-            ])
-
+            num = sum([use_charge, use_energy, use_mass])
+            self.ce_emb = nn.Sequential(
+                nn.Linear(ce_units*num, ce_units), nn.SiLU()
+            )
+        
         # First transformation
-        self.first = L.Dense(running_units)#, kernel_initializer=I.Zeros())
+        self.first = nn.Linear(mz_units+ab_units, running_units)
         
         # Main block
-        attention_dict = {'d': att_d, 'h': att_h}
-        ffn_dict = {'unit_multiplier': ffn_multiplier}
+        attention_dict = {'indim': running_units, 'd': att_d, 'h': att_h}
+        ffn_dict = {'indim': running_units, 'unit_multiplier': ffn_multiplier}
         is_embed = True if self.atleast1 else False
-        self.main = [
+        self.main = nn.ModuleList([
             mp.TransBlock(
-                attention_dict, ffn_dict, norm_type, prenorm, is_embed, preembed
+                attention_dict, 
+                ffn_dict, 
+                norm_type, 
+                prenorm, 
+                is_embed, 
+                ce_units,
+                preembed
             ) 
             for _ in range(depth)
-        ]
-        self.main_proj = A.linear#L.Dense(embedding_units, kernel_initializer=I.Zeros())
+        ])
+        self.main_proj = nn.Identity()#L.Dense(embedding_units, kernel_initializer=I.Zeros())
         
         # Normalization type
         self.norm = mp.get_norm_type(norm_type)
         
         # Recycling embedder
-        self.recyc = K.Sequential([
-            self.norm() if prenorm else mp.KerasActLayer(A.linear),
-            L.Dense(running_units) if False else mp.KerasActLayer(A.linear),
-            mp.KerasActLayer(A.linear) if prenorm else self.norm()
-        ]) if self.its > 1 else A.linear
+        self.recyc = nn.Sequential(
+            self.norm(running_units) if prenorm else nn.Identity(),
+            nn.Linear(running_units, running_units) if False else nn.Identity(),
+            nn.Identity() if prenorm else self.norm(running_units)
+        ) if self.its > 1 else nn.Identity()
         
         """# Recycling modulator
         self.alphacyc = ( 
@@ -93,59 +121,48 @@ class Encoder(K.Model):
             tf.Variable(1.0, trainable=False)
         )"""
         
-        self.global_step = tf.Variable(0, trainable=False)
+        self.global_step = nn.Parameter(th.tensor(0), requires_grad=False)
         
-    def build(self, x):
-        self.sl = x[1]
-        
-        # Positional embedding
-        self.pos = mp.FourierFeatures(
-            tf.range(self.sl, dtype=tf.float32), self.run_units, 5.*self.sl
+        pos = mp.FourierFeatures(
+            th.arange(self.sl, dtype=th.float32), self.run_units, 5.*self.sl
         )
-        
-        """# Tag
-        self.tag = tf.zeros((1, self.sl), tf.int32)"""
+        self.pos = nn.Parameter(pos, requires_grad=False)
 
-        """self.tensor = tf.Variable(
-            tf.random.normal((x[1], self.embed_units)), trainable=True 
-        )"""
+        self.apply(init_encoder_weights)
     
-    """def PredictTag(self, predict_array):
-        return tf.cast(tf.one_hot(predict_array, 2), tf.float32)"""
+    def total_params(self):
+        return sum([m.numel() for m in self.parameters()])
 
     def MzAb(self, x, inp_mask=None):
-        mz, ab = tf.split(x, 2, -1)
+        mz, ab = th.split(x, 1, -1)
         
-        mz = tf.squeeze(mz)
+        mz = mz.squeeze()
         if self.subdivide:
             mz = mp.subdivide_float(mz)
             minidim = self.mz_units//4
-            mz_emb = mp.FourierFeatures(mz, minidim, 1000.)
+            mz_emb = mp.FourierFeatures(mz, minidim, 1000.).to(x.device)
         else:
-            mz_emb = mp.FourierFeatures(mz, self.mz_units, 10000.)
+            mz_emb = mp.FourierFeatures(mz, self.mz_units, 10000.).to(x.device)
         mz_emb = self.MzSeq(mz_emb) # multiply sequential to mz fourier feature
-        mz_emb = tf.reshape(mz_emb, (x.shape[0], x.shape[1], -1))
+        mz_emb = mz_emb.reshape(x.shape[0], x.shape[1], -1)
         # ASSUME ab comes in 0-1, multiply by 100 (0-100) before expansion
         ab_emb = mp.FourierFeatures(100*ab[...,0], self.ab_units, 500.)
         
         # Apply input mask, if necessary
         if inp_mask is not None:
-            mz_mask, ab_mask = tf.split(inp_mask, 2, -1)
+            mz_mask, ab_mask = th.split(inp_mask, 1, -1)
             # Zeros out the feature's entire Fourier vector
             mz_emb *= mz_mask
             ab_emb *= ab_mask
             
-        out = tf.concat([mz_emb, ab_emb], axis=-1)
+        out = th.cat([mz_emb, ab_emb], dim=-1)
 
         return out
-    
-    def total_params(self):
-        return sum([np.prod(m.shape) for m in self.trainable_variables])
     
     def Main(self, inp, embed=None, mask=None):
         out = inp
         for layer in self.main:
-            out = layer(out, temb=embed, spec_mask=mask)
+            out = layer(out, embed_feats=embed, spec_mask=mask)
         return self.main_proj(out)
     
     def UpdateEmbed(self, 
@@ -161,12 +178,12 @@ class Encoder(K.Model):
                     ):
         # Create mask
         if length!=None:
-            grid = tf.tile(
-                tf.range(self.sl, dtype=tf.int32)[None], 
+            grid = th.tile(
+                th.arange(self.sl, dtype=th.int32)[None].to(x.device), 
                 (x.shape[0], 1)
             ) # bs, seq_len
             mask = grid >= length[:, None]
-            mask = 1e5*tf.cast(mask, tf.float32)
+            mask = (1e5*mask).type(th.float32)
         else:
             mask = None
         
@@ -180,14 +197,14 @@ class Encoder(K.Model):
         if self.atleast1:
             ce_emb = []
             if self.use_charge:
-                charge = tf.cast(charge, tf.float32)
+                charge = charge.type(th.float32)
                 ce_emb.append(mp.FourierFeatures(charge, self.ce_units, 10.))
             if self.use_energy:
                 ce_emb.append(mp.FourierFeatures(energy, self.ce_units, 150.))
             if self.use_mass:
                 ce_emb.append(mp.FourierFeatures(mass, self.ce_units, 20000.))
             # tf.concat works if list is 1 or multiple members
-            ce_emb = tf.concat(ce_emb, axis=-1)
+            ce_emb = th.cat(ce_emb, dim=-1)
             ce_emb = self.ce_emb(ce_emb)
         else:
             ce_emb = None
@@ -205,8 +222,8 @@ class Encoder(K.Model):
         output = (emb, mask) if return_mask else emb
         
         return output
-       
-    def call(self, 
+    
+    def forward(self, 
              x,
              charge=None, 
              energy=None, 
@@ -224,9 +241,9 @@ class Encoder(K.Model):
         # Recycled embedding
         emb = (
             emb 
-            if tf.is_tensor(emb) else 
-            tf.zeros((x.shape[0], self.sl, self.run_units))
-        )
+            if emb is not None else 
+            th.zeros(x.shape[0], self.sl, self.run_units)
+        ).to(x.device)
         
         for _ in range(its):
             output = self.UpdateEmbed(
@@ -238,9 +255,6 @@ class Encoder(K.Model):
         Output['emb'] = emb
         if return_mask: Output['mask'] = mask
         
-        out = emb
-        
-        # output = out, mask if return_mask else out
-        
         return Output
 
+            

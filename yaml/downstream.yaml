@@ -1,7 +1,7 @@
 batch_size: 100
 lr: 0.00005
 pretrain_path:
-epochs: 5
+epochs: 10
 steps_per_epoch: 10000
 train_encoder: True
 encoder_start: 1000
@@ -28,7 +28,8 @@ denovo_bl:
     drop_rate: 0
 denovo_ar:
   head_dict:
-    embedding_units: 512
+    running_units: 512
+    sequence_length: 30
     depth: 9
     d: 64
     h: 4
