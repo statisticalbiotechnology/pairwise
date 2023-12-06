@@ -33,47 +33,12 @@ with open("./yaml/downstream.yaml") as stream:
     dsconfig = yaml.safe_load(stream)
 config['lr'] = float(config['lr'])
 
-###############################################################################
-#                                  Loader                                     #
-###############################################################################
-
-import pathlib
-import path
-from loaders.loader import LoadObj
-from copy import deepcopy
-
-#HOME = str(pathlib.Path.home())
-paths = [
-    path.glob.glob(fp+'/*') for fp in dc['pretrain']['train_dirs']
-]
-paths = [m for n in paths for m in n]
-
-L = LoadObj(
-    paths, 
-    preopen=dc['pretrain']['preopen_files'], 
-    mdsaved_path=dc['pretrain']['mdsaved_path'], 
-    top_pks=config['max_peaks']
-)
-
-labels = deepcopy(L.labels)
-
-###############################################################################
-#                                   Model                                     #
-###############################################################################
-
-from models import Encoder, Header
-from utils import *
-
 # NOTE about trading information between yaml files:
-# I don't want to have to specity inputs in 2 different yaml files that are con-
-# sistent with each other. Instead, 1 yaml file can have all relevant input spe-
-# cifications, and share its information with the configuration of the other.
+# I don't want to have to specify inputs in 2 different yaml files that must be 
+# consistent with each other. Instead, 1 yaml file can have all relevant input 
+# specifications, and share its information with the configuration of the other.
 # For example, specify bin size in yaml/tasks.yaml and use that value to set
 # number of bins in hidden mz head model
-
-# Encoder model
-encoder_dic = mconf['encoder_dict']
-encoder = Encoder(**encoder_dic)
 
 # Header model
 header_dict = mconf['header_dict']
@@ -87,7 +52,36 @@ header_dict['hidden_spectrum']['bins'] = config['max_peaks']
 # hidden charge needs max charge to set the number of classes
 header_dict['hidden_charge']['num_classes'] = tc['hidden_charge']['max_charge']
 header_dict = {task: header_dict[task] for task in config['tasks']}
-header = Header(header_dict)
+# Override downstream saving if log is False
+if config['svwts'] is False:
+    dsconfig['save_weights'] = False
+# Override/add to downstream/dataset top_pks
+dsconfig['loader']['top_pks'] = config['max_peaks']
+dc['pretrain']['top_pks'] = config['max_peaks']
+# set downstream encoder_dict
+dsconfig['encoder_dict'] = mconf['encoder_dict']
+
+###############################################################################
+#                                  Loader                                     #
+###############################################################################
+
+from loaders.loader import LoadObj
+from copy import deepcopy
+
+L = LoadObj(**dc['pretrain'])
+labels = deepcopy(L.labels)
+
+###############################################################################
+#                                   Model                                     #
+###############################################################################
+
+from models.encoder import Encoder
+from models.heads import Header
+from utils import *
+
+# Encoder model
+encoder_dic = mconf['encoder_dict']
+encoder = Encoder(**encoder_dic)
 
 # Call model to create weights
 batch = L.load_batch(labels[:config['batch_size']])
@@ -100,6 +94,8 @@ model_inp = {
     'training': False
 }
 out = encoder(**model_inp)
+
+header = Header(header_dict)
 head_out = header(out['emb'], 'all')
 print("Total encoder parameters: %d"%encoder.total_params())
 
@@ -154,7 +150,8 @@ if not config['debug']:
     allds = {
         'charge': ds.ChargeDSObj,
         'peplen': ds.PeplenDSObj,
-        'denovo': ds.DenovoDSObj,
+        'denovo_ar': ds.DenovoArDSObj,
+        'denovo_bl': ds.DenovoBlDSObj,
     }
 
 ###############################################################################
@@ -205,6 +202,8 @@ def train(epochs=1, runlen=50, svfreq=3600):
         os.mkdir('save/%s/yaml'%svdir)
         os.system("cp ./yaml/*.yaml save/%s/yaml/"%svdir)
         if config['svwts']: save_all_weights(svdir)
+    else:
+        svdir = './' # for establishing ds objects below
     
     # Log starting messages and start collection all lines
     if msg:
@@ -264,16 +263,6 @@ def train(epochs=1, runlen=50, svfreq=3600):
             if time()-svtime > svfreq:
                 if swt:
                     save_all_weights(svdir)
-                """
-                sys.stdout.write("\r\033[KDownstream evlauation: %s\n"%(dstask))
-                line = DS.TrainEval()
-                Line = "Downstream evlauation: %s; "%(dstask) + line
-                sys.stdout.write("\r\033[K%s\n"%Line)
-                if msg:
-                    with open("save/%s/valout.txt"%outnm, 'a') as F:
-                        F.write("Global step %d: %s\n"%(encoder.global_step, line))
-                    allvallines.append(Line)
-                """
                 svtime = time()
 
         # End of epoch
@@ -285,20 +274,20 @@ def train(epochs=1, runlen=50, svfreq=3600):
             epoch, encoder.global_step.numpy(), loss_string, time()-start_epoch
         )
         sys.stdout.write("\r\033[K%s\n"%Line)
-        # Run quick(ish) few shot evaluation
-        #line2 = DS.TrainEval()
-        #sys.std.write('%s\n'%line2)
         if msg:
             U.message_board(Line+'\n', "save/%s/epochout.txt"%svdir)
             allepochlines.append(Line+"\n")
     
     # End of pre-training
-    # Save weights, perahps
+    # Save weights, perhaps
     if swt:
         save_all_weights(svdir)
     # Run quick(ish) few shot downstream evaluation
     for dstask in config['downstream']:
-        DS = allds[dstask](dsconfig, base_model=encoder)
+        DS = allds[dstask](
+            dsconfig, base_model=encoder, 
+            svdir='save/%s/dswts/%s/'%(svdir, dstask)
+        )
         sys.stdout.write("\r\033[KDownstream evlauation: %s\n"%(dstask))
         line = DS.TrainEval()
         Line = "Downstream evlauation: %s; "%(dstask) + line[-1]

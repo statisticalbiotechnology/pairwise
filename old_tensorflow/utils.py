@@ -44,7 +44,7 @@ def NonnullInds(SIArray, null_value):
     return tf.where( SIArray != null_value )
 
 def AccRecPrec(target, prediction, null_value):
-    pred = prediction #tf.cast(tf.argmax(prediction, axis=-1), tf.int32) # bs, sl
+    pred = prediction # tf.cast(tf.argmax(prediction, axis=-1), tf.int32) # bs, sl
     boolean = tf.cast(target==pred, tf.int32)
     accsum = tf.reduce_sum(boolean)
     recall_inds = NonnullInds(target, null_value)
@@ -119,7 +119,7 @@ class Scale:
                     int2mass[integer] = 0
 
         self.tok2mass = {key: int2mass[amod_dict[key]] for key in amod_dict.keys()}
-        self.mp = tf.constant(int2mass)
+        self.mp = tf.constant(int2mass, dtype=tf.float32)
         """self.mp = tf.lookup.StaticVocabularyTable(
             tf.lookup.KeyValueTensorInitializer(
                 list(int2mass.keys()), list(int2mass.values()),
@@ -135,3 +135,4 @@ class Scale:
             self.tok2mass[tok] for tok in partition_seq(modified_sequence)['seq']
         )
 
+deltaPPM = lambda mprec, mpred: abs(mprec - mpred) * 1e6 / mprec

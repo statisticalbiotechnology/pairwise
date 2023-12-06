@@ -7,7 +7,7 @@ lr: 4e-5
 tasks:
   - trinary_mz
   #- trinary_ab
-  - hidden_mz
+  #- hidden_mz
   #- hidden_ab
   #- hidden_spectrum
   #- hidden_charge
@@ -15,13 +15,13 @@ tasks:
   #- doctored_mz
   #- doctored_mz2
 downstream:
-  - charge
-  - peplen
-  - denovo
+  #- charge
+    #- peplen
+  - denovo_ar
 load: False
 loadpath: save/2023-09-27_06-24-36.363775/weights/
 svwts: False
 svfreq: 1800
-log: True
+log: False
 debug: False
-header: "trinary mz and hidden_mz"
+header: "base model on psm filtered dataset"
