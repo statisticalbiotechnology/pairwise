@@ -24,7 +24,7 @@ class ClassifierHead(nn.Module):
 
         self.penult = nn.Sequential(
             nn.Linear(in_units, penult_units),
-            nn.GELU(), # GELU was blowing up the gradients at the beginning
+            nn.GELU(),
             norm(penult_units),
         )
         
@@ -212,7 +212,7 @@ class Header(nn.Module):
             self.heads['hidden_mass'] = ClassifierHead(**dic, in_units=IU)
 
         self.opts = {
-            key: th.optim.Adam(self.heads[key].parameters(), lr=lr) 
+            key: th.optim.Adam(self.heads[key].parameters(), lr=lr)
             for key in 
             self.heads.keys()
         }

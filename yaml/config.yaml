@@ -1,13 +1,13 @@
 seed:
 max_peaks: 100
-epochs: 10
-steps_per_epoch: 10
+epochs: 5
+steps_per_epoch: 10000
 batch_size: 100
 lr: 4e-5
 headclip:
-  use: True
+  use: False
   type: norm
-  max: 5
+  max: 1
 tasks:
   - trinary_mz
   #- trinary_ab

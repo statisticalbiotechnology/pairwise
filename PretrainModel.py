@@ -2,9 +2,7 @@
 #                                  todo                                       #
 ###############################################################################
 """
-add mask charge/mass tasks
-add task where you add m/z to each peak and model must guess systematic error
-add a intensity rank task --> one_hot(x.shape[1]-argsort(argsort(x,-1),-1))
+Nada
 """
 # dependencies used throughout the program
 import os
@@ -98,7 +96,7 @@ encoder.to(device) # model shouldn't need to come off of GPU entire run
 print("Total encoder parameters: %d"%encoder.total_params())
 
 # Header model(s)
-header = Header(header_dict)
+header = Header(header_dict)#, lr=config['lr'])
 for task in header.heads.keys(): header.heads[task].to(device)
 assert hasattr(header, 'name')
 
@@ -167,15 +165,17 @@ import sys
 import datetime
 
 def train_step(batch, task, enc_opt, head_opt):
+    # Verify training mode, device, and zero grads
     encoder.train()
     encoder.zero_grad()
+    enc_opt.zero_grad()
     header.train()
     header.zero_grad()
+    head_opt.zero_grad()
     batch = U.Dict2dev(batch, device, inplace=False)
 
     inp = T[task].inptarg(batch)
     inp['length'] = batch['length']
-    
 
     head_outputs = [task]
     enc_output = encoder(**inp)
