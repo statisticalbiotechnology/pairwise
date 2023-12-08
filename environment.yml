@@ -3,10 +3,9 @@ name: Foundation
 channels:
   - conda-forge
 dependencies:
-  - python=3.9 # 3.10 bugs out some dependencies
+  - python=3.10
   - scikit-learn
   - pytorch-lightning
-  - pytorch=1.13
   - pandas
   - scipy
   - pip
