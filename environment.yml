@@ -12,3 +12,5 @@ dependencies:
   - pip:
     - matplotlib
     - wandb
+    - path
+    - pathlib
