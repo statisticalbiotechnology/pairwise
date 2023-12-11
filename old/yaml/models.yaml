@@ -6,7 +6,7 @@ encoder_dict:
   att_d: 64
   att_h: 8
   depth: 9
-  ffn_multiplier: 2
+  ffn_multiplier: 4
   prenorm: True
   use_charge: False
   use_energy: False

@@ -121,7 +121,7 @@ class TrinaryTask(Task):
         # logits dimension (length 3: trinary) must be after batch
         #target = self.target.to(prediction.device).transpose(-1,-2)
         loss = F.cross_entropy(
-            prediction.transpose(-1,-2), self.target.transpose(-1,-2)
+            prediction.transpose(-1,-2), self.target.transpose(-1,-2), reduction='none'
         )
 
         return loss
