@@ -1,4 +1,11 @@
-lr: 0.0001
-weight_decay: 0.005
+data_root_dir: /Users/alfred/Documents/Datasets/instanovo_data_subset
+output_dir: outs/
+log_dir: outs/
 wandb_project: debug
 wandb_entity: kall
+### Models
+encoder_model: encoder_base_arch
+### Training hyperparameters
+batch_size: 100
+lr: 4e-5
+epochs: 5
