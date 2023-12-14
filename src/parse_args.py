@@ -17,9 +17,28 @@ def get_args_parser(conf_parser):
     )
     parser.add_argument(
         "--head_model",
-        default="abc",
+        default="",
         type=str,
         help="Name of the head model to train",
+    )
+    parser.add_argument(
+        "--pretraining_task",
+        default="masked",
+        choices=["masked", "trinary_mz"],
+        type=str,
+        help="Which pretraining strategy to use",
+    )
+    parser.add_argument(
+        "--input_mass",
+        default=0,
+        type=bool,
+        help="1: input precursor mass",
+    )
+    parser.add_argument(
+        "--input_charge",
+        default=0,
+        type=bool,
+        help="1: input precursor charge",
     )
     parser.add_argument(
         "--batch_size",
@@ -82,8 +101,8 @@ def get_args_parser(conf_parser):
 
     # Dataset parameters
     parser.add_argument(
-        "--data_path",
-        default="../../datasets/imagenet1k",
+        "--data_root_dir",
+        default="../../datasets/instanovo_data_subset",
         type=str,
         help="dataset path",
     )
@@ -119,7 +138,6 @@ def get_args_parser(conf_parser):
     )
     parser.add_argument("--seed", default=0, type=int)
     # parser.add_argument("--resume", default="", help="resume from checkpoint")
-
     # parser.add_argument(
     #     "--start_epoch", default=0, type=int, metavar="N", help="start epoch"
     # )
@@ -134,15 +152,15 @@ def get_args_parser(conf_parser):
     parser.add_argument(
         "--accelerator",
         type=str,
-        choices=["cpu", "gpu"],
+        choices=["cpu", "gpu", "mps"],
         default="gpu",
-        help="Specify the accelerator (cpu or gpu)",
+        help="Specify the accelerator type",
     )
     parser.add_argument(
         "--precision",
         type=str,
         choices=["16-mixed", "bf16-mixed", "32-true", "64-true"],
-        default="bf16-mixed",
+        default="32-true",
         help=" Double precision, full precision (32), 16bit mixed precision or bfloat16 mixed precision",
     )
     parser.add_argument(
@@ -179,12 +197,6 @@ def get_args_parser(conf_parser):
         choices=["mse", "ce", "bce"],
         default="mse",
         help="MSE, CE or Binary CE (latter only makes sense for binary targets)",
-    )
-    parser.add_argument(
-        "--num_classes",
-        type=int,
-        default=1,
-        help="Number of classes to bin response variable into",
     )
     parser.add_argument(
         "--profile_flops",
