@@ -2,14 +2,13 @@ import time
 from pathlib import Path
 from loaders.loader import LoadObj
 from depthcharge.data import SpectrumDataset
-from torch.utils.data import DataLoader
 import os
 
 data_dir = "/Users/alfred/Documents/Datasets/instanovo_data_subset"
 lance_dir = "/Users/alfred/Documents/Datasets/instanovo_data_subset/indexed.lance"
 mdsaved_dir = "//Users/alfred/Documents/Datasets/instanovo_data_subset/mdsaved"
 batch_size = 100
-num_workers = 4
+num_workers = 0
 epochs = 1
 subset = -1  # max number of batches that will be loaded each epoch
 
@@ -29,7 +28,7 @@ spectrum_dataloader = spectrum_dataset.loader(
     batch_size=batch_size,
     shuffle=True,
     num_workers=num_workers,
-    multiprocessing_context="forkserver",
+    multiprocessing_context="forkserver" if num_workers>0 else None,
 )
 
 
@@ -75,5 +74,4 @@ if __name__ == "__main__":
     print(
         f"Running {epochs} epoch(s) of dataloading with SpectrumDataset. Batch size = {batch_size}"
     )
-    # loop_SpectrumDataset(spectrum_dataset, subset, epochs)
     loop_SpectrumDataset(spectrum_dataloader, subset, epochs)
