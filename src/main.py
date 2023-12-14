@@ -9,16 +9,18 @@ from parse_args import parse_args_and_config, create_output_dirs
 
 
 from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
-from pl_wrappers import ReconstructionPLWrapper
+from pl_wrappers import MaskedTrainingPLWrapper
+import utils
 
-import models.encoders.dummy_encoders as encoders
-import models.heads.dummy_heads as heads
+
+import models.encoder as encoders
+import models.heads as heads
 
 ENCODER_DICT = {
-    **encoders.__dict__, #TODO: replace with actual models
+    **encoders.__dict__,
 }
 HEAD_DICT = {
-    **heads.__dict__, #TODO: replace with actual models
+    **heads.__dict__,
 }
 
 def update_args(args, config_dict):
@@ -38,13 +40,11 @@ def main(args):
             project=args.wandb_project,
             entity=args.wandb_entity,
             config=vars(args),
-            dir=args.output_dir,
-            anonymous="allow"
+            dir=args.log_dir,
+            anonymous="allow",
         )
         # this step is for automated hparam sweeping
-        update_args(
-            args, dict(run.config)
-        )
+        update_args(args, dict(run.config))
         logger = WandbLogger()
 
     # lr scaling by batch size trick
@@ -82,39 +82,46 @@ def main(args):
     if args.profile_flops:
         callbacks += [FLOPProfilerCallback()]
 
-    datasets = ...  # utils.get_dataset(args) TODO: implement Datasets
+    datasets, collate_fn = utils.get_spectrum_dataset_splits(
+        args.data_root_dir, splits=[0.7, 0.2, 0.1]
+    )
 
     # Define encoder model
-    encoder = ENCODER_DICT[args.encoder_model](
-        args.example_arg1,
-        args.example_arg2,
-        args.example_arg3,
-        args.example_arg4,
-    )
+    encoder = ENCODER_DICT[args.encoder_model]()
     # Define head model
-    head = HEAD_DICT[args.head_model](
-        args.example_arg5,
-        args.example_arg6,
-        args.example_arg7,
-        args.example_arg8,
-    )
-
-    if args.loss_type == "mse":
-        loss_fn = torch.nn.MSELoss(reduction="mean")
-    elif args.loss_type == "ce":
-        loss_fn = torch.nn.CrossEntropyLoss(reduction="mean")
-    elif args.loss_type == "bce":
-        loss_fn = torch.nn.BCEWithLogitsLoss(reduction="mean")
+    if args.head_model:
+        head = HEAD_DICT[args.head_model](
+            args.example_arg5,
+            args.example_arg6,
+            args.example_arg7,
+            args.example_arg8,
+        )
     else:
-        raise NotImplementedError(f"Invalid loss func {args.loss_type} specified")
+        head = None
 
-    pl_model = ReconstructionPLWrapper(encoder, head, loss_fn=loss_fn, args=args, datasets=datasets)
+    if args.pretraining_task == "masked":
+        pl_model = MaskedTrainingPLWrapper(
+            encoder, args=args, datasets=datasets, collate_fn=collate_fn
+        )
+    # elif args.pretraining_task == "trinary_mz":
+    #     pl_model = TrinaryMZTrainingPLWrapper(
+    #         encoder, args=args, datasets=datasets, collate_fn=collate_fn
+    #     )
+    else:
+        raise NotImplementedError(
+            f"{args.pretraining_task} pretraining task not implemented"
+        )
 
     if args.early_stop > 0:
         callbacks += [EarlyStopping("val_loss", patience=args.early_stop)]
 
     if run is not None and utils.get_rank() == 0:  # TODO: implement get_rank
-        run.log({"num_parameters": utils.get_num_parameters(model)}) # TODO: implement get_num_parameters
+        run.log(
+            {
+                "num_parameters_encoder": utils.get_num_parameters(encoder),
+                "num_parameters_head": utils.get_num_parameters(head) if head else None,
+            }
+        )  # TODO: implement get_num_parameters
 
     # Define trainer
     distributed = args.num_devices > 1 or args.num_nodes > 1
@@ -137,7 +144,8 @@ def main(args):
         logger=logger,
         callbacks=callbacks,
         benchmark=True,
-        # profiler="simple"
+        default_root_dir=args.log_dir,
+        # profiler="simple",
     )
 
     # This is the call to start training the model
