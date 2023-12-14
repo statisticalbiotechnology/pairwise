@@ -74,30 +74,42 @@ class BasePLWrapper(ABC, pl.LightningModule):
         datasets (list): A list containing the train, val, and test datasets.
     """
 
-    def __init__(self, encoder, head, loss_fn, datasets, args):
+    def __init__(self, encoder, datasets, args, head=None, collate_fn=None):
         super().__init__()
 
         self.encoder = encoder
         self.head = head
-        self.loss_fn = loss_fn
         self.datasets = datasets
+        self.collate_fn = collate_fn
         self.batch_size = args.batch_size
         self.num_workers = args.num_workers
         self.pin_mem = args.pin_mem
         self.weight_decay = args.weight_decay
         self.datasets = datasets
         self.lr = args.lr
-        self.loss_type = args.loss_type
-        self.activation = args.activation
+        self.input_charge = bool(args.input_charge)
+        self.input_mass = bool(args.input_mass)
         self.tracker = BestMetricTracker()
         self.best_metrics_logged = (
             False  # keep track of if the best achieved metrics have been logged
         )
 
-    def forward(self, x, **kwargs):
-        input, labels = x
-        outs = self.encoder(input, **kwargs)
-        return self.head(outs)
+    def _get_input(self, batch):
+        spectra = batch
+        mz_arr = spectra["mz_array"]
+        int_arr = spectra["intensity_array"]
+        mzab = torch.stack([mz_arr, int_arr], dim=-1)
+        return mzab, {
+            "mass": spectra["mass"] if self.input_mass else None,
+            "charge": spectra["charge"] if self.input_charge else None,
+        }
+
+    def forward(self, inputs, **kwargs):
+        mzab, input_dict = inputs
+        outs = self.encoder(mzab, **input_dict, **kwargs)
+        if self.head is not None:
+            outs = self.head(outs)
+        return outs
 
     @abstractmethod
     def _get_losses(self, returns, labels):
@@ -113,7 +125,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
         # note: must return the differentiable loss
         stats = {}
         # example
-        
+
         input, labels = batch
         loss = self._get_losses(returns, labels)
         # stats["loss"] = loss
@@ -137,7 +149,8 @@ class BasePLWrapper(ABC, pl.LightningModule):
         return stats
 
     def training_step(self, batch, batch_idx):
-        returns = self.forward(batch)
+        inputs = self._get_input(batch)
+        returns = self.forward(inputs)
         loss, train_stats = self._get_train_stats(returns, batch)
         self.log_dict(
             {**train_stats}, on_epoch=True, batch_size=batch[0].shape[0], sync_dist=True
@@ -145,7 +158,8 @@ class BasePLWrapper(ABC, pl.LightningModule):
         return {"loss": loss, "returns": returns}
 
     def validation_step(self, batch, batch_idx):
-        returns = self.forward(batch)
+        inputs = self._get_input(batch)
+        returns = self.forward(inputs)
         val_stats = self._get_eval_stats("val", returns, batch)
         self.log_dict(
             {**val_stats}, on_epoch=True, batch_size=batch[0].shape[0], sync_dist=True
@@ -153,7 +167,8 @@ class BasePLWrapper(ABC, pl.LightningModule):
         return {"val_stats": val_stats, "returns": returns}
 
     def test_step(self, batch, batch_idx):
-        returns = self.forward(batch)
+        inputs = self._get_input(batch)
+        returns = self.forward(inputs)
         test_stats = self._get_eval_stats("test", returns, batch)
         self.log_dict(
             {**test_stats}, on_epoch=True, batch_size=batch[0].shape[0], sync_dist=True
@@ -167,7 +182,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_mem,
             drop_last=True,
-            collate_fn=None,  # TODO: might want to use a collate fn such as pad_length_collate_fn
+            collate_fn=self.collate_fn,
         )
 
     def val_dataloader(self):
@@ -177,7 +192,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_mem,
             drop_last=True,
-            collate_fn=None,  # TODO: might want to use a collate fn such as pad_length_collate_fn
+            collate_fn=self.collate_fn,
         )
 
     def test_dataloader(self):
@@ -187,15 +202,21 @@ class BasePLWrapper(ABC, pl.LightningModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_mem,
             drop_last=False,
-            collate_fn=None,  # TODO: might want to use a collate fn such as pad_length_collate_fn
+            collate_fn=self.collate_fn,
         )
 
     def configure_optimizers(self):
         param_groups = [
             {"params": self.encoder.parameters()},
-            {"head": self.encoder.parameters()},
         ]
-        return torch.optim.AdamW(param_groups, lr=self.lr, betas=(0.9, 0.9999), weight_decay=self.weight_decay)
+        if self.head:
+            param_groups += [{"params": self.head.parameters()}]
+        return torch.optim.AdamW(
+            param_groups,
+            lr=self.lr,
+            betas=(0.9, 0.9999),
+            weight_decay=self.weight_decay,
+        )
 
     @abstractmethod
     def on_validation_epoch_end(self):
@@ -235,88 +256,3 @@ class BasePLWrapper(ABC, pl.LightningModule):
         if not self.best_metrics_logged:
             self.logger.experiment.log(self.tracker.best_metrics)
 
-
-
-class ReconstructionPLWrapper(BasePLWrapper):
-    def _get_losses(self, returns, input):
-        # example
-        preds = returns["preds"]
-        loss = self.loss_fn(preds, input)
-        return loss
-
-    def _get_train_stats(self, returns, batch):
-        stats = {}
-        
-        input = batch
-        loss = self._get_losses(returns, input)
-
-        stats = {"train_" + key: val.detach().item() for key, val in stats.items()}
-        return loss, stats
-
-   def _get_eval_stats(self, split, returns, batch):
-        stats = {}
-        input = batch
-        loss = self._get_losses(returns, input)
-        stats["loss"] = loss
-        stats = {split + "_" + key + name_suffix: val for key, val in metrics.items()}
-        return stats
-
-    def on_validation_epoch_end(self):
-        cur_epoch = self.trainer.current_epoch
-        if self.global_rank == 0:  # Only log on master process
-            if cur_epoch > 0:
-                metrics = self.trainer.logged_metrics
-
-                self.tracker.update_metric(
-                    "best_val_loss",
-                    metrics["val_loss"].detach().cpu().item(),
-                    maximize=False,
-                )
-
-class ClassificationPLWrapper(BasePLWrapper):
-    def _get_losses(self, returns, labels):
-        # example
-        preds = returns["preds"]
-        loss = self.loss_fn(preds, labels)
-        return loss
-
-    def _get_train_stats(self, returns, batch):
-        stats = {}
-
-        _, labels = batch
-        loss = self._get_losses(returns, labels)
-        stats["loss"] = loss
-
-        metrics = calc_classification_metrics(returns["logits"], labels)
-        stats = {**stats, **metrics}
-
-        stats = {"train_" + key: val.detach().item() for key, val in stats.items()}
-        return loss, stats
-
-   def _get_eval_stats(self, split, returns, batch):
-        stats = {}
-         _, labels = batch
-        loss = self._get_losses(returns, labels)
-        stats["loss"] = loss
-
-        metrics = calc_classification_metrics(returns["logits"], labels)
-        stats = {**stats, **metrics}
-        stats = {split + "_" + key + name_suffix: val for key, val in metrics.items()}
-        return stats
-
-    def on_validation_epoch_end(self):
-        cur_epoch = self.trainer.current_epoch
-        if self.global_rank == 0:  # Only log on master process
-            if cur_epoch > 0:
-                metrics = self.trainer.logged_metrics
-
-                self.tracker.update_metric(
-                    "best_val_loss",
-                    metrics["val_loss"].detach().cpu().item(),
-                    maximize=False,
-                )
-                self.tracker.update_metric(
-                    "best_val_accuracy",
-                    metrics["val_accuracy"].detach().cpu().item(),
-                    maximize=True,
-                )
