@@ -40,7 +40,7 @@ def subsample_max_peaks(mz_tensor, int_tensor, max_peaks=300):
     return subsampled_mz, subsampled_intensity
 
 def pad_peaks(
-    batch: Iterable[Dict[Any, Union[List, torch.Tensor]]], precision: torch.dtype=torch.float32, max_length: int = 300
+    batch: Iterable[Dict[Any, Union[List, torch.Tensor]]], precision: torch.dtype=torch.float32, max_peaks: int = 300
 ) -> Dict[str, Union[torch.Tensor, list[Any]]]:
     """
     Transform compatible data types into PyTorch tensors and
@@ -53,7 +53,7 @@ def pad_peaks(
         A batch of data.
     precision : torch.dtype
         Floating point precision of the returned tensors.
-    max_length : int
+    max_peaks : int
         Maximum length to limit each sequence. 
         Subsamples peaks corresponding to the highest intensities.
 
@@ -69,8 +69,8 @@ def pad_peaks(
     for b in batch:
         mz_tensor_b = b.pop("mz_array")
         intensity_tensor_b = b.pop("intensity_array")
-        if len(mz_tensor_b) > max_length:
-            mz_tensor_b, intensity_tensor_b = subsample_max_peaks(mz_tensor_b, intensity_tensor_b, max_length)
+        if len(mz_tensor_b) > max_peaks:
+            mz_tensor_b, intensity_tensor_b = subsample_max_peaks(mz_tensor_b, intensity_tensor_b, max_peaks)
         mz_tensors.append(mz_tensor_b)
         int_tensors.append(intensity_tensor_b)
         

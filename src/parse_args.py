@@ -24,7 +24,7 @@ def get_args_parser(conf_parser):
     parser.add_argument(
         "--pretraining_task",
         default="masked",
-        choices=["masked", "trinary_mz"],
+        choices=["masked", "trinary_mz", "dummy"],
         type=str,
         help="Which pretraining strategy to use",
     )
@@ -45,6 +45,12 @@ def get_args_parser(conf_parser):
         default=64,
         type=int,
         help="Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus",
+    )
+    parser.add_argument(
+        "--max_peaks",
+        default=300,
+        type=int,
+        help="The maximally allowed number of peaks. Spectra that have more peaks are subsampled by the maximum intensities.",
     )
     parser.add_argument("--epochs", default=400, type=int)
     parser.add_argument(

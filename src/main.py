@@ -9,7 +9,7 @@ from parse_args import parse_args_and_config, create_output_dirs
 
 
 from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
-from pl_wrappers import MaskedTrainingPLWrapper
+from pl_wrappers import DummyPLWrapper
 import utils
 
 
@@ -83,7 +83,7 @@ def main(args):
         callbacks += [FLOPProfilerCallback()]
 
     datasets, collate_fn = utils.get_spectrum_dataset_splits(
-        args.data_root_dir, splits=[0.7, 0.2, 0.1]
+        args.data_root_dir, splits=[0.7, 0.2, 0.1], max_peaks=args.max_peaks
     )
 
     # Define encoder model
@@ -101,6 +101,10 @@ def main(args):
 
     if args.pretraining_task == "masked":
         pl_model = MaskedTrainingPLWrapper(
+            encoder, args=args, datasets=datasets, collate_fn=collate_fn
+        )
+    elif args.pretraining_task == "dummy":
+        pl_model = DummyPLWrapper(
             encoder, args=args, datasets=datasets, collate_fn=collate_fn
         )
     # elif args.pretraining_task == "trinary_mz":
