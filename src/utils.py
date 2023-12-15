@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import torch
 
-from collate_functions import depthcharge_collate_fn
+from collate_functions import pad_peaks
 
 
 def get_spectrum_dataset_splits(data_root_dir, splits=[0.6, 0.2, 0.2], random_seed=42):
@@ -24,7 +24,7 @@ def get_spectrum_dataset_splits(data_root_dir, splits=[0.6, 0.2, 0.2], random_se
         spectrum_dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(random_seed)
     )
 
-    return (dataset_train, dataset_val, dataset_test), depthcharge_collate_fn
+    return (dataset_train, dataset_val, dataset_test), pad_peaks
 
 def get_rank() -> int:
     rank_keys = ("RANK", "SLURM_PROCID", "LOCAL_RANK")
