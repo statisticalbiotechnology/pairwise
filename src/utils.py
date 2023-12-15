@@ -3,11 +3,12 @@ from torch.utils.data.dataset import random_split
 import os
 from pathlib import Path
 import torch
+from functools import partial
 
 from collate_functions import pad_peaks
 
 
-def get_spectrum_dataset_splits(data_root_dir, splits=[0.6, 0.2, 0.2], random_seed=42):
+def get_spectrum_dataset_splits(data_root_dir, splits=[0.6, 0.2, 0.2], max_peaks=300, random_seed=42):
     assert abs(sum(splits)-1)<1e-6
     lance_dir = os.path.join(data_root_dir, "indexed.lance")
     if os.path.exists(lance_dir):
@@ -24,7 +25,7 @@ def get_spectrum_dataset_splits(data_root_dir, splits=[0.6, 0.2, 0.2], random_se
         spectrum_dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(random_seed)
     )
 
-    return (dataset_train, dataset_val, dataset_test), pad_peaks
+    return (dataset_train, dataset_val, dataset_test), partial(pad_peaks, max_peaks=max_peaks)
 
 def get_rank() -> int:
     rank_keys = ("RANK", "SLURM_PROCID", "LOCAL_RANK")
