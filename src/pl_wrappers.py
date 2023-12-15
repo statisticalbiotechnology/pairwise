@@ -5,8 +5,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from abc import ABC, abstractmethod
-from collate_functions import pad_length_collate_fn
-
+import torch.nn.functional as F
 
 def calc_classification_metrics(all_outputs, all_targets):
     all_targets = all_targets.detach().cpu().float().numpy()
@@ -94,7 +93,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             False  # keep track of if the best achieved metrics have been logged
         )
 
-    def _get_input(self, batch):
+    def _parse_batch(self, batch):
         spectra = batch
         mz_arr = spectra["mz_array"]
         int_arr = spectra["intensity_array"]
@@ -104,15 +103,15 @@ class BasePLWrapper(ABC, pl.LightningModule):
             "charge": spectra["charge"] if self.input_charge else None,
         }
 
-    def forward(self, inputs, **kwargs):
-        mzab, input_dict = inputs
+    def forward(self, parsed_batch, **kwargs):
+        mzab, input_dict, target = parsed_batch
         outs = self.encoder(mzab, **input_dict, **kwargs)
         if self.head is not None:
             outs = self.head(outs)
         return outs
 
     @abstractmethod
-    def _get_losses(self, returns, labels):
+    def _get_losses(self, returns, parsed_batch):
         # example
         # preds = returns["preds"]
         # loss = self.loss_fn(preds, labels)
@@ -120,7 +119,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
         pass
 
     @abstractmethod
-    def _get_train_stats(self, returns, batch):
+    def _get_train_stats(self, returns, parsed_batch):
         # define what metrics to log during training steps
         # note: must return the differentiable loss
         stats = {}
@@ -132,11 +131,11 @@ class BasePLWrapper(ABC, pl.LightningModule):
         # metrics = calc_classification_metrics(returns["preds"], labels)
         # stats = {**stats, **metrics}
 
-        stats = {"train_" + key: val.detach().item() for key, val in stats.items()}
+        # stats = {"train_" + key: val.detach().item() for key, val in stats.items()}
         return loss, stats
 
     @abstractmethod
-    def _get_eval_stats(self, split, returns, batch):
+    def _get_eval_stats(self, returns, parsed_batch):
         # define what metrics to log during val/test steps
         stats = {}
         # example
@@ -145,31 +144,33 @@ class BasePLWrapper(ABC, pl.LightningModule):
         # stats["loss"] = loss
         # metrics = calc_classification_metrics(returns["preds"], labels)
         # stats = {**stats, **metrics}
-        stats = {split + "_" + key + name_suffix: val for key, val in metrics.items()}
         return stats
 
     def training_step(self, batch, batch_idx):
-        inputs = self._get_input(batch)
-        returns = self.forward(inputs)
-        loss, train_stats = self._get_train_stats(returns, batch)
+        parsed_batch = self._parse_batch(batch)
+        returns = self.forward(parsed_batch)
+        loss, train_stats = self._get_train_stats(returns, parsed_batch)
+        train_stats = {"train_" + key: val.detach().item() for key, val in train_stats.items()}
         self.log_dict(
             {**train_stats}, on_epoch=True, batch_size=batch[0].shape[0], sync_dist=True
         )
         return {"loss": loss, "returns": returns}
 
     def validation_step(self, batch, batch_idx):
-        inputs = self._get_input(batch)
-        returns = self.forward(inputs)
-        val_stats = self._get_eval_stats("val", returns, batch)
+        parsed_batch = self._parse_batch(batch)
+        returns = self.forward(parsed_batch)
+        val_stats = self._get_eval_stats(returns, parsed_batch)
+        val_stats = {"val_" + key: val.detach().item() for key, val in val_stats.items()}
         self.log_dict(
             {**val_stats}, on_epoch=True, batch_size=batch[0].shape[0], sync_dist=True
         )
         return {"val_stats": val_stats, "returns": returns}
 
     def test_step(self, batch, batch_idx):
-        inputs = self._get_input(batch)
-        returns = self.forward(inputs)
-        test_stats = self._get_eval_stats("test", returns, batch)
+        parsed_batch = self._parse_batch(batch)
+        returns = self.forward(parsed_batch)
+        test_stats = self._get_eval_stats(returns, parsed_batch)
+        test_stats = {"test_" + key: val.detach().item() for key, val in test_stats.items()}
         self.log_dict(
             {**test_stats}, on_epoch=True, batch_size=batch[0].shape[0], sync_dist=True
         )
@@ -256,3 +257,117 @@ class BasePLWrapper(ABC, pl.LightningModule):
         if not self.best_metrics_logged:
             self.logger.experiment.log(self.tracker.best_metrics)
 
+class DummyPLWrapper(BasePLWrapper):
+    def _get_losses(self, returns, labels):
+        return 0
+
+
+    def _get_train_stats(self, returns, batch):
+        stats = {}
+        return 0, stats
+
+
+    def _get_eval_stats(self, split, returns, batch):
+        stats = {}
+        return stats
+
+    def on_validation_epoch_end(self):
+        pass
+
+
+class TrinaryMZPLWrapper(BasePLWrapper):
+    def __init__(self, encoder, datasets, args, collate_fn=None):
+        head = nn.Linear(encoder.running_units, 3)
+        super().__init__(encoder, datasets, args, head, collate_fn)
+        self.corrupt_freq = args.trinary.freq
+        self.corrupt_std = args.trinary.std
+
+    def _parse_batch(self, batch):
+        spectra = batch
+        mz_arr = spectra["mz_array"]
+        int_arr = spectra["intensity_array"]
+        corrupt_mz_arr, target = self.inptarg(mz_arr)
+
+        mzab = torch.stack([corrupt_mz_arr, int_arr], dim=-1)
+        return mzab, {
+            "mass": spectra["mass"] if self.input_mass else None,
+            "charge": spectra["charge"] if self.input_charge else None,
+        }, target
+
+    def forward(self, parsed_batch, **kwargs):
+        mzab, input_dict, target = parsed_batch
+        outs = self.encoder(mzab, **input_dict, **kwargs)
+        outs = self.head(outs["emb"])
+        outs = F.softmax(outs, dim=-1)
+        return outs
+
+    def _get_losses(self, returns, labels):
+        loss = F.cross_entropy(
+            returns.transpose(-1,-2), labels.transpose(-1,-2), reduction='mean' #TODO: verify that mean reduction is what we want here
+        )
+
+    def _get_train_stats(self, returns, parsed_batch):
+        _, _, target = parsed_batch
+        stats = {}
+        loss = self._get_losses(returns, target)
+        stats["loss"] = loss
+        return loss, stats
+
+    def _get_eval_stats(self, returns, parsed_batch):
+        _, _, target = parsed_batch
+        stats = {}
+        loss = self._get_losses(returns, target)
+        stats["loss"] = loss
+        return stats
+
+
+    def inptarg(self, mz_batch):
+
+        # Random sequence indices to change
+        inds_boolean = torch.empty_like(mz_batch[:, :, 0]).uniform_(0, 1) < self.corrupt_freq
+        inds = torch.nonzero(inds_boolean, as_tuple=False)
+
+        # Get their mz values
+        means = mz_batch[inds[:, 0], inds[:, 1]]
+
+        # Generate normal distributions for inds, centered on original value
+        updates = torch.normal(means, self.corrupt_std)
+        updates = torch.clamp(updates, min=0.0, max=1.0)
+
+        # Distribute updates into corrupted indices
+        mz_batch[inds[:, 0], inds[:, 1], 0] = updates
+
+        # Construct Target Tensor
+        # inds that are below the original value (0)
+        zero = means > updates  # 1d boolean
+        target = torch.ones_like(mz_batch[..., 0]).type_as(mz_batch)
+        target[inds[zero, 0], inds[zero, 1]] = 0
+
+        # inds that are above the original value (2)
+        two = means < updates  # 1d boolean
+        target[inds[two, 0], inds[two, 1]] = 2
+
+        target = F.one_hot(target, 3)
+
+        return mz_batch, target
+
+    def on_validation_epoch_end(self):
+        # Update the current best achieved value for each val metric
+        # Get the per-epoch metric value from the logged metrics
+
+        cur_epoch = self.trainer.current_epoch
+        if self.global_rank == 0:  # Only log on master process
+            if cur_epoch > 0:
+                metrics = self.trainer.logged_metrics
+
+                self.tracker.update_metric(
+                    "best_val_loss",
+                    metrics["val_loss"].detach().cpu().item(),
+                    maximize=False,
+                )
+
+            # TODO: verify: don't think this part is needed bc of the "on_train_end"
+            # at the last epoch, log the best metrics
+            if cur_epoch == self.trainer.max_epochs - 1:
+                self.log_dict(self.tracker.best_metrics)
+                self.best_metrics_logged = True
