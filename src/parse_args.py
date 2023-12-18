@@ -41,6 +41,18 @@ def get_args_parser(conf_parser):
         help="1: input precursor charge",
     )
     parser.add_argument(
+        "--trinary_freq",
+        default=0.15,
+        type=float,
+        help="Frequency of corrupted tokens in the Trinary MZ objective",
+    )
+    parser.add_argument(
+        "--trinary_std",
+        default=5,
+        type=float,
+        help="Stdev of Gaussian noise in the corrupted tokens in the Trinary MZ objective",
+    )
+    parser.add_argument(
         "--batch_size",
         default=64,
         type=int,
