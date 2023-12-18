@@ -6,6 +6,8 @@ import numpy as np
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from abc import ABC, abstractmethod
 import torch.nn.functional as F
+from denovo_eval import Metrics as DeNovoMetrics
+
 
 def calc_classification_metrics(all_outputs, all_targets):
     all_targets = all_targets.detach().cpu().float().numpy()
@@ -98,10 +100,14 @@ class BasePLWrapper(ABC, pl.LightningModule):
         mz_arr = spectra["mz_array"]
         int_arr = spectra["intensity_array"]
         mzab = torch.stack([mz_arr, int_arr], dim=-1)
-        return mzab, {
-            "mass": spectra["mass"] if self.input_mass else None,
-            "charge": spectra["charge"] if self.input_charge else None,
-        }
+        batch_size = mz_arr.shape[0]
+        return (
+            mzab,
+            {
+                "mass": spectra["mass"] if self.input_mass else None,
+                "charge": spectra["charge"] if self.input_charge else None,
+            },
+        ), batch_size
 
     def forward(self, parsed_batch, **kwargs):
         mzab, input_dict, target = parsed_batch
@@ -147,32 +153,38 @@ class BasePLWrapper(ABC, pl.LightningModule):
         return stats
 
     def training_step(self, batch, batch_idx):
-        parsed_batch = self._parse_batch(batch)
+        parsed_batch, batch_size = self._parse_batch(batch)
         returns = self.forward(parsed_batch)
         loss, train_stats = self._get_train_stats(returns, parsed_batch)
-        train_stats = {"train_" + key: val.detach().item() for key, val in train_stats.items()}
+        train_stats = {
+            "train_" + key: val.detach().item() for key, val in train_stats.items()
+        }
         self.log_dict(
-            {**train_stats}, on_epoch=True, batch_size=batch[0].shape[0], sync_dist=True
+            {**train_stats}, on_epoch=True, batch_size=batch_size, sync_dist=True
         )
         return {"loss": loss, "returns": returns}
 
     def validation_step(self, batch, batch_idx):
-        parsed_batch = self._parse_batch(batch)
+        parsed_batch, batch_size = self._parse_batch(batch)
         returns = self.forward(parsed_batch)
         val_stats = self._get_eval_stats(returns, parsed_batch)
-        val_stats = {"val_" + key: val.detach().item() for key, val in val_stats.items()}
+        val_stats = {
+            "val_" + key: val.detach().item() for key, val in val_stats.items()
+        }
         self.log_dict(
-            {**val_stats}, on_epoch=True, batch_size=batch[0].shape[0], sync_dist=True
+            {**val_stats}, on_epoch=True, batch_size=batch_size, sync_dist=True
         )
         return {"val_stats": val_stats, "returns": returns}
 
     def test_step(self, batch, batch_idx):
-        parsed_batch = self._parse_batch(batch)
+        parsed_batch, batch_size = self._parse_batch(batch)
         returns = self.forward(parsed_batch)
         test_stats = self._get_eval_stats(returns, parsed_batch)
-        test_stats = {"test_" + key: val.detach().item() for key, val in test_stats.items()}
+        test_stats = {
+            "test_" + key: val.detach().item() for key, val in test_stats.items()
+        }
         self.log_dict(
-            {**test_stats}, on_epoch=True, batch_size=batch[0].shape[0], sync_dist=True
+            {**test_stats}, on_epoch=True, batch_size=batch_size, sync_dist=True
         )
         return {"test_stats": test_stats, "returns": returns}
 
@@ -257,15 +269,14 @@ class BasePLWrapper(ABC, pl.LightningModule):
         if not self.best_metrics_logged:
             self.logger.experiment.log(self.tracker.best_metrics)
 
+
 class DummyPLWrapper(BasePLWrapper):
     def _get_losses(self, returns, labels):
         return 0
 
-
     def _get_train_stats(self, returns, batch):
         stats = {}
         return 0, stats
-
 
     def _get_eval_stats(self, split, returns, batch):
         stats = {}
@@ -279,8 +290,8 @@ class TrinaryMZPLWrapper(BasePLWrapper):
     def __init__(self, encoder, datasets, args, collate_fn=None):
         head = nn.Linear(encoder.running_units, 3)
         super().__init__(encoder, datasets, args, head, collate_fn)
-        self.corrupt_freq = args.trinary.freq
-        self.corrupt_std = args.trinary.std
+        self.corrupt_freq = args.trinary_freq
+        self.corrupt_std = args.trinary_std
 
     def _parse_batch(self, batch):
         spectra = batch
@@ -288,11 +299,16 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         int_arr = spectra["intensity_array"]
         corrupt_mz_arr, target = self.inptarg(mz_arr)
 
+        batch_size = mz_arr.shape[0]
         mzab = torch.stack([corrupt_mz_arr, int_arr], dim=-1)
-        return mzab, {
-            "mass": spectra["mass"] if self.input_mass else None,
-            "charge": spectra["charge"] if self.input_charge else None,
-        }, target
+        return (
+            mzab,
+            {
+                "mass": spectra["mass"] if self.input_mass else None,
+                "charge": spectra["charge"] if self.input_charge else None,
+            },
+            target,
+        ), batch_size
 
     def forward(self, parsed_batch, **kwargs):
         mzab, input_dict, target = parsed_batch
@@ -303,7 +319,9 @@ class TrinaryMZPLWrapper(BasePLWrapper):
 
     def _get_losses(self, returns, labels):
         loss = F.cross_entropy(
-            returns.transpose(-1,-2), labels.transpose(-1,-2), reduction='mean' #TODO: verify that mean reduction is what we want here
+            returns.transpose(-1, -2),
+            labels.transpose(-1, -2),
+            reduction="mean",  # TODO: verify that mean reduction is what we want here
         )
         return loss
 
@@ -321,11 +339,9 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         stats["loss"] = loss
         return stats
 
-
     def inptarg(self, mz_batch):
-
         # Random sequence indices to change
-        inds_boolean = torch.empty_like(mz_batch[:, :, 0]).uniform_(0, 1) < self.corrupt_freq
+        inds_boolean = torch.empty_like(mz_batch).uniform_(0, 1) < self.corrupt_freq
         inds = torch.nonzero(inds_boolean, as_tuple=False)
 
         # Get their mz values
@@ -336,19 +352,19 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         updates = torch.clamp(updates, min=0.0, max=1.0)
 
         # Distribute updates into corrupted indices
-        mz_batch[inds[:, 0], inds[:, 1], 0] = updates
+        mz_batch[inds[:, 0], inds[:, 1]] = updates
 
         # Construct Target Tensor
         # inds that are below the original value (0)
         zero = means > updates  # 1d boolean
-        target = torch.ones_like(mz_batch[..., 0]).type_as(mz_batch)
+        target = torch.ones_like(mz_batch, dtype=torch.long)
         target[inds[zero, 0], inds[zero, 1]] = 0
 
         # inds that are above the original value (2)
         two = means < updates  # 1d boolean
         target[inds[two, 0], inds[two, 1]] = 2
 
-        target = F.one_hot(target, 3)
+        # target = F.one_hot(target, 3) # Not needed, CE loss expects class inds for the target
 
         return mz_batch, target
 
