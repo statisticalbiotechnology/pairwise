@@ -14,3 +14,4 @@ dependencies:
     - wandb
     - path
     - pathlib
+    - jiwer

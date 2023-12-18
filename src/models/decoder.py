@@ -1,216 +1,204 @@
 from copy import deepcopy
 import numpy as np
-from utils import Scale
 import models.model_parts as mp
 import torch as th
 from torch import nn
+import pytorch_lightning as pl
 
-class Decoder(nn.Module):
-    def __init__(self,
-                 running_units=512,
-                 kv_indim=256,
-                 sequence_length=30, # maximum number of amino acids
-                 num_inp_tokens=21,
-                 depth=9,
-                 d=64,
-                 h=4,
-                 ffn_multiplier=1,
-                 ce_units=256,
-                 use_charge=True,
-                 use_energy=False,
-                 use_mass=True,
-                 norm_type='layer',
-                 prenorm=True,
-                 preembed=True,
-                 penultimate_units=None,
-                 pool=False,
-                 ):
+
+class Decoder(pl.LightningModule):
+    def __init__(
+        self,
+        running_units=512,
+        kv_indim=256,
+        sequence_length=30,  # maximum number of amino acids
+        num_inp_tokens=21,
+        depth=9,
+        d=64,
+        h=4,
+        ffn_multiplier=1,
+        ce_units=256,
+        use_charge=True,
+        use_energy=False,
+        use_mass=True,
+        norm_type="layer",
+        prenorm=True,
+        preembed=True,
+        penultimate_units=None,
+        pool=False,
+    ):
         super(Decoder, self).__init__()
         self.run_units = running_units
         self.kv_indim = kv_indim
         self.sl = sequence_length
         self.num_inp_tokens = num_inp_tokens
-        self.num_out_tokens = num_inp_tokens - 2 # no need for start or hidden tokens
+        self.num_out_tokens = num_inp_tokens - 2  # no need for start or hidden tokens
         self.use_charge = use_charge
         self.use_energy = use_energy
         self.use_mass = use_mass
 
         self.ce_units = ce_units
-        
+
         # Normalization type
         self.norm = mp.get_norm_type(norm_type)
 
         # First embeddings
         self.seq_emb = nn.Embedding(num_inp_tokens, running_units)
         self.alpha = nn.Parameter(th.tensor(0.1), requires_grad=True)
-        
+
         # charge/energy embedding transformation
         self.atleast1 = use_charge or use_energy or use_mass
         if self.atleast1:
             num = sum([use_charge, use_energy, use_mass])
-            self.ce_emb = nn.Sequential(
-                nn.Linear(ce_units*num, ce_units), nn.SiLU()
-            )
-        
+            self.ce_emb = nn.Sequential(nn.Linear(ce_units * num, ce_units), nn.SiLU())
+
         # Main blocks
-        attention_dict = {'indim': running_units, 'd': d, 'h': h}
-        ffn_dict = {'indim': running_units, 'unit_multiplier': ffn_multiplier}
+        attention_dict = {"indim": running_units, "d": d, "h": h}
+        ffn_dict = {"indim": running_units, "unit_multiplier": ffn_multiplier}
         is_embed = True if self.atleast1 else False
-        self.main = nn.ModuleList([
-            mp.TransBlock(
-                attention_dict, 
-                ffn_dict, 
-                norm_type, 
-                prenorm, 
-                is_embed,
-                ce_units,
-                preembed, 
-                is_cross=True,
-                kvindim=kv_indim
-            ) 
-            for _ in range(depth)
-        ])
-        
-        # Final block
-        units = (
-            running_units if penultimate_units==None else penultimate_units 
+        self.main = nn.ModuleList(
+            [
+                mp.TransBlock(
+                    attention_dict,
+                    ffn_dict,
+                    norm_type,
+                    prenorm,
+                    is_embed,
+                    ce_units,
+                    preembed,
+                    is_cross=True,
+                    kvindim=kv_indim,
+                )
+                for _ in range(depth)
+            ]
         )
+
+        # Final block
+        units = running_units if penultimate_units == None else penultimate_units
         self.final = nn.Sequential(
             nn.Linear(running_units, units, bias=False),
             nn.GELU(),
             self.norm(units),
-            nn.Linear(units, self.num_out_tokens)
+            nn.Linear(units, self.num_out_tokens),
         )
-        
+
         # Pool sequence dimension?
         self.pool = pool
-        
+
         # Positional embedding
         pos = mp.FourierFeatures(
-            th.arange(self.sl, dtype=th.float32), self.run_units, 5.*self.sl
+            th.arange(self.sl, dtype=th.float32), self.run_units, 5.0 * self.sl
         )
         self.pos = nn.Parameter(pos, requires_grad=False)
-    
+
     def total_params(self):
         return sum([m.numel() for m in self.parameters()])
-    
+
     def sequence_mask(self, seqlen):
         # seqlen: 1d vector equal to (zero-based) index of predict token
-        if seqlen==None:
+        if seqlen == None:
             mask = th.zeros(1, self.sl, dtype=th.float32)
         else:
             seqs = th.tile(
-                th.arange(self.sl, device=seqlen.device)[None], (seqlen.shape[0], 1)
+                th.arange(self.sl, device=self.device)[None], (seqlen.shape[0], 1)
             )
             # Only mask out sequence positions greater than or equal to predict
             # token
-            # - if predict token is at position 5 (zero-based), mask out 
-            #   positions 5 to seq_len, i.e. you can only attend to positions 
+            # - if predict token is at position 5 (zero-based), mask out
+            #   positions 5 to seq_len, i.e. you can only attend to positions
             #   0, 1, 2, 3, 4
-            mask = 1e5 * (seqs >= seqlen[:,None]).type(th.float32)
-        
+            mask = 1e5 * (seqs >= seqlen[:, None]).type(th.float32)
+
         return mask
-    
+
     def Main(self, inp, kv_feats, embed=None, spec_mask=None, seq_mask=None):
         out = inp
         for layer in self.main:
             out = layer(
-                out, kv_feats=kv_feats, embed_feats=embed, spec_mask=spec_mask,
-                seq_mask=seq_mask 
+                out,
+                kv_feats=kv_feats,
+                embed_feats=embed,
+                spec_mask=spec_mask,
+                seq_mask=seq_mask,
             )
-        
+
         return out
-    
+
     def Final(self, inp):
         out = inp
         return out
-    
+
     def EmbedInputs(self, intseq, charge=None, energy=None, mass=None):
-        
         # Sequence embedding
         seqemb = self.seq_emb(intseq)
-        
+
         # charge and/or energy embedding
         if self.atleast1:
             ce_emb = []
             if self.use_charge:
                 charge = charge.type(th.float32)
-                ce_emb.append(mp.FourierFeatures(charge, self.ce_units, 10.))
+                ce_emb.append(mp.FourierFeatures(charge, self.ce_units, 10.0))
             if self.use_energy:
-                ce_emb.append(mp.FourierFeatures(energy, self.ce_units, 150.))
+                ce_emb.append(mp.FourierFeatures(energy, self.ce_units, 150.0))
             if self.use_mass:
-                ce_emb.append(mp.FourierFeatures(mass, self.ce_units, 20000.))
+                ce_emb.append(mp.FourierFeatures(mass, self.ce_units, 20000.0))
             if len(ce_emb) > 1:
                 ce_emb = th.cat(ce_emb, dim=-1)
             ce_emb = self.ce_emb(ce_emb)
         else:
             ce_emb = None
-        
-        out = seqemb + self.alpha*self.pos
-        
+
+        out = seqemb + self.alpha * self.pos
+
         return out, ce_emb
-    
-    def forward(self, 
-                intseq, 
-                kv_feats, 
-                charge=None, 
-                energy=None, 
-                mass=None,
-                seqlen=None, 
-                specmask=None
+
+    def forward(
+        self,
+        intseq,
+        kv_feats,
+        charge=None,
+        energy=None,
+        mass=None,
+        seqlen=None,
+        specmask=None,
     ):
-        
         out, ce_emb = self.EmbedInputs(intseq, charge=charge, energy=energy, mass=mass)
-        
+
         seqmask = self.sequence_mask(seqlen)
-        
+
         out = self.Main(
-            out, kv_feats=kv_feats, embed=ce_emb, 
-            spec_mask=specmask, seq_mask=seqmask
+            out, kv_feats=kv_feats, embed=ce_emb, spec_mask=specmask, seq_mask=seqmask
         )
-        
+
         out = self.final(out)
         if self.pool:
             out = out.mean(dim=1)
 
         return out
 
-class DenovoDecoder:
-    def __init__(self, token_dict, dec_config, encoder):
-        
+
+class DenovoDecoder(pl.LightningModule):
+    def __init__(self, token_dict, dec_config):
         self.outdict = deepcopy(token_dict)
         self.inpdict = deepcopy(token_dict)
-        self.NT = self.outdict['X']
-        self.inpdict['<s>'] = len(self.inpdict)
-        self.start_token = self.inpdict['<s>']
-        self.inpdict['<h>'] = len(self.inpdict)
-        self.hidden_token = self.inpdict['<h>']
-        #self.inpdict['<p>'] = len(self.inpdict)
-        #self.pred_token = self.inpdict['<p>']
-        dec_config['num_inp_tokens'] = len(self.inpdict)
-        
+        self.NT = self.outdict["X"]
+        self.inpdict["<s>"] = len(self.inpdict)
+        self.start_token = self.inpdict["<s>"]
+        self.inpdict["<h>"] = len(self.inpdict)
+        self.hidden_token = self.inpdict["<h>"]
+        # self.inpdict['<p>'] = len(self.inpdict)
+        # self.pred_token = self.inpdict['<p>']
+        dec_config["num_inp_tokens"] = len(self.inpdict)
+
         self.scale = Scale(self.outdict)
 
         self.dec_config = dec_config
         self.decoder = Decoder(**dec_config)
-        self.encoder = encoder
 
         self.initialize_variables()
 
-    def save_weights(self, fp='./decoder.wts'):
-        th.save(self.decoder.state_dict(), fp)
-
-    def load_weights(self, fp='./decoder.wts'):
-        self.decoder.load_state_dict(th.load(fp))
-    
-    def train(self):
-        self.decoder.train()
-
-    def eval(self):
-        self.decoder.eval()
-
     def prepend_startok(self, intseq):
-        hold = th.zeros(intseq.shape[0], 1, dtype=th.int32, device=intseq.device)
+        hold = th.zeros(intseq.shape[0], 1, dtype=th.int32, device=self.device)
         start = th.fill(hold, self.start_token)
         out = th.cat([start, intseq], dim=1)
 
@@ -218,17 +206,17 @@ class DenovoDecoder:
 
     def append_nulltok(self, intseq):
         hold = th.zeros(intseq.shape[0], 1, dtype=th.int32)
-        end = th.fill(hold, self.inpdict['X'])
+        end = th.fill(hold, self.inpdict["X"])
         out = th.cat([intseq, end], axis=1)
-    
+
         return out
 
     def initial_intseq(self, batch_size, seqlen=None):
-        seq_length = self.seq_len if seqlen==None else seqlen
-        intseq = th.empty(batch_size, seq_length-1, dtype=th.int32)
+        seq_length = self.seq_len if seqlen == None else seqlen
+        intseq = th.empty(batch_size, seq_length - 1, dtype=th.int32)
         intseq = th.fill(intseq, self.hidden_token)
-        out = self.prepend_startok(intseq) # bs, seq_length
-        #out = self.set_tokens(out, int(seq_length+1), self.hidden_token)
+        out = self.prepend_startok(intseq)  # bs, seq_length
+        # out = self.set_tokens(out, int(seq_length+1), self.hidden_token)
 
         return out
 
@@ -237,10 +225,9 @@ class DenovoDecoder:
 
     def initialize_variables(self):
         self.seq_len = self.decoder.sl
-        self.parameters = self.decoder.parameters
 
     def column_inds(self, batch_size, column_ind):
-        ind0 = th.arange(batch_size)[:,None]
+        ind0 = th.arange(batch_size)[:, None]
         ind1 = th.fill(th.fill(batch_size, 1, dtype=th.int32), column_ind)
         inds = th.cat([ind0, ind1], dim=1)
 
@@ -248,25 +235,24 @@ class DenovoDecoder:
 
     def set_tokens(self, int_array, inds, updates, add=False):
         shp = int_array.shape
-        
-        if type(inds)==int:
+
+        if type(inds) == int:
             int_array[:, inds] = updates + int_array[:, inds] if add else updates
         else:
             int_array[inds] = updates + int_array[inds] if add else updates
-        
+
         return int_array
 
-    def fill2c(self, int_array, inds, tokentyp='X', output=True):
-        dev = int_array.device
+    def fill2c(self, int_array, inds, tokentyp="X", output=True):
         tokint = self.NT if output else self.inpdict[tokentyp]
         all_inds = th.tile(
-            th.arange(int_array.shape[1], dtype=th.int32, device=dev)[None],
-            [int_array.shape[0], 1]
+            th.arange(int_array.shape[1], dtype=th.int32, device=self.device)[None],
+            [int_array.shape[0], 1],
         )
         # hidden_inds = th.where(all_inds > inds[:, None])
         # out = tf.tensor_scatter_nd_update(
-        #     int_array, 
-        #     hidden_inds, 
+        #     int_array,
+        #     hidden_inds,
         #     tf.fill((tf.shape(hidden_inds)[0],), tokint)
         # )
         out = int_array
@@ -274,28 +260,29 @@ class DenovoDecoder:
 
         return out
 
-    def decinp(self, 
-        intseq, 
-        enc_out, 
-        charge=None, 
-        energy=None, 
+    def decinp(
+        self,
+        intseq,
+        enc_out,
+        charge=None,
+        energy=None,
         mass=None,
-        device=th.device('cpu'),
-        ):
+    ):
         dec_inp = {
-            'intseq': intseq.to(device),
-            'kv_feats': enc_out['emb'].to(device),
-            'charge': charge.to(device) if self.decoder.use_charge else None,
-            'energy': energy.to(device) if self.decoder.use_energy else None,
-            'mass': mass.to(device) if self.decoder.use_mass else None,
-            'seqlen': self.num_reg_tokens(intseq.to(device)), # for the seq. mask
-            'specmask': enc_out['mask'].to(device),
+            "intseq": intseq.to(self.device),
+            "kv_feats": enc_out["emb"].to(self.device),
+            "charge": charge.to(self.device) if self.decoder.use_charge else None,
+            "energy": energy.to(self.device) if self.decoder.use_energy else None,
+            "mass": mass.to(self.device) if self.decoder.use_mass else None,
+            "seqlen": self.num_reg_tokens(intseq.to(self.device)),  # for the seq. mask
+            "specmask": enc_out["mask"].to(self.device),
         }
 
         return dec_inp
 
     def greedy(self, predict_logits):
         return predict_logits.argmax(-1).type(th.int32)
+
     """
     def beam_search(self, K, batch, enc_out, pred_stop=True):
         # initialize complete set of sequences
@@ -523,83 +510,105 @@ class DenovoDecoder:
 
         return output
     """
-    # The encoder's output should have always come from a batch loaded in 
+
+    # The encoder's output should have always come from a batch loaded in
     # from the dataset. The batch dictionary has any necessary inputs for
     # the decoder.
-    #@tf.function
+    # @tf.function
     def predict_sequence(self, enc_out, batdic):
-
-        dev = enc_out['emb'].device
-        bs = enc_out['emb'].shape[0]
+        dev = enc_out["emb"].device
+        bs = enc_out["emb"].shape[0]
         # starting intseq array
         intseq = self.initial_intseq(bs, self.seq_len).to(dev)
         for i in range(self.seq_len):
-        
             index = int(i)
-        
+
             dec_out = self(intseq, enc_out, batdic, False)
 
             predictions = self.greedy(dec_out[:, index])
-            
-            if index < self.seq_len-1:
-                intseq = self.set_tokens(intseq, index+1, predictions)
-        
-        intseq = th.cat([intseq[:, 1:], predictions[:,None]], dim=1)
+
+            if index < self.seq_len - 1:
+                intseq = self.set_tokens(intseq, index + 1, predictions)
+
+        intseq = th.cat([intseq[:, 1:], predictions[:, None]], dim=1)
 
         return intseq
 
     def correct_sequence_(self, enc_out, batdic, softmax=False):
-        bs = enc_out['emb'].shape[0]
+        bs = enc_out["emb"].shape[0]
         rank = th.zeros(bs, self.seq_len, dtype=th.int32)
         prob = th.zeros(bs, self.seq_len, dtype=th.float32)
         # starting intseq array
         intseq = self.initial_intseq(bs, self.seq_len)
         for i in range(self.seq_len):
-        
             index = int(i)
-        
+
             dec_out = self(intseq, enc_out, batdic, False, softmax)
-            
+
             wrank = th.where(
-                (-dec_out[:, i]).argsort(-1) == batdic['seqint'][:, i:i+1]
+                (-dec_out[:, i]).argsort(-1) == batdic["seqint"][:, i : i + 1]
             )[-1].type(th.int32)
-            
+
             rank = self.set_tokens(rank, index, wrank)
-            
-            inds = (th.arange(bs, dtype=th.int32), batdic['seqint'][:, i])
-            #updates = tf.math.log(tf.gather_nd(dec_out[:, i], inds))
+
+            inds = (th.arange(bs, dtype=th.int32), batdic["seqint"][:, i])
+            # updates = tf.math.log(tf.gather_nd(dec_out[:, i], inds))
             updates = dec_out[:, i][inds].log()
             prob = self.set_tokens(prob, index, updates)
-            
-            predictions = batdic['seqint'][:, i] #self.greedy(dec_out[:, index])
-            
-            if index < self.seq_len-1:
-                intseq = self.set_tokens(intseq, index+1, predictions)
-        
-        intseq = th.cat([intseq[:, 1:], predictions[:,None]], dim=1)
 
-        return rank, prob #UNNECESSARY
+            predictions = batdic["seqint"][:, i]  # self.greedy(dec_out[:, index])
 
-    def __call__(self, 
-                 intseq, 
-                 enc_out, 
-                 batdic, 
-                 training=False, 
-                 softmax=False,
-                 ):
+            if index < self.seq_len - 1:
+                intseq = self.set_tokens(intseq, index + 1, predictions)
+
+        intseq = th.cat([intseq[:, 1:], predictions[:, None]], dim=1)
+
+        return rank, prob  # UNNECESSARY
+
+    def forward(
+        self,
+        intseq,
+        enc_out,
+        batdic,
+        softmax=False,
+    ):
         dec_inp = self.decinp(
-            intseq, enc_out, charge=batdic['charge'], mass=batdic['mass'], 
-            energy=None, device=self.decoder.pos.device
+            intseq,
+            enc_out,
+            charge=batdic["charge"],
+            mass=batdic["mass"],
+            energy=None,
         )
-        if training:
-            self.decoder.train()
-        else:
-            self.decoder.eval()
+
         output = self.decoder(**dec_inp)
         if softmax:
             output = th.softmax(output, dim=-1)
 
         return output
+
+
+def decoder_greedy_base(**kwargs):
+    token_dict = ...  # FIXME
+    decoder_config = {
+        "running_units": 512,
+        "sequence_length": 30,
+        "depth": 9,
+        "d": 64,
+        "h": 4,
+        "ffn_multiplier": 1,
+        "ce_units": 256,
+        "use_charge": True,
+        "use_energy": False,
+        "use_mass": True,
+        "norm_type": "layer",
+        "prenorm": True,
+        "preembed": True,
+        # penultimate_units: #?
+        "pool": False,
+    }
+    model = DenovoDecoder(token_dict, decoder_config)
+    return model
+
 
 """
 def ones(mod, mul=1e-3):

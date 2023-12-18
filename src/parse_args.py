@@ -16,15 +16,15 @@ def get_args_parser(conf_parser):
         help="Name of the encoder model to train",
     )
     parser.add_argument(
-        "--head_model",
+        "--decoder_model",
         default="",
         type=str,
-        help="Name of the head model to train",
+        help="Name of the encoder model to train",
     )
     parser.add_argument(
         "--pretraining_task",
         default="masked",
-        choices=["masked", "trinary_mz", "dummy"],
+        choices=["masked", "trinary_mz", "dummy", "denovo"],
         type=str,
         help="Which pretraining strategy to use",
     )
@@ -39,6 +39,18 @@ def get_args_parser(conf_parser):
         default=0,
         type=bool,
         help="1: input precursor charge",
+    )
+    parser.add_argument(
+        "--trinary_freq",
+        default=0.15,
+        type=float,
+        help="Frequency of corrupted tokens in the Trinary MZ objective",
+    )
+    parser.add_argument(
+        "--trinary_std",
+        default=5,
+        type=float,
+        help="Stdev of Gaussian noise in the corrupted tokens in the Trinary MZ objective",
     )
     parser.add_argument(
         "--batch_size",
