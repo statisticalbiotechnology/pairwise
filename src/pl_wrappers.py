@@ -305,6 +305,7 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         loss = F.cross_entropy(
             returns.transpose(-1,-2), labels.transpose(-1,-2), reduction='mean' #TODO: verify that mean reduction is what we want here
         )
+        return loss
 
     def _get_train_stats(self, returns, parsed_batch):
         _, _, target = parsed_batch
