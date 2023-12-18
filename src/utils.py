@@ -14,7 +14,7 @@ def get_spectrum_dataset_splits(data_root_dir, splits=[0.6, 0.2, 0.2], max_peaks
     if os.path.exists(lance_dir):
         spectrum_dataset = SpectrumDataset.from_lance(lance_dir)
     else:
-        mgf_files = list(Path(data_root_dir).glob("*.mgf"))
+        mgf_files = list(Path(data_root_dir).glob("**/*.mgf"))
         spectrum_dataset = SpectrumDataset(mgf_files, path=lance_dir)
 
     # Calculate sizes based on the desired split ratios
