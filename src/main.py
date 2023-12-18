@@ -9,18 +9,18 @@ from parse_args import parse_args_and_config, create_output_dirs
 
 
 from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
-from pl_wrappers import DummyPLWrapper, TrinaryMZPLWrapper
+from pl_wrappers import DeNovoPLWrapper, DummyPLWrapper, TrinaryMZPLWrapper
 import utils
 
 
 import models.encoder as encoders
-import models.heads as heads
+import models.decoder as decoders
 
 ENCODER_DICT = {
     **encoders.__dict__,
 }
-HEAD_DICT = {
-    **heads.__dict__,
+DECODER_DICT = {
+    **decoders.__dict__,
 }
 
 
@@ -90,15 +90,10 @@ def main(args):
     # Define encoder model
     encoder = ENCODER_DICT[args.encoder_model]()
     # Define head model
-    if args.head_model:
-        head = HEAD_DICT[args.head_model](
-            args.example_arg5,
-            args.example_arg6,
-            args.example_arg7,
-            args.example_arg8,
-        )
+    if args.encoder_model:
+        decoder = DECODER_DICT[args.decoder_model]()
     else:
-        head = None
+        decoder = None
 
     if args.pretraining_task == "masked":
         pl_model = MaskedTrainingPLWrapper(
@@ -112,6 +107,10 @@ def main(args):
         pl_model = TrinaryMZPLWrapper(
             encoder, args=args, datasets=datasets, collate_fn=collate_fn
         )
+    elif args.pretraining_task == "denovo":
+        pl_model = DeNovoPLWrapper(
+            encoder, decoder, args=args, datasets=datasets, collate_fn=collate_fn
+        )
     else:
         raise NotImplementedError(
             f"{args.pretraining_task} pretraining task not implemented"
@@ -124,7 +123,9 @@ def main(args):
         run.log(
             {
                 "num_parameters_encoder": utils.get_num_parameters(encoder),
-                "num_parameters_head": utils.get_num_parameters(head) if head else None,
+                "num_parameters_head": utils.get_num_parameters(decoder)
+                if decoder
+                else None,
             }
         )  # TODO: implement get_num_parameters
 

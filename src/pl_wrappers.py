@@ -196,6 +196,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             pin_memory=self.pin_mem,
             drop_last=True,
             collate_fn=self.collate_fn,
+            persistent_workers=True,
         )
 
     def val_dataloader(self):
@@ -206,6 +207,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             pin_memory=self.pin_mem,
             drop_last=True,
             collate_fn=self.collate_fn,
+            persistent_workers=True,
         )
 
     def test_dataloader(self):
@@ -216,6 +218,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             pin_memory=self.pin_mem,
             drop_last=False,
             collate_fn=self.collate_fn,
+            persistent_workers=True,
         )
 
     def configure_optimizers(self):
@@ -388,3 +391,43 @@ class TrinaryMZPLWrapper(BasePLWrapper):
             if cur_epoch == self.trainer.max_epochs - 1:
                 self.log_dict(self.tracker.best_metrics)
                 self.best_metrics_logged = True
+
+
+class DeNovoPLWrapper(BasePLWrapper):
+    def __init__(self, encoder, decoder, datasets, args, collate_fn=None):
+        super().__init__(encoder, datasets, args, collate_fn=collate_fn)
+        self.decoder = decoder
+        self.denovo_metrics = DeNovoMetrics()
+
+    def forward(self, parsed_batch, **kwargs):
+        mzab, input_dict = parsed_batch
+        outs = self.encoder(mzab, **input_dict, **kwargs)
+        outs = self.decoder(outs["emb"])
+        outs = F.softmax(outs, dim=-1)
+        return outs
+
+    def _get_losses(self, returns, labels):
+        return 0
+
+    def _get_train_stats(self, returns, batch):
+        stats = {}
+        return 0, stats
+
+    def _get_eval_stats(self, split, returns, batch):
+        stats = {}
+        return stats
+
+    def on_validation_epoch_end(self):
+        pass
+
+    def configure_optimizers(self):
+        param_groups = [
+            {"params": self.encoder.parameters()},
+            {"params": self.decoder.parameters()},
+        ]
+        return torch.optim.AdamW(
+            param_groups,
+            lr=self.lr,
+            betas=(0.9, 0.9999),
+            weight_decay=self.weight_decay,
+        )

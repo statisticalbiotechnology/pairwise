@@ -16,15 +16,15 @@ def get_args_parser(conf_parser):
         help="Name of the encoder model to train",
     )
     parser.add_argument(
-        "--head_model",
+        "--decoder_model",
         default="",
         type=str,
-        help="Name of the head model to train",
+        help="Name of the encoder model to train",
     )
     parser.add_argument(
         "--pretraining_task",
         default="masked",
-        choices=["masked", "trinary_mz", "dummy"],
+        choices=["masked", "trinary_mz", "dummy", "denovo"],
         type=str,
         help="Which pretraining strategy to use",
     )
