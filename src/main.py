@@ -9,7 +9,7 @@ from parse_args import parse_args_and_config, create_output_dirs
 
 
 from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
-from pl_wrappers import DummyPLWrapper
+from pl_wrappers import DummyPLWrapper, TrinaryMZPLWrapper
 import utils
 
 
@@ -22,6 +22,7 @@ ENCODER_DICT = {
 HEAD_DICT = {
     **heads.__dict__,
 }
+
 
 def update_args(args, config_dict):
     for key, val in config_dict.items():
@@ -107,10 +108,10 @@ def main(args):
         pl_model = DummyPLWrapper(
             encoder, args=args, datasets=datasets, collate_fn=collate_fn
         )
-    # elif args.pretraining_task == "trinary_mz":
-    #     pl_model = TrinaryMZTrainingPLWrapper(
-    #         encoder, args=args, datasets=datasets, collate_fn=collate_fn
-    #     )
+    elif args.pretraining_task == "trinary_mz":
+        pl_model = TrinaryMZPLWrapper(
+            encoder, args=args, datasets=datasets, collate_fn=collate_fn
+        )
     else:
         raise NotImplementedError(
             f"{args.pretraining_task} pretraining task not implemented"
