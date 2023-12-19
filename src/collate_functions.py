@@ -2,8 +2,6 @@ from typing import Any, Dict, Iterable, List, Union
 import torch
 
 
-
-
 def subsample_max_peaks(mz_tensor, int_tensor, max_peaks=300):
     """Subsample mass spectra to retain the peaks with the highest intensities.
 
@@ -31,7 +29,6 @@ def subsample_max_peaks(mz_tensor, int_tensor, max_peaks=300):
     # Keep original order
     highest_indices_original_order, _ = highest_indices.sort()
 
-
     subsampled_tensor = combined_tensor[highest_indices_original_order]
 
     # Split back into m/z and intensity tensors
@@ -39,8 +36,11 @@ def subsample_max_peaks(mz_tensor, int_tensor, max_peaks=300):
     subsampled_intensity = subsampled_tensor[:, 1]
     return subsampled_mz, subsampled_intensity
 
+
 def pad_peaks(
-    batch: Iterable[Dict[Any, Union[List, torch.Tensor]]], precision: torch.dtype=torch.float32, max_peaks: int = 300
+    batch: Iterable[Dict[Any, Union[List, torch.Tensor]]],
+    precision: torch.dtype = torch.float32,
+    max_peaks: int = 300,
 ) -> Dict[str, Union[torch.Tensor, list[Any]]]:
     """
     Transform compatible data types into PyTorch tensors and
@@ -54,7 +54,7 @@ def pad_peaks(
     precision : torch.dtype
         Floating point precision of the returned tensors.
     max_peaks : int
-        Maximum length to limit each sequence. 
+        Maximum length to limit each sequence.
         Subsamples peaks corresponding to the highest intensities.
 
     Returns
@@ -65,15 +65,19 @@ def pad_peaks(
     """
     mz_tensors = []
     int_tensors = []
+    lengths = torch.zeros((len(batch), 1), dtype=torch.int32)
 
-    for b in batch:
+    for i, b in enumerate(batch):
         mz_tensor_b = b.pop("mz_array")
         intensity_tensor_b = b.pop("intensity_array")
         if len(mz_tensor_b) > max_peaks:
-            mz_tensor_b, intensity_tensor_b = subsample_max_peaks(mz_tensor_b, intensity_tensor_b, max_peaks)
+            mz_tensor_b, intensity_tensor_b = subsample_max_peaks(
+                mz_tensor_b, intensity_tensor_b, max_peaks
+            )
+        lengths[i] = len(mz_tensor_b)
         mz_tensors.append(mz_tensor_b)
         int_tensors.append(intensity_tensor_b)
-        
+
     mz_array = torch.nn.utils.rnn.pad_sequence(
         mz_tensors,
         batch_first=True,
@@ -87,6 +91,7 @@ def pad_peaks(
     batch = torch.utils.data.default_collate(batch)
     batch["mz_array"] = mz_array
     batch["intensity_array"] = intensity_array
+    batch["lengths"] = lengths
 
     for key, val in batch.items():
         if isinstance(val, torch.Tensor) and torch.is_floating_point(val):

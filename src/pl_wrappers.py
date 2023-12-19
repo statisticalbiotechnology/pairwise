@@ -90,6 +90,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.lr = args.lr
         self.input_charge = bool(args.input_charge)
         self.input_mass = bool(args.input_mass)
+        self.mask_zero_tokens = bool(args.mask_zero_tokens)
         self.tracker = BestMetricTracker()
         self.best_metrics_logged = (
             False  # keep track of if the best achieved metrics have been logged
@@ -196,7 +197,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             pin_memory=self.pin_mem,
             drop_last=True,
             collate_fn=self.collate_fn,
-            persistent_workers=True,
+            persistent_workers=self.num_workers > 0,
         )
 
     def val_dataloader(self):
@@ -207,7 +208,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             pin_memory=self.pin_mem,
             drop_last=True,
             collate_fn=self.collate_fn,
-            persistent_workers=True,
+            persistent_workers=self.num_workers > 0,
         )
 
     def test_dataloader(self):
@@ -218,7 +219,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             pin_memory=self.pin_mem,
             drop_last=False,
             collate_fn=self.collate_fn,
-            persistent_workers=True,
+            persistent_workers=self.num_workers > 0,
         )
 
     def configure_optimizers(self):
@@ -307,8 +308,9 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         return (
             mzab,
             {
-                "mass": spectra["mass"] if self.input_mass else None,
-                "charge": spectra["charge"] if self.input_charge else None,
+                "mass": spectra["precursor_mz"] if self.input_mass else None,
+                "charge": spectra["precursor_charge"] if self.input_charge else None,
+                "length": spectra["lengths"] if self.mask_zero_tokens else None,
             },
             target,
         ), batch_size

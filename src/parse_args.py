@@ -41,6 +41,12 @@ def get_args_parser(conf_parser):
         help="1: input precursor charge",
     )
     parser.add_argument(
+        "--mask_zero_tokens",
+        default=0,
+        type=bool,
+        help="1: mask the attention for 'null' tokens",
+    )
+    parser.add_argument(
         "--trinary_freq",
         default=0.15,
         type=float,
