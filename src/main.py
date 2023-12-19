@@ -90,7 +90,7 @@ def main(args):
     # Define encoder model
     encoder = ENCODER_DICT[args.encoder_model]()
     # Define head model
-    if args.encoder_model:
+    if args.decoder_model:
         decoder = DECODER_DICT[args.decoder_model]()
     else:
         decoder = None
@@ -107,10 +107,6 @@ def main(args):
         pl_model = TrinaryMZPLWrapper(
             encoder, args=args, datasets=datasets, collate_fn=collate_fn
         )
-    elif args.pretraining_task == "denovo":
-        pl_model = DeNovoPLWrapper(
-            encoder, decoder, args=args, datasets=datasets, collate_fn=collate_fn
-        )
     else:
         raise NotImplementedError(
             f"{args.pretraining_task} pretraining task not implemented"
@@ -123,7 +119,7 @@ def main(args):
         run.log(
             {
                 "num_parameters_encoder": utils.get_num_parameters(encoder),
-                "num_parameters_head": utils.get_num_parameters(decoder)
+                "num_parameters_decoder": utils.get_num_parameters(decoder)
                 if decoder
                 else None,
             }
@@ -135,7 +131,7 @@ def main(args):
         f"Starting distributed training using {args.num_devices} devices on {args.num_nodes} node(s)"
     ) if distributed else print("Starting single-device training")
 
-    trainer = pl.Trainer(
+    pretrainer = pl.Trainer(
         # Distributed kwargs
         accelerator=args.accelerator,
         devices=[i for i in range(args.num_devices)]
@@ -155,11 +151,19 @@ def main(args):
     )
 
     # This is the call to start training the model
-    trainer.fit(pl_model)
+    pretrainer.fit(pl_model)
 
     # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
     if args.save_top_k > 0:
-        trainer.test(ckpt_path="best")
+        pretrainer.test(ckpt_path="best")
+
+    # Load best or last encoder
+    encoder_path = pretrainer.checkpoint_callback.state_dict()["last_model_path"]
+
+    if args.downstream == "denovo":
+        pl_model = DeNovoPLWrapper(
+            encoder, decoder, args=args, datasets=datasets, collate_fn=collate_fn
+        )
 
     # Flag the run as finished to the wandb server
     if run is not None and utils.get_rank() == 0:
