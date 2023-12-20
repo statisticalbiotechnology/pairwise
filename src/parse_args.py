@@ -54,7 +54,7 @@ def get_args_parser(conf_parser):
     )
     parser.add_argument(
         "--trinary_std",
-        default=5,
+        default=0.1,
         type=float,
         help="Stdev of Gaussian noise in the corrupted tokens in the Trinary MZ objective",
     )

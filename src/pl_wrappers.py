@@ -325,7 +325,7 @@ class TrinaryMZPLWrapper(BasePLWrapper):
     def _get_losses(self, returns, labels):
         loss = F.cross_entropy(
             returns.transpose(-1, -2),
-            labels.transpose(-1, -2),
+            labels,
             reduction="mean",  # TODO: verify that mean reduction is what we want here
         )
         return loss
@@ -354,7 +354,7 @@ class TrinaryMZPLWrapper(BasePLWrapper):
 
         # Generate normal distributions for inds, centered on original value
         updates = torch.normal(means, self.corrupt_std)
-        updates = torch.clamp(updates, min=0.0, max=1.0)
+        #updates = torch.clamp(updates, min=0.0, max=1.0)
 
         # Distribute updates into corrupted indices
         mz_batch[inds[:, 0], inds[:, 1]] = updates

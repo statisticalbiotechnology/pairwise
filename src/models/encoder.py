@@ -37,7 +37,7 @@ class Encoder(nn.Module):
         self,
         in_units=2,  # input units from mz/ab tensor
         running_units=512,  # num units running throughout model
-        max_sequence_length=100,  # maximum number of peaks
+        max_sequence_length=1000,  # maximum number of peaks
         mz_units=512,  # units in mz fourier vector
         ab_units=256,  # units in ab fourier vector
         subdivide=False,  # subdivide mz units in 2s and expand-concat
@@ -47,8 +47,8 @@ class Encoder(nn.Module):
         ce_units=256,  # units for transformation of mzab fourier vectors
         att_d=64,  # attention qkv dimension units
         att_h=4,  # attention qkv heads
-        pairwise_bias=False,  # use pairwise mz tensor to create SA-bias
-        pairwise_units=None,
+        pairwise_bias=True,  # use pairwise mz tensor to create SA-bias
+        pairwise_units=256,
         ffn_multiplier=4,  # multiply inp units for 1st FFN transform
         depth=9,  # number of transblocks
         prenorm=True,  # normalization before attention/ffn layers
