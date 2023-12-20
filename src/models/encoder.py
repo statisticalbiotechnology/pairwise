@@ -37,7 +37,7 @@ class Encoder(nn.Module):
         self,
         in_units=2,  # input units from mz/ab tensor
         running_units=512,  # num units running throughout model
-        sequence_length=100,  # maximum number of peaks
+        max_sequence_length=100,  # maximum number of peaks
         mz_units=512,  # units in mz fourier vector
         ab_units=256,  # units in ab fourier vector
         subdivide=False,  # subdivide mz units in 2s and expand-concat
@@ -59,7 +59,7 @@ class Encoder(nn.Module):
     ):
         super(Encoder, self).__init__()
         self.running_units = running_units
-        self.sl = sequence_length
+        self.msl = max_sequence_length
         self.mz_units = mz_units
         self.ab_units = ab_units
         self.subdivide = subdivide
@@ -150,7 +150,9 @@ class Encoder(nn.Module):
         self.global_step = nn.Parameter(th.tensor(0), requires_grad=False)
 
         pos = mp.FourierFeatures(
-            th.arange(self.sl, dtype=th.float32), self.running_units, 5.0 * self.sl
+            th.arange(max_sequence_length, dtype=th.float32), 
+            self.running_units, 
+            5.0 * max_sequence_length
         )
         self.pos = nn.Parameter(pos, requires_grad=False)
 
@@ -223,7 +225,7 @@ class Encoder(nn.Module):
         # Create mask
         if length != None:
             grid = th.tile(
-                th.arange(self.sl, dtype=th.int32)[None].to(x.device), (x.shape[0], 1)
+                th.arange(x.shape[1], dtype=th.int32)[None], (x.shape[0], 1)
             )  # bs, seq_len
             mask = grid >= length[:, None]
             mask = (1e5 * mask).type(th.float32)
@@ -257,7 +259,7 @@ class Encoder(nn.Module):
         mabemb = mzab_dic["1d"]
         pwemb = mzab_dic["2d"]
         """mabemb = tf.concat([mabemb, TagArray], axis=-1) # add before self.first"""
-        out = self.first(mabemb) + self.alpha * self.pos
+        out = self.first(mabemb) + self.alpha * self.pos[:x.shape[1]]
 
         # Reycling the embedding with normalization, perhaps dense transform
         out += self.recyc(emb)
@@ -288,7 +290,7 @@ class Encoder(nn.Module):
         emb = (
             emb
             if emb is not None
-            else th.zeros(x.shape[0], self.sl, self.running_units)
+            else th.zeros(x.shape[0], x.shape[1], self.running_units)
         ).to(x.device)
 
         for _ in range(its):
