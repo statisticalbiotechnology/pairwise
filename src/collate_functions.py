@@ -1,4 +1,4 @@
-from typing import Any, Dict, Iterable, List, Union
+from typing import Any, Dict, Iterable, List, Tuple, Union
 import torch
 
 
@@ -35,6 +35,35 @@ def subsample_max_peaks(mz_tensor, int_tensor, max_peaks=300):
     subsampled_mz = subsampled_tensor[:, 0]
     subsampled_intensity = subsampled_tensor[:, 1]
     return subsampled_mz, subsampled_intensity
+
+
+def minmax_scale(
+    tensor: torch.Tensor, scale_range: Tuple[float, float] = (0, 1)
+) -> torch.Tensor:
+    """Scale each sequence in the tensor to the specified range along the last dimension.
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        Tensor to be scaled.
+    scale_range : Tuple[float, float], optional
+        Range to scale the tensor to, by default (0, 1).
+
+    Returns
+    -------
+    torch.Tensor
+        Scaled tensor.
+    """
+    # Calculate min and max along the last dimension
+    min_vals, _ = torch.min(tensor, dim=-1, keepdim=True)
+    max_vals, _ = torch.max(tensor, dim=-1, keepdim=True)
+
+    # Scale each sequence to the specified range
+    scaled_tensor = scale_range[0] + (tensor - min_vals) * (
+        scale_range[1] - scale_range[0]
+    ) / (max_vals - min_vals)
+
+    return scaled_tensor
 
 
 def pad_peaks(
@@ -87,6 +116,8 @@ def pad_peaks(
         int_tensors,
         batch_first=True,
     )
+
+    intensity_array = minmax_scale(intensity_array)
 
     batch = torch.utils.data.default_collate(batch)
     batch["mz_array"] = mz_array
