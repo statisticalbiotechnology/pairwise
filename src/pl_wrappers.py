@@ -6,6 +6,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from abc import ABC, abstractmethod
 import torch.nn.functional as F
+from collections import deque
 from denovo_eval import Metrics as DeNovoMetrics
 
 
@@ -35,6 +36,20 @@ def calc_classification_metrics(all_outputs, all_targets):
         # confusion_mat=confusion_mat,
     )
     return metrics
+
+
+class RunningWindowLoss:
+    def __init__(self, window_size=50):
+        self.window_size = window_size
+        self.loss_window = deque(maxlen=window_size)
+
+    def update(self, loss):
+        self.loss_window.append(loss)
+
+    def get_running_loss(self):
+        return (
+            sum(self.loss_window) / len(self.loss_window) if self.loss_window else 0.0
+        )
 
 
 class BestMetricTracker:
@@ -95,6 +110,8 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.best_metrics_logged = (
             False  # keep track of if the best achieved metrics have been logged
         )
+        self.running_train_loss = RunningWindowLoss()
+        self.running_val_loss = RunningWindowLoss()
 
     def _parse_batch(self, batch):
         spectra = batch
@@ -161,7 +178,14 @@ class BasePLWrapper(ABC, pl.LightningModule):
             "train_" + key: val.detach().item() for key, val in train_stats.items()
         }
         self.log_dict(
-            {**train_stats}, on_epoch=True, batch_size=batch_size, sync_dist=True
+            {**train_stats},
+            on_epoch=True,
+            batch_size=batch_size,
+            sync_dist=True,
+        )
+        self.running_train_loss.update(train_stats["train_loss"])
+        self.log(
+            "run_train_loss:", self.running_train_loss.get_running_loss(), prog_bar=True
         )
         return {"loss": loss, "returns": returns}
 
@@ -173,7 +197,14 @@ class BasePLWrapper(ABC, pl.LightningModule):
             "val_" + key: val.detach().item() for key, val in val_stats.items()
         }
         self.log_dict(
-            {**val_stats}, on_epoch=True, batch_size=batch_size, sync_dist=True
+            {**val_stats},
+            on_epoch=True,
+            batch_size=batch_size,
+            sync_dist=True,
+        )
+        self.running_train_loss.update(val_stats["val_loss"])
+        self.log(
+            "run_val_loss:", self.running_val_loss.get_running_loss(), prog_bar=True
         )
         return {"val_stats": val_stats, "returns": returns}
 
@@ -354,7 +385,7 @@ class TrinaryMZPLWrapper(BasePLWrapper):
 
         # Generate normal distributions for inds, centered on original value
         updates = torch.normal(means, self.corrupt_std)
-        #updates = torch.clamp(updates, min=0.0, max=1.0)
+        # updates = torch.clamp(updates, min=0.0, max=1.0)
 
         # Distribute updates into corrupted indices
         mz_batch[inds[:, 0], inds[:, 1]] = updates
