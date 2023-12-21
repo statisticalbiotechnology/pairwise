@@ -103,9 +103,9 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.weight_decay = args.weight_decay
         self.datasets = datasets
         self.lr = args.lr
-        self.input_charge = bool(args.input_charge)
-        self.input_mass = bool(args.input_mass)
-        self.mask_zero_tokens = bool(args.mask_zero_tokens)
+        self.input_charge = args.input_charge
+        self.input_mass = args.input_mass
+        self.mask_zero_tokens = args.mask_zero_tokens
         self.tracker = BestMetricTracker()
         self.best_metrics_logged = (
             False  # keep track of if the best achieved metrics have been logged

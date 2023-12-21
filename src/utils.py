@@ -1,5 +1,7 @@
 from depthcharge.data import SpectrumDataset
+import numpy as np
 from torch.utils.data.dataset import random_split
+from torch.utils.data.dataset import Subset
 import os
 from pathlib import Path
 import torch
@@ -9,7 +11,7 @@ from collate_functions import pad_peaks
 
 
 def get_spectrum_dataset_splits(
-    data_root_dir, splits=[0.6, 0.2, 0.2], max_peaks=300, random_seed=42
+    data_root_dir, splits=[0.6, 0.2, 0.2], max_peaks=300, random_seed=42, subset=0
 ):
     assert abs(sum(splits) - 1) < 1e-6
     lance_dir = os.path.join(data_root_dir, "indexed.lance")
@@ -28,6 +30,13 @@ def get_spectrum_dataset_splits(
         [train_size, val_size, test_size],
         generator=torch.Generator().manual_seed(random_seed),
     )
+
+    if subset:
+        assert subset >= 0 and subset <= 1
+        dataset_train, dataset_val, dataset_test = [
+            Subset(dataset, np.arange(int(len(dataset) * subset)))
+            for dataset in [dataset_train, dataset_val, dataset_test]
+        ]
 
     return (dataset_train, dataset_val, dataset_test), partial(
         pad_peaks, max_peaks=max_peaks

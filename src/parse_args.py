@@ -22,11 +22,23 @@ def get_args_parser(conf_parser):
         help="Name of the encoder model to train",
     )
     parser.add_argument(
+        "--encoder_weights",
+        default="",
+        type=str,
+        help="Path to checkpoint of previously trained encoder weights",
+    )
+    parser.add_argument(
         "--pretraining_task",
         default="masked",
         choices=["masked", "trinary_mz", "dummy", "denovo"],
         type=str,
         help="Which pretraining strategy to use",
+    )
+    parser.add_argument(
+        "--pretrain",
+        default=1,
+        type=bool,
+        help="0 = toggle off pretraining",
     )
     parser.add_argument(
         "--input_mass",
@@ -109,13 +121,13 @@ def get_args_parser(conf_parser):
     parser.add_argument(
         "--anneal_lr",
         type=bool,
-        default=True,
+        default=1,
         help="Turn on cosine annealing lr",
     )
     parser.add_argument(
         "--scale_lr_by_batchsize",
         type=bool,
-        default=False,
+        default=1,
         help="Turns on MAE-style lr scaling which multiplies lr by (eff_batch_size / 256)",
     )
 
@@ -132,10 +144,10 @@ def get_args_parser(conf_parser):
     )
     parser.add_argument(
         "--output_dir",
-        default="./output_dir",
+        default="outs/checkpoint",
         help="path where to save",
     )
-    parser.add_argument("--log_dir", default="./log_dir", help="path where to log")
+    parser.add_argument("--log_dir", default="outs/log", help="path where to log")
     parser.add_argument(
         "--save_top_k",
         type=int,
@@ -145,7 +157,7 @@ def get_args_parser(conf_parser):
     parser.add_argument(
         "--save_last",
         type=bool,
-        default=True,
+        default=1,
         help="saves checkpoint from last epoch",
     )
     parser.add_argument(
@@ -161,15 +173,13 @@ def get_args_parser(conf_parser):
         help="(int) If >0, early stop with patience = this int",
     )
     parser.add_argument("--seed", default=0, type=int)
-    # parser.add_argument("--resume", default="", help="resume from checkpoint")
-    # parser.add_argument(
-    #     "--start_epoch", default=0, type=int, metavar="N", help="start epoch"
-    # )
+    parser.add_argument("--resume", default=0, type=bool, help="resume from checkpoint")
+    # parser.add_argument("--start_epoch", default=0, type=int, help="start epoch") # I think lightning detects the starting epoch from the checkpoint
     parser.add_argument("--num_workers", default=10, type=int)
     parser.add_argument(
         "--pin_mem",
         type=bool,
-        default=True,
+        default=1,
         help="Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.",
     )
     # distributed training parameters
@@ -225,16 +235,34 @@ def get_args_parser(conf_parser):
     parser.add_argument(
         "--profile_flops",
         type=bool,
-        default=False,
+        default=0,
         help="Measure forward pass FLOPs on the first train batch",
+    )
+    parser.add_argument(
+        "--subset",
+        default=0,
+        type=float,
+        help="Fraction in [0, 1]. Train on a subset of the data for debugging purposes. 0 = full data",
     )
     return parser
 
 
 def sanity_checks(args):
     # add sanity checks, i.e. for args that should be mutually exclusive here
+    ...
+    # make sure int booleans are bool
     args.log_wandb = bool(args.log_wandb)
-    pass
+    args.save_last = bool(args.save_last)
+    args.input_mass = bool(args.input_mass)
+    args.input_charge = bool(args.input_charge)
+    args.mask_zero_tokens = bool(args.mask_zero_tokens)
+    args.anneal_lr = bool(args.anneal_lr)
+    args.scale_lr_by_batchsize = bool(args.scale_lr_by_batchsize)
+    args.resume = bool(args.resume)
+    args.pin_mem = bool(args.pin_mem)
+    args.data_in_memory = bool(args.data_in_memory)
+    args.profile_flops = bool(args.profile_flops)
+    args.pretrain = bool(args.pretrain)
 
 
 def uniquify_path(path):

@@ -47,7 +47,7 @@ class Encoder(nn.Module):
         ce_units=256,  # units for transformation of mzab fourier vectors
         att_d=64,  # attention qkv dimension units
         att_h=4,  # attention qkv heads
-        pairwise_bias=True,  # use pairwise mz tensor to create SA-bias
+        pairwise_bias=False,  # use pairwise mz tensor to create SA-bias
         pairwise_units=256,
         ffn_multiplier=4,  # multiply inp units for 1st FFN transform
         depth=9,  # number of transblocks
@@ -150,9 +150,9 @@ class Encoder(nn.Module):
         self.global_step = nn.Parameter(th.tensor(0), requires_grad=False)
 
         pos = mp.FourierFeatures(
-            th.arange(max_sequence_length, dtype=th.float32), 
-            self.running_units, 
-            5.0 * max_sequence_length
+            th.arange(max_sequence_length, dtype=th.float32),
+            self.running_units,
+            5.0 * max_sequence_length,
         )
         self.pos = nn.Parameter(pos, requires_grad=False)
 
@@ -259,7 +259,7 @@ class Encoder(nn.Module):
         mabemb = mzab_dic["1d"]
         pwemb = mzab_dic["2d"]
         """mabemb = tf.concat([mabemb, TagArray], axis=-1) # add before self.first"""
-        out = self.first(mabemb) + self.alpha * self.pos[:x.shape[1]]
+        out = self.first(mabemb) + self.alpha * self.pos[: x.shape[1]]
 
         # Reycling the embedding with normalization, perhaps dense transform
         out += self.recyc(emb)
@@ -313,20 +313,32 @@ class Encoder(nn.Module):
         return Output
 
 
+BASE_ARCH_DICT = dict(
+    norm_type="layer",
+    mz_units=1024,
+    subdivide=True,
+    running_units=512,
+    att_d=64,
+    att_h=8,
+    depth=9,
+    ffn_multiplier=4,
+    prenorm=True,
+    use_charge=False,
+    use_energy=False,
+    use_mass=False,
+    recycling_its=1,
+)
+
+
 def encoder_base_arch(**kwargs):
+    model = Encoder(**BASE_ARCH_DICT)
+    return model
+
+
+def encoder_base_pairwise(**kwargs):
     model = Encoder(
-        norm_type="layer",
-        mz_units=1024,
-        subdivide=True,
-        running_units=512,
-        att_d=64,
-        att_h=8,
-        depth=9,
-        ffn_multiplier=4,
-        prenorm=True,
-        use_charge=False,
-        use_energy=False,
-        use_mass=False,
-        recycling_its=1,
+        pairwise_bias=True,  # use pairwise mz tensor to create SA-bias
+        pairwise_units=256,
+        **BASE_ARCH_DICT,
     )
     return model
