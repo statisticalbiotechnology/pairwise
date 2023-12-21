@@ -71,6 +71,12 @@ def get_args_parser(conf_parser):
         help="Stdev of Gaussian noise in the corrupted tokens in the Trinary MZ objective",
     )
     parser.add_argument(
+        "--trinary_penult_units",
+        default=512,
+        type=int,
+        help="Hidden hunits in the Trinary MZ head",
+    )
+    parser.add_argument(
         "--batch_size",
         default=64,
         type=int,
@@ -260,7 +266,7 @@ def sanity_checks(args):
     args.scale_lr_by_batchsize = bool(args.scale_lr_by_batchsize)
     args.resume = bool(args.resume)
     args.pin_mem = bool(args.pin_mem)
-    args.data_in_memory = bool(args.data_in_memory)
+    # args.data_in_memory = bool(args.data_in_memory)
     args.profile_flops = bool(args.profile_flops)
     args.pretrain = bool(args.pretrain)
 

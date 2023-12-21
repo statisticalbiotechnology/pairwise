@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 import torch.nn.functional as F
 from collections import deque
 from denovo_eval import Metrics as DeNovoMetrics
+from models.heads import ClassifierHead
 
 
 def calc_classification_metrics(all_outputs, all_targets):
@@ -323,7 +324,8 @@ class DummyPLWrapper(BasePLWrapper):
 
 class TrinaryMZPLWrapper(BasePLWrapper):
     def __init__(self, encoder, datasets, args, collate_fn=None):
-        head = nn.Linear(encoder.running_units, 3)
+        self.penult_units = args.trinary_penult_units
+        head = ClassifierHead(3, encoder.running_units, self.penult_units)
         super().__init__(encoder, datasets, args, head, collate_fn)
         self.corrupt_freq = args.trinary_freq
         self.corrupt_std = args.trinary_std
