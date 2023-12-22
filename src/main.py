@@ -168,29 +168,30 @@ def main(args):
     # ----------- Downstream Finetuning -----------
     # ---------------------------------------------
 
-    # Load best or last encoder
-    encoder_path = pretrainer.checkpoint_callback.state_dict()["last_model_path"]
-    pl_encoder.load_state_dict(encoder_path)
+    if False:
+        # Load best or last encoder
+        encoder_path = pretrainer.checkpoint_callback.state_dict()["last_model_path"]
+        pl_encoder.load_state_dict(encoder_path)
 
-    # Define decoder model
-    if args.decoder_model:
-        decoder = DECODER_DICT[args.decoder_model]()
-    else:
-        decoder = None
+        # Define decoder model
+        if args.decoder_model:
+            decoder = DECODER_DICT[args.decoder_model]()
+        else:
+            decoder = None
 
-    if run is not None and utils.get_rank() == 0:  # TODO: implement get_rank
-        run.log(
-            {
-                "num_parameters_decoder": utils.get_num_parameters(decoder)
-                if decoder
-                else None,
-            }
-        )
+        if run is not None and utils.get_rank() == 0:  # TODO: implement get_rank
+            run.log(
+                {
+                    "num_parameters_decoder": utils.get_num_parameters(decoder)
+                    if decoder
+                    else None,
+                }
+            )
 
-    if args.downstream == "denovo":
-        pl_model_downstream = DeNovoPLWrapper(
-            encoder, decoder, args=args, datasets=datasets, collate_fn=collate_fn
-        )
+        if args.downstream == "denovo":
+            pl_model_downstream = DeNovoPLWrapper(
+                encoder, decoder, args=args, datasets=datasets, collate_fn=collate_fn
+            )
 
     # Flag the run as finished to the wandb server
     if run is not None and utils.get_rank() == 0:
