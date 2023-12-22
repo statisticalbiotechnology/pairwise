@@ -4,6 +4,7 @@ from depthcharge.data import SpectrumDataset
 from torch.utils.data.dataloader import DataLoader
 from collate_functions import pad_peaks
 import os
+from tqdm import tqdm
 
 data_dir = "/Users/alfred/Documents/Datasets/instanovo_data_subset"
 lance_dir = "/Users/alfred/Documents/Datasets/instanovo_data_subset/indexed.lance"
@@ -11,7 +12,7 @@ mdsaved_dir = "//Users/alfred/Documents/Datasets/instanovo_data_subset/mdsaved"
 batch_size = 100
 num_workers = 4
 epochs = 1
-subset = 20  # max number of batches that will be loaded each epoch
+subset = -1  # max number of batches that will be loaded each epoch
 
 
 # SpectrumDataset initialization
@@ -47,7 +48,7 @@ def timeit(func):
 @timeit
 def loop_SpectrumDataset(dataloader, subset=-1, epochs=1):
     for epoch in range(epochs):
-        for batch_idx, batch in enumerate(dataloader):
+        for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
             # Process the batch as needed for your training
             # mz, intensity, label = batch['mz'], batch['intensity'], batch['label']
             # Your training logic here
