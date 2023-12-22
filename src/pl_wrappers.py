@@ -211,7 +211,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             batch_size=batch_size,
             sync_dist=True,
         )
-        self.running_train_loss.update(val_stats["val_loss"])
+        self.running_val_loss.update(val_stats["val_loss"])
         self.log(
             "run_val_loss:", self.running_val_loss.get_running_loss(), prog_bar=True
         )
