@@ -113,6 +113,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
         )
         self.running_train_loss = RunningWindowLoss()
         self.running_val_loss = RunningWindowLoss()
+        self.automatic_optimization = False
 
     def _parse_batch(self, batch):
         spectra = batch
@@ -172,6 +173,9 @@ class BasePLWrapper(ABC, pl.LightningModule):
         return stats
 
     def training_step(self, batch, batch_idx):
+        opts = self.optimizers()
+        for opt in opts:
+            opt.zero_grad()
         parsed_batch, batch_size = self._parse_batch(batch)
         returns = self.forward(parsed_batch)
         loss, train_stats = self._get_train_stats(returns, parsed_batch)
@@ -188,6 +192,10 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.log(
             "run_train_loss:", self.running_train_loss.get_running_loss(), prog_bar=True
         )
+
+        self.manual_backward(loss)
+        for opt in opts:
+            opt.step()
         return {"loss": loss, "returns": returns}
 
     def validation_step(self, batch, batch_idx):
@@ -255,17 +263,24 @@ class BasePLWrapper(ABC, pl.LightningModule):
         )
 
     def configure_optimizers(self):
-        param_groups = [
-            {"params": self.encoder.parameters()},
+        opts = [
+            torch.optim.AdamW(
+                self.encoder.parameters(),
+                lr=self.lr,
+                betas=(0.9, 0.9999),
+                weight_decay=self.weight_decay,
+            ),
         ]
         if self.head:
-            param_groups += [{"params": self.head.parameters()}]
-        return torch.optim.AdamW(
-            param_groups,
-            lr=self.lr,
-            betas=(0.9, 0.9999),
-            weight_decay=self.weight_decay,
-        )
+            opts.append(
+                torch.optim.AdamW(
+                    self.head.parameters(),
+                    lr=self.lr,
+                    betas=(0.9, 0.9999),
+                    weight_decay=self.weight_decay,
+                ),
+            )
+        return opts
 
     @abstractmethod
     def on_validation_epoch_end(self):
@@ -297,9 +312,11 @@ class BasePLWrapper(ABC, pl.LightningModule):
             #     self.best_metrics_logged = True
 
     def on_train_epoch_end(self):  # log the learning rate
-        optimizer = self.optimizers()
-        current_lr = optimizer.param_groups[0]["lr"]
-        self.log("lr", current_lr, on_step=False, on_epoch=True)
+        opts = self.optimizers()
+        cur_lr_enc = opts[0].param_groups[0]["lr"]
+        self.log("lr_enc", cur_lr_enc, on_step=False, on_epoch=True)
+        cur_lr_head = opts[1].param_groups[0]["lr"]
+        self.log("lr_head", cur_lr_head, on_step=False, on_epoch=True)
 
     def on_train_end(self):
         if not self.best_metrics_logged:
@@ -352,7 +369,6 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         mzab, input_dict, target = parsed_batch
         outs = self.encoder(mzab, **input_dict, **kwargs)
         outs = self.head(outs["emb"])
-        outs = F.softmax(outs, dim=-1)
         return outs
 
     def _get_losses(self, returns, labels):
