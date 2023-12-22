@@ -114,14 +114,12 @@ def main(args):
         callbacks += [EarlyStopping("val_loss", patience=args.early_stop)]
 
     if run is not None and utils.get_rank() == 0:  # TODO: implement get_rank
+        run.watch(pl_encoder, "all")
         run.log(
             {
                 "num_parameters_encoder": utils.get_num_parameters(encoder),
-                "num_parameters_decoder": utils.get_num_parameters(decoder)
-                if decoder
-                else None,
             }
-        )  # TODO: implement get_num_parameters
+        )
 
     # Define trainer
     distributed = args.num_devices > 1 or args.num_nodes > 1
@@ -179,6 +177,15 @@ def main(args):
         decoder = DECODER_DICT[args.decoder_model]()
     else:
         decoder = None
+
+    if run is not None and utils.get_rank() == 0:  # TODO: implement get_rank
+        run.log(
+            {
+                "num_parameters_decoder": utils.get_num_parameters(decoder)
+                if decoder
+                else None,
+            }
+        )
 
     if args.downstream == "denovo":
         pl_model_downstream = DeNovoPLWrapper(
