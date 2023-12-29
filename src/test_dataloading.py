@@ -2,6 +2,7 @@ import time
 from pathlib import Path
 from depthcharge.data import SpectrumDataset
 from torch.utils.data.dataloader import DataLoader
+from torchvision import datasets, transforms
 from collate_functions import pad_peaks
 import os
 from tqdm import tqdm
@@ -13,6 +14,21 @@ batch_size = 100
 num_workers = 4
 epochs = 1
 subset = -1  # max number of batches that will be loaded each epoch
+
+transform = transforms.Compose(
+    [transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]
+)
+
+mnist_dataset = datasets.MNIST(
+    root="./data", train=True, download=True, transform=transform
+)
+mnist_dataloader = DataLoader(
+    mnist_dataset,
+    batch_size=batch_size,
+    shuffle=True,
+    num_workers=num_workers,
+    multiprocessing_context="fork" if num_workers > 0 else None,
+)
 
 
 # SpectrumDataset initialization
@@ -29,7 +45,7 @@ spectrum_dataloader = DataLoader(
     batch_size=batch_size,
     shuffle=True,
     num_workers=num_workers,
-    multiprocessing_context="forkserver" if num_workers > 0 else None,
+    multiprocessing_context="fork" if num_workers > 0 else None,
     collate_fn=pad_peaks,
 )
 
@@ -57,12 +73,28 @@ def loop_SpectrumDataset(dataloader, subset=-1, epochs=1):
                 break
 
 
+@timeit
+def loop_MNIST_dataloader(dataloader, subset=-1, epochs=1):
+    for epoch in range(epochs):
+        for batch_idx, (data, target) in tqdm(
+            enumerate(dataloader), total=len(dataloader)
+        ):
+            # Process the batch as needed for your training
+            # Your training logic here
+            if subset > 0 and batch_idx > subset:
+                break
+
+
 if __name__ == "__main__":
     # Compare the two methods
     # print(
     #     f"Running {epochs} epoch(s) of dataloading with LoadObj. Batch size = {batch_size}"
     # )
     # loop_LoadObj_dataset(L, batch_size, subset, epochs)
+
+    print("Running MNIST dataloading")
+    loop_MNIST_dataloader(mnist_dataloader, subset=subset, epochs=epochs)
+
     print(
         f"Running {epochs} epoch(s) of dataloading with SpectrumDataset. Batch size = {batch_size}"
     )
