@@ -7,7 +7,9 @@ from pathlib import Path
 import torch
 from functools import partial
 
-from collate_functions import pad_peaks
+from collate_functions import pad_peaks, pad_peptides
+
+from loader_parquet import PeptideDataset, PeptideParser
 
 
 def get_spectrum_dataset_splits(
@@ -40,6 +42,45 @@ def get_spectrum_dataset_splits(
 
     return (dataset_train, dataset_val, dataset_test), partial(
         pad_peaks, max_peaks=max_peaks
+    )
+
+
+def prepend_relative_path(root_dir, rel_path):
+    return os.path.join
+
+
+def get_ninespecies_dataset_splits(data_root_dir, ds_config, max_peaks=300, subset=0):
+    path_dict = ds_config["paths"]
+
+    for split in ["train", "val", "test"]:
+        path_list = path_dict[split]
+        for i, path in enumerate(path_list):
+            path_list[i] = os.path.join(data_root_dir, path)
+        path_dict[split] = path_list
+
+    parser = PeptideParser(ds_config)
+    dfs, amod_dict = parser.get_data()
+    dataset_train = PeptideDataset(dfs["train"], amod_dict)
+    dataset_val = PeptideDataset(dfs["val"], amod_dict)
+    dataset_test = PeptideDataset(dfs["test"], amod_dict)
+
+    if subset:
+        assert subset >= 0 and subset <= 1
+        dataset_train, dataset_val, dataset_test = [
+            Subset(dataset, np.arange(int(len(dataset) * subset)))
+            for dataset in [dataset_train, dataset_val, dataset_test]
+        ]
+
+    return (
+        (dataset_train, dataset_val, dataset_test),
+        partial(
+            pad_peptides,
+            max_peaks=max_peaks,
+            null_token_idx=len(
+                amod_dict.values()
+            ),  # TODO: verify null token index which is the padding value
+        ),
+        amod_dict,
     )
 
 

@@ -339,6 +339,10 @@ class DummyPLWrapper(BasePLWrapper):
         pass
 
 
+class MaskedTrainingPLWrapper(DummyPLWrapper):
+    pass
+
+
 class TrinaryMZPLWrapper(BasePLWrapper):
     def __init__(self, encoder, datasets, args, collate_fn=None):
         self.penult_units = args.trinary_penult_units
@@ -450,11 +454,29 @@ class DeNovoPLWrapper(BasePLWrapper):
         self.decoder = decoder
         self.denovo_metrics = DeNovoMetrics()
 
+    def _parse_batch(self, batch):
+        spectra = batch
+        mz_arr = spectra["mz_array"]
+        int_arr = spectra["intensity_array"]
+        target = spectra["intseq"]
+
+        batch_size = mz_arr.shape[0]
+        mzab = torch.stack([mz_arr, int_arr], dim=-1)
+        return (
+            mzab,
+            {
+                "mass": spectra["mass"] if self.input_mass else None,
+                "charge": spectra["charge"] if self.input_charge else None,
+                "length": spectra["lengths"] if self.mask_zero_tokens else None,
+            },
+            target,
+        ), batch_size
+
     def forward(self, parsed_batch, **kwargs):
-        mzab, input_dict = parsed_batch
+        mzab, input_dict, target = parsed_batch
         outs = self.encoder(mzab, **input_dict, **kwargs)
-        outs = self.decoder(outs["emb"])
-        outs = F.softmax(outs, dim=-1)
+        outs = self.decoder(target, outs)
+        logits = ...
         return outs
 
     def _get_losses(self, returns, labels):

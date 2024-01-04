@@ -4,6 +4,7 @@ import models.model_parts as mp
 import torch as th
 from torch import nn
 import pytorch_lightning as pl
+from loader_parquet import Scale
 
 
 class Decoder(pl.LightningModule):
@@ -179,6 +180,7 @@ class Decoder(pl.LightningModule):
 
 class DenovoDecoder(pl.LightningModule):
     def __init__(self, token_dict, dec_config):
+        super(DenovoDecoder, self).__init__()
         self.outdict = deepcopy(token_dict)
         self.inpdict = deepcopy(token_dict)
         self.NT = self.outdict["X"]
@@ -587,8 +589,7 @@ class DenovoDecoder(pl.LightningModule):
         return output
 
 
-def decoder_greedy_base(**kwargs):
-    token_dict = ...  # FIXME
+def decoder_greedy_base(token_dict, **kwargs):
     decoder_config = {
         "running_units": 512,
         "sequence_length": 30,
@@ -606,7 +607,7 @@ def decoder_greedy_base(**kwargs):
         # penultimate_units: #?
         "pool": False,
     }
-    model = DenovoDecoder(token_dict, decoder_config)
+    model = DenovoDecoder(token_dict, decoder_config, **kwargs)
     return model
 
 

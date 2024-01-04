@@ -129,3 +129,52 @@ def pad_peaks(
             batch[key] = val.type(precision)
 
     return batch
+
+
+def pad_peptides(
+    batch: Iterable[Dict[Any, Union[List, torch.Tensor]]],
+    precision: torch.dtype = torch.float32,
+    max_peaks: int = 300,
+    null_token_idx=22,
+) -> Dict[str, Union[torch.Tensor, list[Any]]]:
+    """
+    Transform compatible data types into PyTorch tensors and
+    pad the m/z and intensities arrays of each mass spectrum with
+    zeros to be stacked into a tensor.
+
+    Parameters
+    ----------
+    batch : iterable of dict
+        A batch of data.
+    precision : torch.dtype
+        Floating point precision of the returned tensors.
+    max_peaks : int
+        Maximum length to limit each sequence.
+        Subsamples peaks corresponding to the highest intensities.
+
+    Returns
+    -------
+    dict of str, tensor or list
+        A dictionary mapping the columns of the lance dataset
+        to a PyTorch tensor or list of values.
+    """
+    intseqs = []
+    peptide_lengths = torch.zeros((len(batch), 1), dtype=torch.int32)
+
+    for i, b in enumerate(batch):
+        intseq_b = b.pop("intseq")
+        peptide_lengths[i] = len(intseq_b)
+        intseqs.append(intseq_b)
+
+    intseq_array = torch.nn.utils.rnn.pad_sequence(
+        intseqs, batch_first=True, padding_value=null_token_idx
+    )
+    batch = pad_peaks(batch, precision, max_peaks)
+    batch["intseq"] = intseq_array
+    batch["peptide_lengths"] = peptide_lengths
+
+    for key, val in batch.items():
+        if isinstance(val, torch.Tensor) and torch.is_floating_point(val):
+            batch[key] = val.type(precision)
+
+    return batch
