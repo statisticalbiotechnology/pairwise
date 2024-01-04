@@ -163,5 +163,4 @@ cython_debug/
 # My additions
 shellscript.sh
 .vscode/
-src/test_dataloading.py
 outs/
