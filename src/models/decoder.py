@@ -95,13 +95,14 @@ class Decoder(pl.LightningModule):
     def total_params(self):
         return sum([m.numel() for m in self.parameters()])
 
-    def sequence_mask(self, seqlen):
+    def sequence_mask(self, seqlen, max_len=None):
         # seqlen: 1d vector equal to (zero-based) index of predict token
+        sequence_len = self.sl if max_len is None else max_len
         if seqlen == None:
-            mask = th.zeros(1, self.sl, dtype=th.float32)
+            mask = th.zeros(1, sequence_len, dtype=th.float32)
         else:
             seqs = th.tile(
-                th.arange(self.sl, device=self.device)[None], (seqlen.shape[0], 1)
+                th.arange(sequence_len, device=self.device)[None], (seqlen.shape[0], 1)
             )
             # Only mask out sequence positions greater than or equal to predict
             # token
@@ -149,7 +150,7 @@ class Decoder(pl.LightningModule):
         else:
             ce_emb = None
 
-        out = seqemb + self.alpha * self.pos
+        out = seqemb + self.alpha * self.pos[: seqemb.shape[1]].unsqueeze(0)
 
         return out, ce_emb
 
@@ -165,7 +166,7 @@ class Decoder(pl.LightningModule):
     ):
         out, ce_emb = self.EmbedInputs(intseq, charge=charge, energy=energy, mass=mass)
 
-        seqmask = self.sequence_mask(seqlen)
+        seqmask = self.sequence_mask(seqlen, max(seqlen))
 
         out = self.Main(
             out, kv_feats=kv_feats, embed=ce_emb, spec_mask=specmask, seq_mask=seqmask
@@ -277,7 +278,9 @@ class DenovoDecoder(pl.LightningModule):
             "energy": energy.to(self.device) if self.decoder.use_energy else None,
             "mass": mass.to(self.device) if self.decoder.use_mass else None,
             "seqlen": self.num_reg_tokens(intseq.to(self.device)),  # for the seq. mask
-            "specmask": enc_out["mask"].to(self.device),
+            "specmask": enc_out["mask"].to(self.device)
+            if enc_out["mask"] is not None
+            else enc_out["mask"],
         }
 
         return dec_inp
@@ -589,8 +592,9 @@ class DenovoDecoder(pl.LightningModule):
         return output
 
 
-def decoder_greedy_base(token_dict, **kwargs):
+def decoder_greedy_base(token_dict, kv_indim=256, **kwargs):
     decoder_config = {
+        "kv_indim": kv_indim,
         "running_units": 512,
         "sequence_length": 30,
         "depth": 9,
