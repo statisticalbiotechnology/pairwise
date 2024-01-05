@@ -73,13 +73,7 @@ def get_ninespecies_dataset_splits(data_root_dir, ds_config, max_peaks=300, subs
 
     return (
         (dataset_train, dataset_val, dataset_test),
-        partial(
-            pad_peptides,
-            max_peaks=max_peaks,
-            null_token_idx=len(
-                amod_dict.values()
-            ),  # TODO: verify null token index which is the padding value
-        ),
+        partial(pad_peptides, max_peaks=max_peaks, null_token_idx=amod_dict["X"]),
         amod_dict,
     )
 

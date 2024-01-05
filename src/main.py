@@ -196,7 +196,9 @@ def main(args, ds_config=None):
         assert (
             args.decoder_model
         ), f"argument decoder_model must be provided when downstream finetuning"
-        decoder = DECODER_DICT[args.decoder_model](amod_dict)
+        decoder = DECODER_DICT[args.decoder_model](
+            amod_dict, kv_indim=encoder.running_units
+        )
 
         if run is not None and utils.get_rank() == 0:
             run.log({"num_parameters_decoder": utils.get_num_parameters(decoder)})
