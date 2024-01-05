@@ -204,7 +204,12 @@ def main(args, ds_config=None):
             run.log({"num_parameters_decoder": utils.get_num_parameters(decoder)})
 
         pl_downstream = DOWNSTREAM_TASK_DICT[args.downstream_task](
-            encoder, decoder, args=args, datasets=datasets_ds, collate_fn=collate_fn_ds
+            encoder,
+            decoder,
+            args=args,
+            datasets=datasets_ds,
+            collate_fn=collate_fn_ds,
+            amod_dict=amod_dict,
         )
 
         print(
