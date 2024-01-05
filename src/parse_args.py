@@ -30,9 +30,22 @@ def get_args_parser(conf_parser):
     parser.add_argument(
         "--pretraining_task",
         default="masked",
-        choices=["masked", "trinary_mz", "dummy", "denovo"],
+        choices=["masked", "trinary_mz", "dummy"],
         type=str,
         help="Which pretraining strategy to use",
+    )
+    parser.add_argument(
+        "--downstream_config",
+        default="configs/downstream.yaml",
+        type=str,
+        help="Path of the downstream config",
+    )
+    parser.add_argument(
+        "--downstream_task",
+        default="none",
+        choices=["denovo", "none"],
+        type=str,
+        help="Which finetuning task to perform",
     )
     parser.add_argument(
         "--pretrain",
@@ -147,6 +160,12 @@ def get_args_parser(conf_parser):
         default="../../datasets/instanovo_data_subset",
         type=str,
         help="dataset path",
+    )
+    parser.add_argument(
+        "--downstream_root_dir",
+        default="/cmnfs/data/proteomics/foundational_model/ninespecies_xy/",
+        type=str,
+        help="dataset path for the denovo task",
     )
     parser.add_argument(
         "--output_dir",
@@ -313,7 +332,19 @@ def parse_args_and_config():
     # parse the rest of the args and override defaults/config
     args = parser.parse_args(remaining_args)
     sanity_checks(args)
-    return args
+
+    if bool(args.downstream_config):
+        try:
+            with open(args.downstream_config, "r") as f:
+                ds_config = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            print(
+                f"Error occurred while loading the configuration file: {args.downstream_config}"
+            )
+            print(e)
+    else:
+        ds_config = None
+    return args, ds_config
 
 
 def create_output_dirs(args, is_main_process=True):

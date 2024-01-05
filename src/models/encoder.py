@@ -281,7 +281,7 @@ class Encoder(nn.Module):
         inp_mask=None,
         tag_array=None,
         its=None,
-        return_mask=False,
+        return_mask=True,
     ):
         Output = {"final": None, "emb": None, "mask": None}
         its = self.its if its == None else its

@@ -9,9 +9,14 @@ from parse_args import parse_args_and_config, create_output_dirs
 
 
 from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
-from pl_wrappers import DeNovoPLWrapper, DummyPLWrapper, TrinaryMZPLWrapper
+from pl_wrappers import (
+    DeNovoPLWrapper,
+    DummyPLWrapper,
+    MaskedTrainingPLWrapper,
+    TrinaryMZPLWrapper,
+)
 import utils
-
+from loader_parquet import PeptideParser
 
 import models.encoder as encoders
 import models.decoder as decoders
@@ -23,13 +28,23 @@ DECODER_DICT = {
     **decoders.__dict__,
 }
 
+PRETRAIN_TASK_DICT = {
+    "masked": MaskedTrainingPLWrapper,
+    "dummy": DummyPLWrapper,
+    "trinary_mz": TrinaryMZPLWrapper,
+}
+
+DOWNSTREAM_TASK_DICT = {
+    "denovo": DeNovoPLWrapper,
+}
+
 
 def update_args(args, config_dict):
     for key, val in config_dict.items():
         setattr(args, key, val)
 
 
-def main(args):
+def main(args, ds_config=None):
     print(f"Saving checkpoints in {args.output_dir}")
     print(f"Saving logs in {args.log_dir}")
 
@@ -93,41 +108,34 @@ def main(args):
     # Define encoder model
     encoder = ENCODER_DICT[args.encoder_model]()
 
-    if args.pretraining_task == "masked":
-        pl_encoder = MaskedTrainingPLWrapper(
-            encoder, args=args, datasets=datasets, collate_fn=collate_fn
-        )
-    elif args.pretraining_task == "dummy":
-        pl_encoder = DummyPLWrapper(
-            encoder, args=args, datasets=datasets, collate_fn=collate_fn
-        )
-    elif args.pretraining_task == "trinary_mz":
-        pl_encoder = TrinaryMZPLWrapper(
-            encoder, args=args, datasets=datasets, collate_fn=collate_fn
-        )
-    else:
+    if args.pretraining_task not in PRETRAIN_TASK_DICT:
         raise NotImplementedError(
             f"{args.pretraining_task} pretraining task not implemented"
         )
 
-    if args.early_stop > 0:
-        callbacks += [EarlyStopping("val_loss", patience=args.early_stop)]
-
-    if run is not None and utils.get_rank() == 0:  # TODO: implement get_rank
-        run.watch(pl_encoder, "all")
-        run.log(
-            {
-                "num_parameters_encoder": utils.get_num_parameters(encoder),
-            }
+    distributed = args.num_devices > 1 or args.num_nodes > 1
+    if args.pretrain:
+        # Instantiate PL wrapper based on the pretraining task
+        pl_encoder = PRETRAIN_TASK_DICT[args.pretraining_task](
+            encoder, args=args, datasets=datasets, collate_fn=collate_fn
         )
 
-    # Define trainer
-    distributed = args.num_devices > 1 or args.num_nodes > 1
-    print(
-        f"Starting distributed training using {args.num_devices} devices on {args.num_nodes} node(s)"
-    ) if distributed else print("Starting single-device training")
+        if args.early_stop > 0:
+            callbacks += [EarlyStopping("val_loss", patience=args.early_stop)]
 
-    if args.pretrain:
+        if run is not None and utils.get_rank() == 0:
+            run.watch(pl_encoder, "all")
+            run.log(
+                {
+                    "num_parameters_encoder": utils.get_num_parameters(encoder),
+                }
+            )
+
+        print(
+            f"Starting distributed pretraining using {args.num_devices} devices on {args.num_nodes} node(s)"
+        ) if distributed else print("Starting single-device training")
+
+        # Define trainer
         pretrainer = pl.Trainer(
             # Distributed kwargs
             accelerator=args.accelerator,
@@ -155,43 +163,78 @@ def main(args):
             pl_encoder, ckpt_path=args.encoder_weights if args.resume else None
         )
 
+        # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
+        if args.save_top_k > 0 and args.pretrain:
+            pretrainer.test(ckpt_path="best")
+
     elif args.encoder_weights:
-        pl_encoder.load_from_checkpoint(args.encoder_weights)
+        pl_encoder = PRETRAIN_TASK_DICT[args.pretraining_task].load_from_checkpoint(
+            args.encoder_weights, args=args, encoder=encoder, datasets=datasets
+        )
         print(f"Loading encoder checkpoint: {args.encoder_weights}")
     else:
         print("Warning: proceeding with untrained encoder")
 
-    # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
-    if args.save_top_k > 0:
-        pretrainer.test(ckpt_path="best")
-
     # ----------- Downstream Finetuning -----------
     # ---------------------------------------------
 
-    if False:
-        # Load best or last encoder
-        encoder_path = pretrainer.checkpoint_callback.state_dict()["last_model_path"]
-        pl_encoder.load_state_dict(encoder_path)
+    # # Load best encoder if pretraining has been done
+    # if args.pretrain:
+    #     encoder_path = pretrainer.checkpoint_callback.state_dict()["best_model_path"]
+    #     pl_encoder.load_from_checkpoint(encoder_path)
+
+    datasets_ds, collate_fn_ds, amod_dict = utils.get_ninespecies_dataset_splits(
+        args.downstream_root_dir, ds_config, subset=args.subset
+    )
+
+    if args.downstream_task != "none":
+        # Extract pretrained encoder nn.Module
+        if args.pretrain or args.encoder_weights:
+            encoder = pl_encoder.encoder
 
         # Define decoder model
-        if args.decoder_model:
-            decoder = DECODER_DICT[args.decoder_model]()
-        else:
-            decoder = None
+        assert (
+            args.decoder_model
+        ), f"argument decoder_model must be provided when downstream finetuning"
+        decoder = DECODER_DICT[args.decoder_model](
+            amod_dict, kv_indim=encoder.running_units
+        )
 
-        if run is not None and utils.get_rank() == 0:  # TODO: implement get_rank
-            run.log(
-                {
-                    "num_parameters_decoder": utils.get_num_parameters(decoder)
-                    if decoder
-                    else None,
-                }
-            )
+        if run is not None and utils.get_rank() == 0:
+            run.log({"num_parameters_decoder": utils.get_num_parameters(decoder)})
 
-        if args.downstream == "denovo":
-            pl_model_downstream = DeNovoPLWrapper(
-                encoder, decoder, args=args, datasets=datasets, collate_fn=collate_fn
-            )
+        pl_downstream = DOWNSTREAM_TASK_DICT[args.downstream_task](
+            encoder, decoder, args=args, datasets=datasets_ds, collate_fn=collate_fn_ds
+        )
+
+        print(
+            f"Starting distributed downstream finetuning using {args.num_devices} devices on {args.num_nodes} node(s)"
+        ) if distributed else print("Starting single-device training")
+        ds_trainer = pl.Trainer(
+            # Distributed kwargs
+            accelerator=args.accelerator,
+            devices=[i for i in range(args.num_devices)]
+            if args.accelerator == "gpu"
+            else args.num_devices,
+            num_nodes=args.num_nodes,
+            strategy=args.strategy if distributed else "auto",
+            precision=args.precision,
+            # Training args
+            max_epochs=args.epochs,
+            gradient_clip_val=args.clip_grad,
+            logger=logger,
+            callbacks=callbacks,
+            benchmark=True,
+            default_root_dir=args.log_dir,
+            # profiler="simple",
+        )
+
+        # This is the call to start training the model
+        ds_trainer.fit(pl_downstream)
+
+        # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
+        if args.save_top_k > 0:
+            ds_trainer.test(ckpt_path="best")
 
     # Flag the run as finished to the wandb server
     if run is not None and utils.get_rank() == 0:
@@ -200,7 +243,7 @@ def main(args):
 
 if __name__ == "__main__":
     # parse args
-    args = parse_args_and_config()
+    args, ds_config = parse_args_and_config()
     # create output dirs on main process
     create_output_dirs(args, is_main_process=utils.get_rank() == 0)
     # A100 specific setting
@@ -211,4 +254,4 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     random.seed(args.seed)
     # run
-    main(args)
+    main(args, ds_config)

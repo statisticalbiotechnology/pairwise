@@ -339,6 +339,10 @@ class DummyPLWrapper(BasePLWrapper):
         pass
 
 
+class MaskedTrainingPLWrapper(DummyPLWrapper):
+    pass
+
+
 class TrinaryMZPLWrapper(BasePLWrapper):
     def __init__(self, encoder, datasets, args, collate_fn=None):
         self.penult_units = args.trinary_penult_units
@@ -450,35 +454,68 @@ class DeNovoPLWrapper(BasePLWrapper):
         self.decoder = decoder
         self.denovo_metrics = DeNovoMetrics()
 
-    def forward(self, parsed_batch, **kwargs):
-        mzab, input_dict = parsed_batch
-        outs = self.encoder(mzab, **input_dict, **kwargs)
-        outs = self.decoder(outs["emb"])
-        outs = F.softmax(outs, dim=-1)
-        return outs
+    def _parse_batch(self, batch):
+        spectra = batch
+        mz_arr = spectra["mz_array"]
+        int_arr = spectra["intensity_array"]
+        intseq = spectra["intseq"]
 
-    def _get_losses(self, returns, labels):
-        return 0
+        batch_size = mz_arr.shape[0]
+        mzab = torch.stack([mz_arr, int_arr], dim=-1)
+
+        encoder_input_dict = {
+            "mass": spectra["mass"] if self.input_mass else None,
+            "charge": spectra["charge"] if self.input_charge else None,
+            "length": spectra["lengths"] if self.mask_zero_tokens else None,
+        }
+
+        decoder_input_dict = {
+            "mass": spectra["mass"] if self.input_mass else None,
+            "charge": spectra["charge"] if self.input_charge else None,
+        }
+
+        return (mzab, encoder_input_dict, intseq, decoder_input_dict), batch_size
+
+    def forward(self, parsed_batch, **kwargs):
+        mzab, encoder_input_dict, intseq, decoder_input_dict = parsed_batch
+        outs = self.encoder(mzab, **encoder_input_dict, return_mask=True, **kwargs)
+        preds = self.decoder(intseq, outs, decoder_input_dict)
+        return preds
+
+    def _get_losses(self, preds, labels):
+        preds = torch.einsum("bsc->bcs", preds)
+        loss = F.cross_entropy(preds, labels)
+        return loss
 
     def _get_train_stats(self, returns, batch):
-        stats = {}
-        return 0, stats
+        _, _, intseq, _ = batch
+        preds = returns
+        loss = self._get_losses(preds, intseq)
+        stats = {"loss": loss}
+        return loss, stats
 
-    def _get_eval_stats(self, split, returns, batch):
-        stats = {}
+    def _get_eval_stats(self, returns, batch):
+        _, _, intseq, _ = batch
+        preds = returns
+        loss = self._get_losses(preds, intseq)
+        stats = {"loss": loss}
         return stats
 
     def on_validation_epoch_end(self):
         pass
 
     def configure_optimizers(self):
-        param_groups = [
-            {"params": self.encoder.parameters()},
-            {"params": self.decoder.parameters()},
+        return [
+            torch.optim.Adam(
+                self.encoder.parameters(),
+                lr=self.lr,
+                betas=(0.9, 0.9999),
+                weight_decay=self.weight_decay,
+            ),
+            torch.optim.Adam(
+                self.decoder.parameters(),
+                lr=self.lr,
+                betas=(0.9, 0.9999),
+                weight_decay=self.weight_decay,
+            ),
         ]
-        return torch.optim.AdamW(
-            param_groups,
-            lr=self.lr,
-            betas=(0.9, 0.9999),
-            weight_decay=self.weight_decay,
-        )
