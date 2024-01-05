@@ -167,7 +167,10 @@ class BasePLWrapper(ABC, pl.LightningModule):
         returns = self.forward(parsed_batch)
         loss, train_stats = self._get_train_stats(returns, parsed_batch)
         train_stats = {
-            "train_" + key: val.detach().item() for key, val in train_stats.items()
+            "train_" + key: val.detach().item()
+            if isinstance(val, torch.Tensor)
+            else val
+            for key, val in train_stats.items()
         }
         self.log_dict(
             {**train_stats},
@@ -190,7 +193,8 @@ class BasePLWrapper(ABC, pl.LightningModule):
         returns = self.forward(parsed_batch)
         val_stats = self._get_eval_stats(returns, parsed_batch)
         val_stats = {
-            "val_" + key: val.detach().item() for key, val in val_stats.items()
+            "val_" + key: val.detach().item() if isinstance(val, torch.Tensor) else val
+            for key, val in val_stats.items()
         }
         self.log_dict(
             {**val_stats},
@@ -209,7 +213,8 @@ class BasePLWrapper(ABC, pl.LightningModule):
         returns = self.forward(parsed_batch)
         test_stats = self._get_eval_stats(returns, parsed_batch)
         test_stats = {
-            "test_" + key: val.detach().item() for key, val in test_stats.items()
+            "test_" + key: val.detach().item() if isinstance(val, torch.Tensor) else val
+            for key, val in test_stats.items()
         }
         self.log_dict(
             {**test_stats}, on_epoch=True, batch_size=batch_size, sync_dist=True
@@ -443,6 +448,56 @@ class DeNovoPLWrapper(BasePLWrapper):
         self.decoder = decoder
         self.denovo_metrics = DeNovoMetrics()
         self.amod_dict = amod_dict
+        self.int_to_aa = {v: k for k, v in amod_dict.items()}
+        self.null_token = "X"
+
+        assert all(
+            key in self.denovo_metrics.residues
+            for key in self.amod_dict
+            if key != self.null_token
+        ), "All keys except the null token in amod_dict must be in self.denovo_metrics.residues"
+
+    def to_aa_sequence(self, int_tensors: torch.Tensor | list):
+        # Check if the input is a Tensor and convert it to a list
+        if isinstance(int_tensors, torch.Tensor):
+            int_tensors = int_tensors.tolist()
+
+        def convert_sequence(seq):
+            # Convert to amino acids and strip null tokens
+            return [
+                self.int_to_aa[i] for i in seq if self.int_to_aa[i] != self.null_token
+            ]
+
+        # Check if the input is a list of lists or a single list
+        if int_tensors and isinstance(int_tensors[0], list):
+            # Convert each sequence in the list of lists into strings
+            aa_sequences = [convert_sequence(seq) for seq in int_tensors]
+        else:
+            # Convert the single sequence into a string
+            aa_sequences = convert_sequence(int_tensors)
+
+        return aa_sequences
+
+    def deepnovo_metrics(self, preds, target, aa_conf, threshold=None):
+        mean_conf = aa_conf.mean(dim=-1)
+        target_str = self.to_aa_sequence(target)
+        pred_str = self.to_aa_sequence(preds)
+        (
+            aa_prec,
+            aa_recall,
+            pep_recall,
+            pep_precision,
+        ) = self.denovo_metrics.compute_precision_recall(
+            target_str, pred_str, aa_conf.tolist()
+        )
+        pep_auc = self.denovo_metrics.calc_auc(target_str, pred_str, mean_conf.tolist())
+        return {
+            "aa_prec": aa_prec,
+            "aa_recall": aa_recall,
+            "pep_recall": pep_recall,
+            "pep_precision": pep_precision,
+            "pep_auc": pep_auc,
+        }
 
     def _parse_batch(self, batch):
         spectra = batch
@@ -479,22 +534,22 @@ class DeNovoPLWrapper(BasePLWrapper):
 
     def _get_train_stats(self, returns, batch):
         _, _, intseq, _ = batch
-        preds = returns
-        loss = self._get_losses(preds, intseq)
-        naive_metrics = NaiveAccRecPrec(
-            intseq, preds.argmax(dim=-1), self.amod_dict["X"]
-        )
-        stats = {"loss": loss, **naive_metrics}
+        logits = returns
+        aa_conf, preds = logits.max(dim=-1)
+        loss = self._get_losses(logits, intseq)
+        naive_metrics = NaiveAccRecPrec(intseq, preds, self.amod_dict["X"])
+        deepnovo_metrics = self.deepnovo_metrics(preds, intseq, aa_conf)
+        stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
         return loss, stats
 
     def _get_eval_stats(self, returns, batch):
         _, _, intseq, _ = batch
-        preds = returns
-        loss = self._get_losses(preds, intseq)
-        naive_metrics = NaiveAccRecPrec(
-            intseq, preds.argmax(dim=-1), self.amod_dict["X"]
-        )
-        stats = {"loss": loss, **naive_metrics}
+        logits = returns
+        aa_conf, preds = logits.max(dim=-1)
+        loss = self._get_losses(logits, intseq)
+        naive_metrics = NaiveAccRecPrec(intseq, preds, self.amod_dict["X"])
+        deepnovo_metrics = self.deepnovo_metrics(preds, intseq, aa_conf)
+        stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
         return stats
 
     def on_validation_epoch_end(self):
