@@ -7,6 +7,6 @@ paths:
     - train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet
     - train-00000-of-00002-ca1fbc3de7c99259.parquet
   val: 
-    - test-00000-of-00001-15be7bb3864037e7.parquet
+    - validation-00000-of-00001-b84568f5bf3ba95d.parquet
   test: 
     - test-00000-of-00001-15be7bb3864037e7.parquet
