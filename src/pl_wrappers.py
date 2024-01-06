@@ -11,32 +11,19 @@ from denovo_eval import Metrics as DeNovoMetrics
 from models.heads import ClassifierHead
 
 
-def calc_classification_metrics(all_outputs, all_targets):
-    all_targets = all_targets.detach().cpu().float().numpy()
-    all_outputs = all_outputs.detach().cpu().float().numpy()
-
-    # Compute accuracy
-    accuracy = accuracy_score(all_targets.argmax(axis=-1), all_outputs.argmax(axis=-1))
-
-    # Compute precision, recall, and F1-score
-    precision, recall, f1, _ = precision_recall_fscore_support(
-        all_targets.argmax(axis=-1),
-        all_outputs.argmax(axis=-1),
-        average="weighted",
-        zero_division=0,
-    )
-
-    # Compute confusion matrix
-    # confusion_mat = confusion_matrix(all_targets.argmax(axis=-1), all_outputs.argmax(axis=-1))
-
-    metrics = dict(
-        accuracy=accuracy,
-        precision=precision,
-        recall=recall,
-        f1=f1,
-        # confusion_mat=confusion_mat,
-    )
-    return metrics
+def NaiveAccRecPrec(target, prediction, null_value):
+    correct_bool = (target == prediction).type(torch.int32)
+    num_correct = correct_bool.sum()
+    recall_bool = target != null_value
+    recsum = correct_bool[recall_bool].sum()
+    prec_bool = prediction != null_value
+    precsum = correct_bool[prec_bool].sum()
+    total = target.shape[0] * target.shape[1]
+    return {
+        "acc_naive": num_correct / total,
+        "recall_naive": recsum / recall_bool.sum(),
+        "precision_naive": precsum / prec_bool.sum(),
+    }
 
 
 class RunningWindowLoss:
@@ -449,10 +436,13 @@ class TrinaryMZPLWrapper(BasePLWrapper):
 
 
 class DeNovoPLWrapper(BasePLWrapper):
-    def __init__(self, encoder, decoder, datasets, args, collate_fn=None):
+    def __init__(
+        self, encoder, decoder, datasets, args, collate_fn=None, amod_dict=None
+    ):
         super().__init__(encoder, datasets, args, collate_fn=collate_fn)
         self.decoder = decoder
         self.denovo_metrics = DeNovoMetrics()
+        self.amod_dict = amod_dict
 
     def _parse_batch(self, batch):
         spectra = batch
@@ -491,14 +481,20 @@ class DeNovoPLWrapper(BasePLWrapper):
         _, _, intseq, _ = batch
         preds = returns
         loss = self._get_losses(preds, intseq)
-        stats = {"loss": loss}
+        naive_metrics = NaiveAccRecPrec(
+            intseq, preds.argmax(dim=-1), self.amod_dict["X"]
+        )
+        stats = {"loss": loss, **naive_metrics}
         return loss, stats
 
     def _get_eval_stats(self, returns, batch):
         _, _, intseq, _ = batch
         preds = returns
         loss = self._get_losses(preds, intseq)
-        stats = {"loss": loss}
+        naive_metrics = NaiveAccRecPrec(
+            intseq, preds.argmax(dim=-1), self.amod_dict["X"]
+        )
+        stats = {"loss": loss, **naive_metrics}
         return stats
 
     def on_validation_epoch_end(self):
