@@ -192,6 +192,7 @@ class DenovoDecoder(pl.LightningModule):
         # self.pred_token = self.inpdict['<p>']
         dec_config["num_inp_tokens"] = len(self.inpdict)
 
+        self.predcats = len(self.outdict)
         self.scale = Scale(self.outdict)
 
         self.dec_config = dec_config
@@ -524,19 +525,21 @@ class DenovoDecoder(pl.LightningModule):
         bs = enc_out["emb"].shape[0]
         # starting intseq array
         intseq = self.initial_intseq(bs, self.seq_len).to(dev)
+        probs = th.zeros(bs, self.seq_len, self.predcats).to(dev)
         for i in range(self.seq_len):
             index = int(i)
 
             dec_out = self(intseq, enc_out, batdic, False)
 
             predictions = self.greedy(dec_out[:, index])
+            probs[:,index,:] = dec_out[:,index]
 
             if index < self.seq_len - 1:
                 intseq = self.set_tokens(intseq, index + 1, predictions)
 
         intseq = th.cat([intseq[:, 1:], predictions[:, None]], dim=1)
 
-        return intseq
+        return intseq, probs
 
     def correct_sequence_(self, enc_out, batdic, softmax=False):
         bs = enc_out["emb"].shape[0]

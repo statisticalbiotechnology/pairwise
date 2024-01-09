@@ -552,8 +552,8 @@ class DeNovoPLWrapper(BasePLWrapper):
         encinpdict = self._encoder_dict(batch)
         encout = self.encoder(mzab, **encinpdict, return_mask=True, **kwargs)
         decinpdict = self._decoder_dict(batch)
-        returns = self.decoder.predict_sequence(encout, decinpdict)
-        val_stats = self._get_eval_stats(returns, batch)
+        returns, probs = self.decoder.predict_sequence(encout, decinpdict)
+        val_stats = self._get_eval_stats(returns, probs, batch)
         val_stats = {
             "val_" + key: val.detach().item() for key, val in val_stats.items()
         }
@@ -569,10 +569,12 @@ class DeNovoPLWrapper(BasePLWrapper):
         )
         return {"val_stats": val_stats, "returns": returns}
 
-    def _get_eval_stats(self, returns, batch):
+    def _get_eval_stats(self, returns, probs, batch):
         targ = batch['intseq']
         preds = returns[:, :targ.shape[1]]
-        loss = torch.tensor(0)#self._get_losses(preds, targ)
+
+        probs_ = probs[:,:targ.shape[1]].transpose(-1, -2)
+        loss = F.cross_entropy(probs_, targ)
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
         naive_metrics = NaiveAccRecPrec(
             targ, preds, self.amod_dict["X"]
