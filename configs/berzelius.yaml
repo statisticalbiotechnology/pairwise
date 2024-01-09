@@ -1,0 +1,29 @@
+data_root_dir: /proj/bedrock/datasets/instanovo_data_subset/
+output_dir: /proj/bedrock/checkpoints/checkpoint
+log_dir: /proj/bedrock/logs/log
+wandb_project: debug
+wandb_entity: kall
+log_wandb: 1
+num_workers: 16
+matmul_precision: medium
+precision: bf16-mixed
+### Models
+encoder_model: encoder_base_arch
+###
+anneal_lr: 1
+min_lr: 0
+warmup_epochs: 1
+### Training hyperparameters
+batch_size: 400
+lr: 4e-5
+epochs: 10
+input_mass: 1
+input_charge: 1
+max_peaks: 100
+# Task
+pretrain: 0
+pretraining_task: trinary_mz
+# De novo
+downstream_task: denovo
+decoder_model: decoder_greedy_base
+downstream_root_dir: /proj/bedrock/datasets/9_species
