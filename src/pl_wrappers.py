@@ -479,7 +479,7 @@ class DeNovoPLWrapper(BasePLWrapper):
 
         # Take the variable batch['seqint'] and add a start token to the
         # beginning and null on the end
-        intseq = self.decoder.prepend_startok(batch['intseq'][...,:-1])
+        intseq = self.decoder.prepend_startok(batch['intseq'][..., :-1])
 
         # Find the indices first null tokens so that when you choose random
         # token you avoid trivial trailing null tokens (beyond final null)
@@ -500,7 +500,7 @@ class DeNovoPLWrapper(BasePLWrapper):
         # Indices of chosen predict tokens
         # - save for LossFunction
         inds_ = [torch.arange(inds.shape[0], dtype=torch.int32), inds]
-        self.inds = inds_   
+        self.inds = inds_
 
         # Target is the actual (intseq) identity of the chosen predict indices
         targ = (
@@ -548,17 +548,32 @@ class DeNovoPLWrapper(BasePLWrapper):
 
     def validation_step(self, batch, batch_idx, **kwargs):
         mzab = self._mzab_array(batch)
+        batch_size = mzab.shape[0]
         encinpdict = self._encoder_dict(batch)
         encout = self.encoder(mzab, **encinpdict, return_mask=True, **kwargs)
         decinpdict = self._decoder_dict(batch)
-        prediction = self.decoder.predict_sequence(encout, decinpdict)
-        self._get_eval_stats(prediction, batch)
+        returns = self.decoder.predict_sequence(encout, decinpdict)
+        val_stats = self._get_eval_stats(returns, batch)
+        val_stats = {
+            "val_" + key: val.detach().item() for key, val in val_stats.items()
+        }
+        self.log_dict(
+            {**val_stats},
+            on_epoch=True,
+            batch_size=batch_size,
+            sync_dist=True,
+        )
+        self.running_val_loss.update(val_stats["val_loss"])
+        self.log(
+            "run_val_loss:", self.running_val_loss.get_running_loss(), prog_bar=True
+        )
+        return {"val_stats": val_stats, "returns": returns}
 
     def _get_eval_stats(self, returns, batch):
         targ = batch['intseq']
         preds = returns[:, :targ.shape[1]]
-        loss = 0#self._get_losses(preds, targ)
-        """Accuracy has little meaning if we are dynamically sizing the sequence length"""
+        loss = torch.tensor(0)#self._get_losses(preds, targ)
+        """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
         naive_metrics = NaiveAccRecPrec(
             targ, preds, self.amod_dict["X"]
         )
