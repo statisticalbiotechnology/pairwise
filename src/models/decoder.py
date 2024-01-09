@@ -166,7 +166,7 @@ class Decoder(pl.LightningModule):
     ):
         out, ce_emb = self.EmbedInputs(intseq, charge=charge, energy=energy, mass=mass)
 
-        seqmask = self.sequence_mask(seqlen, max(seqlen))
+        seqmask = self.sequence_mask(seqlen, out.shape[1])#max(seqlen))
 
         out = self.Main(
             out, kv_feats=kv_feats, embed=ce_emb, spec_mask=specmask, seq_mask=seqmask
@@ -177,7 +177,6 @@ class Decoder(pl.LightningModule):
             out = out.mean(dim=1)
 
         return out
-
 
 class DenovoDecoder(pl.LightningModule):
     def __init__(self, token_dict, dec_config):
@@ -201,7 +200,7 @@ class DenovoDecoder(pl.LightningModule):
         self.initialize_variables()
 
     def prepend_startok(self, intseq):
-        hold = th.zeros(intseq.shape[0], 1, dtype=th.int32, device=self.device)
+        hold = th.zeros(intseq.shape[0], 1, dtype=th.int32, device=intseq.device)
         start = th.fill(hold, self.start_token)
         out = th.cat([start, intseq], dim=1)
 
@@ -615,47 +614,4 @@ def decoder_greedy_base(token_dict, kv_indim=256, **kwargs):
     return model
 
 
-"""
-def ones(mod, mul=1e-3):
-    #if hasattr(mod, 'weight'):
-    #    parm = mod.weight
-    #    if parm is not None:
-    #        setattr(mod, 'weight', nn.Parameter(mul*th.ones_like(parm)))
-    if hasattr(mod, 'bias'):
-        parm = mod.bias
-        if parm is not None:
-            setattr(mod, 'bias', nn.Parameter(th.zeros_like(parm)))
-    if hasattr(mod, 'eps'):
-        mod.eps = 1e-3
 
-from models.encoder import Encoder
-import yaml
-fpath = '/cmnfs/home/j.lapin/projects/foundational/yaml/downstream.yaml'
-with open(fpath) as stream:
-    config = yaml.safe_load(stream)
-with open("/cmnfs/home/j.lapin/projects/foundational/yaml/datasets.yaml", 'r') as stream:
-    dc = yaml.safe_load(stream)
-with open("/cmnfs/home/j.lapin/projects/foundational/yaml/models.yaml", 'r') as stream:
-    mconf = yaml.safe_load(stream)
-
-#from loaders.loader import LoadObj
-#L = LoadObj(**dc['pretrain'])
-from loaders.loader_parquet import LoaderDS 
-Lds = LoaderDS(config['loader'])
-
-encoder = Encoder(**mconf['encoder_dict'])
-dnvdec = DenovoDecoder(Lds.amod_dic, config['denovo_ar']['head_dict'], encoder)
-
-batch = Lds.load_batch(np.arange(100), SeqInts=True)
-enc_inp = {
-    'x': th.cat([batch['mz'][...,None], batch['ab'][...,None]], dim=-1),
-    'charge': batch['charge'],
-    'mass': batch['mass'],
-    'length': batch['length'],
-    'return_mask': True
-}
-enc_out = encoder(**enc_inp)
-
-out = dnvdec.predict_sequence(enc_out, batch) 
-out = dnvdec.correct_sequence_(enc_out, batch, softmax=True)
-"""

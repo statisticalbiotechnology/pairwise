@@ -19,7 +19,7 @@ def get_args_parser(conf_parser):
         "--decoder_model",
         default="",
         type=str,
-        help="Name of the encoder model to train",
+        help="Name of the decoder model to train",
     )
     parser.add_argument(
         "--encoder_weights",
