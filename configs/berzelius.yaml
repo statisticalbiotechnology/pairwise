@@ -15,7 +15,7 @@ min_lr: 0
 warmup_epochs: 1
 ### Training hyperparameters
 batch_size: 400
-lr: 4e-5
+blr: 5e-5
 epochs: 10
 input_mass: 1
 input_charge: 1
