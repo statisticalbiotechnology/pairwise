@@ -2,7 +2,7 @@
 import pytorch_lightning as pl
 import math
 from pytorch_lightning.utilities.rank_zero import rank_zero_only
-from deepspeed.profiling.flops_profiler.profiler import FlopsProfiler
+# from deepspeed.profiling.flops_profiler.profiler import FlopsProfiler
 
 
 class CosineAnnealLRCallback(pl.Callback):
@@ -36,12 +36,12 @@ class CosineAnnealLRCallback(pl.Callback):
                 )
             )
 
-        optimizer = trainer.optimizers[0]
-        for param_group in optimizer.param_groups:
-            if "lr_scale" in param_group:
-                param_group["lr"] = lr_temp * param_group["lr_scale"]
-            else:
-                param_group["lr"] = lr_temp
+        for optimizer in trainer.optimizers:
+            for param_group in optimizer.param_groups:
+                if "lr_scale" in param_group:
+                    param_group["lr"] = lr_temp * param_group["lr_scale"]
+                else:
+                    param_group["lr"] = lr_temp
         pl_module.lr = lr_temp
 
 

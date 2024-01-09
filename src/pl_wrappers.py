@@ -174,12 +174,14 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.log_dict(
             {**train_stats},
             on_epoch=True,
+            on_step=True,
             batch_size=batch_size,
             sync_dist=True,
         )
         self.running_train_loss.update(train_stats["train_loss"])
         self.log(
-            "run_train_loss:", self.running_train_loss.get_running_loss(), prog_bar=True
+            "run_train_loss:", self.running_train_loss.get_running_loss(), prog_bar=True,
+            sync_dist=True,
         )
 
         self.manual_backward(loss)
@@ -197,12 +199,14 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.log_dict(
             {**val_stats},
             on_epoch=True,
+            on_step=True,
             batch_size=batch_size,
             sync_dist=True,
         )
         self.running_val_loss.update(val_stats["val_loss"])
         self.log(
-            "run_val_loss:", self.running_val_loss.get_running_loss(), prog_bar=True
+            "run_val_loss:", self.running_val_loss.get_running_loss(), prog_bar=True,
+            sync_dist=True,
         )
         return {"val_stats": val_stats, "returns": returns}
 
