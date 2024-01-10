@@ -94,6 +94,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.input_charge = args.input_charge
         self.input_mass = args.input_mass
         self.mask_zero_tokens = args.mask_zero_tokens
+        self.log_wandb = args.log_wandb
         self.tracker = BestMetricTracker()
         self.best_metrics_logged = (
             False  # keep track of if the best achieved metrics have been logged
@@ -180,7 +181,9 @@ class BasePLWrapper(ABC, pl.LightningModule):
         )
         self.running_train_loss.update(train_stats["train_loss"])
         self.log(
-            "run_train_loss:", self.running_train_loss.get_running_loss(), prog_bar=True,
+            "run_train_loss:",
+            self.running_train_loss.get_running_loss(),
+            prog_bar=True,
             sync_dist=True,
         )
 
@@ -205,7 +208,9 @@ class BasePLWrapper(ABC, pl.LightningModule):
         )
         self.running_val_loss.update(val_stats["val_loss"])
         self.log(
-            "run_val_loss:", self.running_val_loss.get_running_loss(), prog_bar=True,
+            "run_val_loss:",
+            self.running_val_loss.get_running_loss(),
+            prog_bar=True,
             sync_dist=True,
         )
         return {"val_stats": val_stats, "returns": returns}
@@ -231,7 +236,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             drop_last=True,
             collate_fn=self.collate_fn,
             persistent_workers=self.num_workers > 0,
-            shuffle=True
+            shuffle=True,
         )
 
     def val_dataloader(self):
@@ -313,7 +318,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.log("lr_head", cur_lr_head, on_step=False, on_epoch=True)
 
     def on_train_end(self):
-        if not self.best_metrics_logged:
+        if not self.best_metrics_logged and self.log_wandb:
             self.logger.experiment.log(self.tracker.best_metrics)
 
 
@@ -471,23 +476,22 @@ class DeNovoPLWrapper(BasePLWrapper):
             "charge": batch["charge"] if self.decoder.decoder.use_charge else None,
         }
 
-
     def _parse_batch(self, batch, full_seqint=False):
         spectra = batch
         intseq = spectra["intseq"]
-        
-        batch_size, sl = spectra['mz_array'].shape
-        
+
+        batch_size, sl = spectra["mz_array"].shape
+
         # Encoder input - mz/ab
         mzab = self._mzab_array(spectra)
 
         # Take the variable batch['seqint'] and add a start token to the
         # beginning and null on the end
-        intseq = self.decoder.prepend_startok(batch['intseq'][..., :-1])
+        intseq = self.decoder.prepend_startok(batch["intseq"][..., :-1])
 
         # Find the indices first null tokens so that when you choose random
         # token you avoid trivial trailing null tokens (beyond final null)
-        nonnull = (intseq != self.decoder.inpdict['X']).type(torch.int32).sum(1)
+        nonnull = (intseq != self.decoder.inpdict["X"]).type(torch.int32).sum(1)
 
         # Choose random tokens to predict
         # - the values of inds will be final non-hidden value in decoder input
@@ -499,7 +503,7 @@ class DeNovoPLWrapper(BasePLWrapper):
 
         # Fill with hidden tokens to the end
         # - this will be the decoder's input
-        intseq_ = self.decoder.fill2c(intseq, inds, '<h>', output=False)
+        intseq_ = self.decoder.fill2c(intseq, inds, "<h>", output=False)
 
         # Indices of chosen predict tokens
         # - save for LossFunction
@@ -507,24 +511,24 @@ class DeNovoPLWrapper(BasePLWrapper):
         self.inds = inds_
 
         # Target is the actual (intseq) identity of the chosen predict indices
-        targ = (
-            batch['intseq'] if full_seqint else batch['intseq'][inds_]
-        ).type(torch.int64)
+        targ = (batch["intseq"] if full_seqint else batch["intseq"][inds_]).type(
+            torch.int64
+        )
 
         # Encoder input - non mz/ab
         encoder_input_dict = self._encoder_dict(spectra)
-        #encoder_input_dict = {
+        # encoder_input_dict = {
         #    "mass": spectra["mass"] if self.encoder.use_mass else None,
         #    "charge": spectra["charge"] if self.encoder.use_charge else None,
         #    "length": spectra["lengths"] if self.mask_zero_tokens else None,
-        #}
+        # }
 
         # Decoder input
         decoder_input_dict = self._decoder_dict(batch)
-        #decoder_input_dict = {
+        # decoder_input_dict = {
         #    "mass": spectra["mass"] if self.decoder.decoder.use_mass else None,
         #    "charge": spectra["charge"] if self.decoder.decoder.use_charge else None,
-        #}
+        # }
 
         return (mzab, encoder_input_dict, intseq_, decoder_input_dict, targ), batch_size
 
@@ -544,10 +548,10 @@ class DeNovoPLWrapper(BasePLWrapper):
         _, _, intseq, _, targ = batch
         preds = returns
         loss = self._get_losses(preds, targ)
-        #naive_metrics = NaiveAccRecPrec(
+        # naive_metrics = NaiveAccRecPrec(
         #    intseq, preds.argmax(dim=-1), self.amod_dict["X"]
-        #)
-        stats = {"loss": loss}#, **naive_metrics}
+        # )
+        stats = {"loss": loss}  # , **naive_metrics}
         return loss, stats
 
     def validation_step(self, batch, batch_idx, **kwargs):
@@ -573,14 +577,31 @@ class DeNovoPLWrapper(BasePLWrapper):
         )
         return {"val_stats": val_stats, "returns": returns}
 
-    def _get_eval_stats(self, returns, batch):
-        targ = batch['intseq']
-        preds = returns[:, :targ.shape[1]]
-        loss = torch.tensor(0)#self._get_losses(preds, targ)
-        """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
-        naive_metrics = NaiveAccRecPrec(
-            targ, preds, self.amod_dict["X"]
+    def test_step(self, batch, batch_idx, **kwargs):
+        mzab = self._mzab_array(batch)
+        batch_size = mzab.shape[0]
+        encinpdict = self._encoder_dict(batch)
+        encout = self.encoder(mzab, **encinpdict, return_mask=True, **kwargs)
+        decinpdict = self._decoder_dict(batch)
+        returns = self.decoder.predict_sequence(encout, decinpdict)
+        test_stats = self._get_eval_stats(returns, batch)
+        test_stats = {
+            "test_" + key: val.detach().item() for key, val in test_stats.items()
+        }
+        self.log_dict(
+            {**test_stats},
+            on_epoch=True,
+            batch_size=batch_size,
+            sync_dist=True,
         )
+        return {"test_stats": test_stats, "returns": returns}
+
+    def _get_eval_stats(self, returns, batch):
+        targ = batch["intseq"]
+        preds = returns[:, : targ.shape[1]]
+        loss = torch.tensor(0)  # self._get_losses(preds, targ)
+        """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
+        naive_metrics = NaiveAccRecPrec(targ, preds, self.amod_dict["X"])
         stats = {"loss": loss, **naive_metrics}
         return stats
 
