@@ -166,7 +166,7 @@ class Decoder(pl.LightningModule):
     ):
         out, ce_emb = self.EmbedInputs(intseq, charge=charge, energy=energy, mass=mass)
 
-        seqmask = self.sequence_mask(seqlen, out.shape[1])#max(seqlen))
+        seqmask = self.sequence_mask(seqlen, out.shape[1])  # max(seqlen))
 
         out = self.Main(
             out, kv_feats=kv_feats, embed=ce_emb, spec_mask=specmask, seq_mask=seqmask
@@ -177,6 +177,7 @@ class Decoder(pl.LightningModule):
             out = out.mean(dim=1)
 
         return out
+
 
 class DenovoDecoder(pl.LightningModule):
     def __init__(self, token_dict, dec_config):
@@ -532,7 +533,7 @@ class DenovoDecoder(pl.LightningModule):
             dec_out = self(intseq, enc_out, batdic, False)
 
             predictions = self.greedy(dec_out[:, index])
-            probs[:,index,:] = dec_out[:,index]
+            probs[:, index, :] = dec_out[:, index]
 
             if index < self.seq_len - 1:
                 intseq = self.set_tokens(intseq, index + 1, predictions)
@@ -617,4 +618,47 @@ def decoder_greedy_base(token_dict, kv_indim=256, **kwargs):
     return model
 
 
+def decoder_greedy_small(token_dict, kv_indim=256, **kwargs):
+    decoder_config = {
+        "kv_indim": kv_indim,
+        "running_units": 128,
+        "sequence_length": 30,
+        "depth": 6,
+        "d": 64,
+        "h": 4,
+        "ffn_multiplier": 1,
+        "ce_units": 128,
+        "use_charge": True,
+        "use_energy": False,
+        "use_mass": True,
+        "norm_type": "layer",
+        "prenorm": True,
+        "preembed": True,
+        # penultimate_units: #?
+        "pool": False,
+    }
+    model = DenovoDecoder(token_dict, decoder_config, **kwargs)
+    return model
 
+
+def decoder_greedy_tiny(token_dict, kv_indim=256, **kwargs):
+    decoder_config = {
+        "kv_indim": kv_indim,
+        "running_units": 32,
+        "sequence_length": 30,
+        "depth": 2,
+        "d": 64,
+        "h": 4,
+        "ffn_multiplier": 1,
+        "ce_units": 32,
+        "use_charge": True,
+        "use_energy": False,
+        "use_mass": True,
+        "norm_type": "layer",
+        "prenorm": True,
+        "preembed": True,
+        # penultimate_units: #?
+        "pool": False,
+    }
+    model = DenovoDecoder(token_dict, decoder_config, **kwargs)
+    return model
