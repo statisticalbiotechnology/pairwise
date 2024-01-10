@@ -4,13 +4,9 @@ name: FoundationV2
 channels:
   - defaults
   - conda-forge
-  - pytorch
-  - nvidia
 dependencies:
-  - python=3.10
   - scikit-learn
   - pytorch-lightning
-  - cudatoolkit
   - pandas
   - scipy
   - pip
