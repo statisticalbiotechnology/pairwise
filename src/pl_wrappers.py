@@ -581,10 +581,10 @@ class DeNovoPLWrapper(BasePLWrapper):
         return {"val_stats": val_stats, "returns": returns}
 
     def _get_eval_stats(self, returns, probs, batch):
-        targ = batch['intseq']
-        preds = returns[:, :targ.shape[1]]
+        targ = batch["intseq"]
+        preds = returns[:, : targ.shape[1]]
 
-        probs_ = probs[:,:targ.shape[1]].transpose(-1, -2)
+        probs_ = probs[:, : targ.shape[1]].transpose(-1, -2)
         loss = F.cross_entropy(probs_, targ)
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
         naive_metrics = NaiveAccRecPrec(targ, preds, self.amod_dict["X"])
@@ -597,8 +597,8 @@ class DeNovoPLWrapper(BasePLWrapper):
         encinpdict = self._encoder_dict(batch)
         encout = self.encoder(mzab, **encinpdict, return_mask=True, **kwargs)
         decinpdict = self._decoder_dict(batch)
-        returns = self.decoder.predict_sequence(encout, decinpdict)
-        test_stats = self._get_eval_stats(returns, batch)
+        returns, probs = self.decoder.predict_sequence(encout, decinpdict)
+        test_stats = self._get_eval_stats(returns, probs, batch)
         test_stats = {
             "test_" + key: val.detach().item() for key, val in test_stats.items()
         }
@@ -608,7 +608,7 @@ class DeNovoPLWrapper(BasePLWrapper):
             batch_size=batch_size,
             sync_dist=True,
         )
-        return {"test_stats": test_stats, "returns": returns}   
+        return {"test_stats": test_stats, "returns": returns}
 
     def on_validation_epoch_end(self):
         pass
