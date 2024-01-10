@@ -573,7 +573,10 @@ class DeNovoPLWrapper(BasePLWrapper):
         )
         self.running_val_loss.update(val_stats["val_loss"])
         self.log(
-            "run_val_loss:", self.running_val_loss.get_running_loss(), prog_bar=True
+            "run_val_loss:",
+            self.running_val_loss.get_running_loss(),
+            prog_bar=True,
+            sync_dist=True,
         )
         return {"val_stats": val_stats, "returns": returns}
 
@@ -599,7 +602,7 @@ class DeNovoPLWrapper(BasePLWrapper):
     def _get_eval_stats(self, returns, batch):
         targ = batch["intseq"]
         preds = returns[:, : targ.shape[1]]
-        loss = torch.tensor(0)  # self._get_losses(preds, targ)
+        loss = torch.tensor(0, dtype=targ.dtype)  # self._get_losses(preds, targ)
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
         naive_metrics = NaiveAccRecPrec(targ, preds, self.amod_dict["X"])
         stats = {"loss": loss, **naive_metrics}
