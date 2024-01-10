@@ -19,7 +19,7 @@ def get_args_parser(conf_parser):
         "--decoder_model",
         default="",
         type=str,
-        help="Name of the encoder model to train",
+        help="Name of the decoder model to train",
     )
     parser.add_argument(
         "--encoder_weights",
@@ -173,6 +173,12 @@ def get_args_parser(conf_parser):
         help="path where to save",
     )
     parser.add_argument("--log_dir", default="outs/log", help="path where to log")
+    parser.add_argument(
+        "--barebones",
+        type=int,
+        default=0,
+        help="Bool (0/1): barebones mode",
+    )
     parser.add_argument(
         "--save_top_k",
         type=int,

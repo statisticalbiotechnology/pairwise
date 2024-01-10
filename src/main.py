@@ -6,7 +6,7 @@ import wandb
 import numpy as np
 import random
 from parse_args import parse_args_and_config, create_output_dirs
-
+import time
 
 from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
 from pl_wrappers import (
@@ -74,17 +74,18 @@ def main(args, ds_config=None):
 
     callbacks = []
     # Checkpoint callback
-    callbacks += [
-        ModelCheckpoint(
-            dirpath=args.output_dir,
-            filename="{epoch}-{val_loss:.2f}",
-            monitor="val_loss",  # requires that we log something called "val_loss"
-            mode="min",
-            save_top_k=args.save_top_k,
-            save_last=args.save_last,
-            every_n_epochs=args.every_n_epochs,
-        )
-    ]
+    if not args.barebones:
+        callbacks += [
+            ModelCheckpoint(
+                dirpath=args.output_dir,
+                filename="{epoch}-{val_loss:.2f}",
+                monitor="val_loss",  # requires that we log something called "val_loss"
+                mode="min",
+                save_top_k=args.save_top_k,
+                save_last=args.save_last,
+                every_n_epochs=args.every_n_epochs,
+            )
+        ]
 
     if args.anneal_lr:
         # Cosine annealing LR with warmup callback
@@ -153,18 +154,22 @@ def main(args, ds_config=None):
             benchmark=True,
             default_root_dir=args.log_dir,
             # profiler="simple",
+            barebones=args.barebones,
         )
 
         if args.resume:
             print(f"Resuming training from trainer state: {args.encoder_weights}")
 
+        start_time = time.time()
         # This is the call to start training the model
         pretrainer.fit(
             pl_encoder, ckpt_path=args.encoder_weights if args.resume else None
         )
+        end_time = time.time()  # End time measurement
+        print(f"Pretraining finished in {end_time - start_time} seconds")
 
         # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
-        if args.save_top_k > 0 and args.pretrain:
+        if args.save_top_k > 0 and args.pretrain and not args.barebones:
             pretrainer.test(ckpt_path="best")
 
     elif args.encoder_weights:
@@ -232,13 +237,18 @@ def main(args, ds_config=None):
             benchmark=True,
             default_root_dir=args.log_dir,
             # profiler="simple",
+            # profiler="advanced",
+            barebones=args.barebones,
         )
 
+        start_time = time.time()
         # This is the call to start training the model
         ds_trainer.fit(pl_downstream)
+        end_time = time.time()  # End time measurement
+        print(f"Downstream finetuning finished in {end_time - start_time} seconds")
 
         # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
-        if args.save_top_k > 0:
+        if args.save_top_k > 0 and not args.barebones:
             ds_trainer.test(ckpt_path="best")
 
     # Flag the run as finished to the wandb server

@@ -94,6 +94,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.input_charge = args.input_charge
         self.input_mass = args.input_mass
         self.mask_zero_tokens = args.mask_zero_tokens
+        self.log_wandb = args.log_wandb
         self.tracker = BestMetricTracker()
         self.best_metrics_logged = (
             False  # keep track of if the best achieved metrics have been logged
@@ -163,6 +164,8 @@ class BasePLWrapper(ABC, pl.LightningModule):
         opts = self.optimizers()
         for opt in opts:
             opt.zero_grad()
+        self.encoder.zero_grad()
+        self.decoder.zero_grad()
         parsed_batch, batch_size = self._parse_batch(batch)
         returns = self.forward(parsed_batch)
         loss, train_stats = self._get_train_stats(returns, parsed_batch)
@@ -178,7 +181,9 @@ class BasePLWrapper(ABC, pl.LightningModule):
         )
         self.running_train_loss.update(train_stats["train_loss"])
         self.log(
-            "run_train_loss:", self.running_train_loss.get_running_loss(), prog_bar=True,
+            "run_train_loss:",
+            self.running_train_loss.get_running_loss(),
+            prog_bar=True,
             sync_dist=True,
         )
 
@@ -203,7 +208,9 @@ class BasePLWrapper(ABC, pl.LightningModule):
         )
         self.running_val_loss.update(val_stats["val_loss"])
         self.log(
-            "run_val_loss:", self.running_val_loss.get_running_loss(), prog_bar=True,
+            "run_val_loss:",
+            self.running_val_loss.get_running_loss(),
+            prog_bar=True,
             sync_dist=True,
         )
         return {"val_stats": val_stats, "returns": returns}
@@ -229,6 +236,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             drop_last=True,
             collate_fn=self.collate_fn,
             persistent_workers=self.num_workers > 0,
+            shuffle=True,
         )
 
     def val_dataloader(self):
@@ -310,7 +318,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.log("lr_head", cur_lr_head, on_step=False, on_epoch=True)
 
     def on_train_end(self):
-        if not self.best_metrics_logged:
+        if not self.best_metrics_logged and self.log_wandb:
             self.logger.experiment.log(self.tracker.best_metrics)
 
 
@@ -447,57 +455,156 @@ class DeNovoPLWrapper(BasePLWrapper):
         self.decoder = decoder
         self.denovo_metrics = DeNovoMetrics()
         self.amod_dict = amod_dict
+        self.predcats = len(amod_dict)
 
-    def _parse_batch(self, batch):
+    def _mzab_array(self, batch):
+        mz_arr = batch["mz_array"]
+        int_arr = batch["intensity_array"]
+        mzab = torch.stack([mz_arr, int_arr], dim=-1)
+        return mzab
+
+    def _encoder_dict(self, batch):
+        return {
+            "mass": batch["mass"] if self.encoder.use_mass else None,
+            "charge": batch["charge"] if self.encoder.use_charge else None,
+            "length": batch["lengths"] if self.mask_zero_tokens else None,
+        }
+
+    def _decoder_dict(self, batch):
+        return {
+            "mass": batch["mass"] if self.decoder.decoder.use_mass else None,
+            "charge": batch["charge"] if self.decoder.decoder.use_charge else None,
+        }
+
+    def _parse_batch(self, batch, full_seqint=False):
         spectra = batch
-        mz_arr = spectra["mz_array"]
-        int_arr = spectra["intensity_array"]
         intseq = spectra["intseq"]
 
-        batch_size = mz_arr.shape[0]
-        mzab = torch.stack([mz_arr, int_arr], dim=-1)
+        batch_size, sl = spectra["mz_array"].shape
 
-        encoder_input_dict = {
-            "mass": spectra["mass"] if self.input_mass else None,
-            "charge": spectra["charge"] if self.input_charge else None,
-            "length": spectra["lengths"] if self.mask_zero_tokens else None,
-        }
+        # Encoder input - mz/ab
+        mzab = self._mzab_array(spectra)
 
-        decoder_input_dict = {
-            "mass": spectra["mass"] if self.input_mass else None,
-            "charge": spectra["charge"] if self.input_charge else None,
-        }
+        # Take the variable batch['seqint'] and add a start token to the
+        # beginning and null on the end
+        intseq = self.decoder.prepend_startok(batch["intseq"][..., :-1])
 
-        return (mzab, encoder_input_dict, intseq, decoder_input_dict), batch_size
+        # Find the indices first null tokens so that when you choose random
+        # token you avoid trivial trailing null tokens (beyond final null)
+        nonnull = (intseq != self.decoder.inpdict["X"]).type(torch.int32).sum(1)
+
+        # Choose random tokens to predict
+        # - the values of inds will be final non-hidden value in decoder input
+        # - batch['seqint'](inds) will be the target for decoder output
+        # - must use combination of rand() and round() because int32 is not
+        #   yet implemented when feeding vectors into low/high arguments
+        uniform = torch.rand(batch_size, device=nonnull.device) * nonnull
+        inds = uniform.floor().type(torch.int32)
+
+        # Fill with hidden tokens to the end
+        # - this will be the decoder's input
+        intseq_ = self.decoder.fill2c(intseq, inds, "<h>", output=False)
+
+        # Indices of chosen predict tokens
+        # - save for LossFunction
+        inds_ = [torch.arange(inds.shape[0], dtype=torch.int32), inds]
+        self.inds = inds_
+
+        # Target is the actual (intseq) identity of the chosen predict indices
+        targ = (batch["intseq"] if full_seqint else batch["intseq"][inds_]).type(
+            torch.int64
+        )
+
+        # Encoder input - non mz/ab
+        encoder_input_dict = self._encoder_dict(spectra)
+        # encoder_input_dict = {
+        #    "mass": spectra["mass"] if self.encoder.use_mass else None,
+        #    "charge": spectra["charge"] if self.encoder.use_charge else None,
+        #    "length": spectra["lengths"] if self.mask_zero_tokens else None,
+        # }
+
+        # Decoder input
+        decoder_input_dict = self._decoder_dict(batch)
+        # decoder_input_dict = {
+        #    "mass": spectra["mass"] if self.decoder.decoder.use_mass else None,
+        #    "charge": spectra["charge"] if self.decoder.decoder.use_charge else None,
+        # }
+
+        return (mzab, encoder_input_dict, intseq_, decoder_input_dict, targ), batch_size
 
     def forward(self, parsed_batch, **kwargs):
-        mzab, encoder_input_dict, intseq, decoder_input_dict = parsed_batch
+        mzab, encoder_input_dict, intseq, decoder_input_dict, _ = parsed_batch
         outs = self.encoder(mzab, **encoder_input_dict, return_mask=True, **kwargs)
         preds = self.decoder(intseq, outs, decoder_input_dict)
         return preds
 
     def _get_losses(self, preds, labels):
-        preds = torch.einsum("bsc->bcs", preds)
-        loss = F.cross_entropy(preds, labels)
+        targ_one_hot = F.one_hot(labels, self.predcats).type(torch.float32)
+        preds = preds[self.inds]
+        loss = F.cross_entropy(preds, targ_one_hot)
         return loss
 
     def _get_train_stats(self, returns, batch):
-        _, _, intseq, _ = batch
+        _, _, intseq, _, targ = batch
         preds = returns
-        loss = self._get_losses(preds, intseq)
-        naive_metrics = NaiveAccRecPrec(
-            intseq, preds.argmax(dim=-1), self.amod_dict["X"]
-        )
-        stats = {"loss": loss, **naive_metrics}
+        loss = self._get_losses(preds, targ)
+        # naive_metrics = NaiveAccRecPrec(
+        #    intseq, preds.argmax(dim=-1), self.amod_dict["X"]
+        # )
+        stats = {"loss": loss}  # , **naive_metrics}
         return loss, stats
 
-    def _get_eval_stats(self, returns, batch):
-        _, _, intseq, _ = batch
-        preds = returns
-        loss = self._get_losses(preds, intseq)
-        naive_metrics = NaiveAccRecPrec(
-            intseq, preds.argmax(dim=-1), self.amod_dict["X"]
+    def validation_step(self, batch, batch_idx, **kwargs):
+        mzab = self._mzab_array(batch)
+        batch_size = mzab.shape[0]
+        encinpdict = self._encoder_dict(batch)
+        encout = self.encoder(mzab, **encinpdict, return_mask=True, **kwargs)
+        decinpdict = self._decoder_dict(batch)
+        returns = self.decoder.predict_sequence(encout, decinpdict)
+        val_stats = self._get_eval_stats(returns, batch)
+        val_stats = {
+            "val_" + key: val.detach().item() for key, val in val_stats.items()
+        }
+        self.log_dict(
+            {**val_stats},
+            on_epoch=True,
+            batch_size=batch_size,
+            sync_dist=True,
         )
+        self.running_val_loss.update(val_stats["val_loss"])
+        self.log(
+            "run_val_loss:",
+            self.running_val_loss.get_running_loss(),
+            prog_bar=True,
+            sync_dist=True,
+        )
+        return {"val_stats": val_stats, "returns": returns}
+
+    def test_step(self, batch, batch_idx, **kwargs):
+        mzab = self._mzab_array(batch)
+        batch_size = mzab.shape[0]
+        encinpdict = self._encoder_dict(batch)
+        encout = self.encoder(mzab, **encinpdict, return_mask=True, **kwargs)
+        decinpdict = self._decoder_dict(batch)
+        returns = self.decoder.predict_sequence(encout, decinpdict)
+        test_stats = self._get_eval_stats(returns, batch)
+        test_stats = {
+            "test_" + key: val.detach().item() for key, val in test_stats.items()
+        }
+        self.log_dict(
+            {**test_stats},
+            on_epoch=True,
+            batch_size=batch_size,
+            sync_dist=True,
+        )
+        return {"test_stats": test_stats, "returns": returns}
+
+    def _get_eval_stats(self, returns, batch):
+        targ = batch["intseq"]
+        preds = returns[:, : targ.shape[1]]
+        loss = torch.tensor(0, dtype=targ.dtype)  # self._get_losses(preds, targ)
+        """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
+        naive_metrics = NaiveAccRecPrec(targ, preds, self.amod_dict["X"])
         stats = {"loss": loss, **naive_metrics}
         return stats
 
@@ -509,13 +616,13 @@ class DeNovoPLWrapper(BasePLWrapper):
             torch.optim.Adam(
                 self.encoder.parameters(),
                 lr=self.lr,
-                betas=(0.9, 0.9999),
+                betas=(0.9, 0.999),
                 weight_decay=self.weight_decay,
             ),
             torch.optim.Adam(
                 self.decoder.parameters(),
                 lr=self.lr,
-                betas=(0.9, 0.9999),
+                betas=(0.9, 0.999),
                 weight_decay=self.weight_decay,
             ),
         ]
