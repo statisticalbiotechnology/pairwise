@@ -189,7 +189,10 @@ def main(args, ds_config=None):
     #     pl_encoder.load_from_checkpoint(encoder_path)
 
     datasets_ds, collate_fn_ds, amod_dict = utils.get_ninespecies_dataset_splits(
-        args.downstream_root_dir, ds_config, subset=args.subset
+        args.downstream_root_dir,
+        ds_config,
+        max_peaks=args.max_peaks,
+        subset=args.subset,
     )
 
     if args.downstream_task != "none":
