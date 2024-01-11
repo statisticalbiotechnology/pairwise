@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from typing import Any
+import warnings
 import depthcharge
 from depthcharge.encoders import PeakEncoder
 import torch
@@ -15,11 +16,17 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
         n_layers: int = 1,
         dropout: float = 0,
         peak_encoder: PeakEncoder | Callable[..., Any] | bool = True,
+        use_charge=False,
+        use_energy=False,
+        use_mass=False,
     ) -> None:
         super().__init__(
             d_model, nhead, dim_feedforward, n_layers, dropout, peak_encoder
         )
         self.running_units = self.d_model
+        self.use_charge = use_charge
+        self.use_energy = use_energy
+        self.use_mass = use_mass
 
     def precursor_hook(
         self,
@@ -59,15 +66,31 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
 
         # Create Fourier features for each available charge/energy/mass float
         if charge is not None:
+            if not self.use_charge:
+                warnings.warn(
+                    "Inputting charge while this model has not been configured to use charge."
+                )
             ce_emb.append(mp.FourierFeatures(charge, self.d_model, 10.0).unsqueeze(1))
         if energy is not None:
+            if not self.use_energy:
+                warnings.warn(
+                    "Inputting energy while this model has not been configured to use energy."
+                )
             ce_emb.append(mp.FourierFeatures(energy, self.d_model, 150.0).unsqueeze(1))
         if mass is not None:
+            if not self.use_mass:
+                warnings.warn(
+                    "Inputting mass while this model has not been configured to use mass."
+                )
             ce_emb.append(mp.FourierFeatures(mass, self.d_model, 20000.0).unsqueeze(1))
 
         # If no inputs were provided, return zero tensor
         if not ce_emb:
-            return torch.zeros((mz_int.shape[0], self.d_model)).type_as(mz_int)
+            return (
+                torch.zeros((mz_int.shape[0], self.d_model))
+                .type_as(mz_int)
+                .unsqueeze(1)
+            )
 
         # Concatenate embeddings and mz_int tensor
         ce_emb = torch.cat(ce_emb, dim=1)
@@ -127,8 +150,14 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
         return {"emb": encoder_out, "mask": mask}
 
 
-def dc_encoder_base(**kwargs):
+def dc_encoder_base(use_charge=False, use_energy=False, use_mass=False, **kwargs):
     model = SpectrumTransformerEncoder(
-        d_model=512, nhead=8, dim_feedforward=2048, n_layers=9
+        d_model=512,
+        nhead=8,
+        dim_feedforward=2048,
+        n_layers=9,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
     )
     return model

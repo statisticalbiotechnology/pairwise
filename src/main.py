@@ -109,7 +109,11 @@ def main(args, ds_config=None):
     )
 
     # Define encoder model
-    encoder = ENCODER_DICT[args.encoder_model]()
+    encoder = ENCODER_DICT[args.encoder_model](
+        use_charge=args.use_charge,
+        use_mass=args.use_mass,
+        use_energy=args.use_energy,
+    )
 
     if args.pretraining_task not in PRETRAIN_TASK_DICT:
         raise NotImplementedError(

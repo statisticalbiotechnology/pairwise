@@ -61,13 +61,19 @@ def get_args_parser(conf_parser):
         help="Bool (0/1): toggle pretraining",
     )
     parser.add_argument(
-        "--input_mass",
+        "--use_mass",
         default=0,
         type=int,
         help="Bool (0/1): input precursor mass",
     )
     parser.add_argument(
-        "--input_charge",
+        "--use_energy",
+        default=0,
+        type=int,
+        help="Bool (0/1): input energy",
+    )
+    parser.add_argument(
+        "--use_charge",
         default=0,
         type=int,
         help="Bool (0/1): input precursor charge",
@@ -293,8 +299,9 @@ def sanity_checks(args):
     # make sure int booleans are bool
     args.log_wandb = bool(args.log_wandb)
     args.save_last = bool(args.save_last)
-    args.input_mass = bool(args.input_mass)
-    args.input_charge = bool(args.input_charge)
+    args.use_mass = bool(args.use_mass)
+    args.use_charge = bool(args.use_charge)
+    args.use_energy = bool(args.use_energy)
     args.mask_zero_tokens = bool(args.mask_zero_tokens)
     args.anneal_lr = bool(args.anneal_lr)
     args.scale_lr_by_batchsize = bool(args.scale_lr_by_batchsize)

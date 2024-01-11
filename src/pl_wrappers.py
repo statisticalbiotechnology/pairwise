@@ -91,8 +91,8 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.weight_decay = args.weight_decay
         self.datasets = datasets
         self.lr = args.lr
-        self.input_charge = args.input_charge
-        self.input_mass = args.input_mass
+        self.use_charge = args.use_charge
+        self.use_mass = args.use_mass
         self.mask_zero_tokens = args.mask_zero_tokens
         self.log_wandb = args.log_wandb
         self.tracker = BestMetricTracker()
@@ -112,8 +112,8 @@ class BasePLWrapper(ABC, pl.LightningModule):
         return (
             mzab,
             {
-                "mass": spectra["mass"] if self.input_mass else None,
-                "charge": spectra["charge"] if self.input_charge else None,
+                "mass": spectra["mass"] if self.use_mass else None,
+                "charge": spectra["charge"] if self.use_charge else None,
             },
         ), batch_size
 
@@ -359,8 +359,8 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         return (
             mzab,
             {
-                "mass": spectra["precursor_mz"] if self.input_mass else None,
-                "charge": spectra["precursor_charge"] if self.input_charge else None,
+                "mass": spectra["precursor_mz"] if self.use_mass else None,
+                "charge": spectra["precursor_charge"] if self.use_charge else None,
                 "length": spectra["lengths"] if self.mask_zero_tokens else None,
             },
             target,
@@ -370,7 +370,7 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         mzab, input_dict, target = parsed_batch
         outs = self.encoder(mzab, **input_dict, **kwargs)
         # Additional tokens added for charge/energy/mass
-        num_cem_tokens = sum([self.input_charge, self.input_mass])
+        num_cem_tokens = sum([self.use_charge, self.use_mass])
         embeds = outs["emb"][:, num_cem_tokens:, :]
         outs = self.head(embeds)
         return outs

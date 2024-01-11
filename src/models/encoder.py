@@ -55,10 +55,10 @@ class Encoder(nn.Module):
         preembed=True,  # embed/add charge/energy/mass before FFN
         recycling_its=1,  # recycling iterations
         pairwise_bias=False,  # use pairwise mz tensor to create SA-bias
-        pairwise_units=128, # units to project pw tensor to after sinusoidal expansion
-        pw_attention_ch=32, # triangle_attention_channels
-        pw_attention_h=4, # triangle attention heads
-        pw_blocks=1, # number of PairStack blocks for pairwise features
+        pairwise_units=128,  # units to project pw tensor to after sinusoidal expansion
+        pw_attention_ch=32,  # triangle_attention_channels
+        pw_attention_h=4,  # triangle attention heads
+        pw_blocks=1,  # number of PairStack blocks for pairwise features
         device=th.device("cpu"),
     ):
         super(Encoder, self).__init__()
@@ -84,7 +84,7 @@ class Encoder(nn.Module):
 
         # Position modulation
         self.alpha = nn.Parameter(th.tensor(0.1), requires_grad=True)
-        
+
         mdim = mz_units // 4 if subdivide else mz_units
         self.MzSeq = nn.Sequential(nn.Linear(mdim, mdim), nn.SiLU())
 
@@ -96,13 +96,19 @@ class Encoder(nn.Module):
             self.alphapw = nn.Parameter(th.tensor(0.1), requires_grad=True)
             self.pospw = pw.RelPos(self.msl, 128)
             # Evolve features
-            multdict = {'in_dim': self.pw_units, 'c': 128}
-            attdict = {'in_dim': self.pw_units, 'c': pw_attention_ch, 'h': pw_attention_h}
-            ptdict = {'in_dim': self.pw_units, 'n': 4}
-            self.PwSeq = nn.Sequential(*[
-                pw.PairStack(multdict, attdict, ptdict, drop_rate=0)
-                for m in range(pw_blocks)
-            ])
+            multdict = {"in_dim": self.pw_units, "c": 128}
+            attdict = {
+                "in_dim": self.pw_units,
+                "c": pw_attention_ch,
+                "h": pw_attention_h,
+            }
+            ptdict = {"in_dim": self.pw_units, "n": 4}
+            self.PwSeq = nn.Sequential(
+                *[
+                    pw.PairStack(multdict, attdict, ptdict, drop_rate=0)
+                    for m in range(pw_blocks)
+                ]
+            )
 
         # charge/energy/mass embedding transformation
         self.atleast1 = use_charge or use_energy or use_mass
@@ -274,7 +280,9 @@ class Encoder(nn.Module):
         mabemb = mzab_dic["1d"]
         pwemb = mzab_dic["2d"]
         if self.pairwise_bias:
-            pwemb = pwemb + self.alphapw * self.pospw(x.shape[1]) # MUST SIZE DYNAMICALLY
+            pwemb = pwemb + self.alphapw * self.pospw(
+                x.shape[1]
+            )  # MUST SIZE DYNAMICALLY
             pwemb = self.PwSeq(pwemb)
 
         out = self.first(mabemb) + self.alpha * self.pos[: x.shape[1]]
@@ -341,23 +349,28 @@ BASE_ARCH_DICT = dict(
     depth=9,
     ffn_multiplier=4,
     prenorm=True,
-    use_charge=False,
-    use_energy=False,
-    use_mass=False,
     recycling_its=1,
 )
 
 
-def encoder_base_arch(**kwargs):
-    model = Encoder(**BASE_ARCH_DICT)
+def encoder_base_arch(use_charge=False, use_energy=False, use_mass=False, **kwargs):
+    model = Encoder(
+        **BASE_ARCH_DICT,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
+    )
     return model
 
 
-def encoder_base_pairwise(**kwargs):
+def encoder_base_pairwise(use_charge=False, use_energy=False, use_mass=False, **kwargs):
     model = Encoder(
         pairwise_bias=True,  # use pairwise mz tensor to create SA-bias
         pairwise_units=128,
         pw_blocks=1,
         **BASE_ARCH_DICT,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
     )
     return model
