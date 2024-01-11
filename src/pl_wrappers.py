@@ -164,8 +164,6 @@ class BasePLWrapper(ABC, pl.LightningModule):
         opts = self.optimizers()
         for opt in opts:
             opt.zero_grad()
-        self.encoder.zero_grad()
-        self.decoder.zero_grad()
         parsed_batch, batch_size = self._parse_batch(batch)
         returns = self.forward(parsed_batch)
         loss, train_stats = self._get_train_stats(returns, parsed_batch)
@@ -371,14 +369,17 @@ class TrinaryMZPLWrapper(BasePLWrapper):
     def forward(self, parsed_batch, **kwargs):
         mzab, input_dict, target = parsed_batch
         outs = self.encoder(mzab, **input_dict, **kwargs)
-        outs = self.head(outs["emb"])
+        # Additional tokens added for charge/energy/mass
+        num_cem_tokens = sum([self.input_charge, self.input_mass])
+        embeds = outs["emb"][:, num_cem_tokens:, :]
+        outs = self.head(embeds)
         return outs
 
     def _get_losses(self, returns, labels):
         loss = F.cross_entropy(
             returns.transpose(-1, -2),
             labels,
-            reduction="mean",  # TODO: verify that mean reduction is what we want here
+            reduction="mean",
         )
         return loss
 

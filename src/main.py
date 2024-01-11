@@ -19,10 +19,12 @@ import utils
 from loader_parquet import PeptideParser
 
 import models.encoder as encoders
+import models.dc_encoder as dc_encoders
 import models.decoder as decoders
 
 ENCODER_DICT = {
     **encoders.__dict__,
+    **dc_encoders.__dict__,
 }
 DECODER_DICT = {
     **decoders.__dict__,
@@ -183,10 +185,16 @@ def main(args, ds_config=None):
     # ----------- Downstream Finetuning -----------
     # ---------------------------------------------
 
-    # # Load best encoder if pretraining has been done
-    # if args.pretrain:
-    #     encoder_path = pretrainer.checkpoint_callback.state_dict()["best_model_path"]
-    #     pl_encoder.load_from_checkpoint(encoder_path)
+    # Load best encoder if pretraining has been done
+    if args.pretrain:
+        ckpt_str = (
+            "best_model_path"
+            if args.downstream_encoder == "best"
+            else "last_model_path"
+        )
+        encoder_path = pretrainer.checkpoint_callback.state_dict()[ckpt_str]
+        encoder_ckpt = torch.load(encoder_path)
+        pl_encoder.load_state_dict(encoder_ckpt["state_dict"])
 
     datasets_ds, collate_fn_ds, amod_dict = utils.get_ninespecies_dataset_splits(
         args.downstream_root_dir,
@@ -271,5 +279,6 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
+    pl.seed_everything(args.seed)
     # run
     main(args, ds_config)

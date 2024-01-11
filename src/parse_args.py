@@ -48,6 +48,13 @@ def get_args_parser(conf_parser):
         help="Which finetuning task to perform",
     )
     parser.add_argument(
+        "--downstream_encoder",
+        default="best",
+        choices=["best", "last"],
+        type=str,
+        help="If pretraining, use the best/last encoder checkpoint achieved during pretraining",
+    )
+    parser.add_argument(
         "--pretrain",
         default=1,
         type=int,
