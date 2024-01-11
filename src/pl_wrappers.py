@@ -370,7 +370,7 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         mzab, input_dict, target = parsed_batch
         outs = self.encoder(mzab, **input_dict, **kwargs)
         # Additional tokens added for charge/energy/mass
-        num_cem_tokens = sum([self.use_charge, self.use_mass])
+        num_cem_tokens = outs["num_cem_tokens"]
         embeds = outs["emb"][:, num_cem_tokens:, :]
         outs = self.head(embeds)
         return outs

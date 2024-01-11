@@ -336,6 +336,7 @@ class Encoder(nn.Module):
         if return_mask:
             Output["mask"] = mask
 
+        Output["num_cem_tokens"] = 0
         return Output
 
 

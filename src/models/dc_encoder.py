@@ -147,7 +147,11 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
         mask = torch.cat([cem_mask_pos, zeros], dim=1)
 
         encoder_out = self.transformer_encoder(peaks, src_key_padding_mask=mask)
-        return {"emb": encoder_out, "mask": mask}
+        return {
+            "emb": encoder_out,
+            "mask": mask,
+            "num_cem_tokens": precursor_latents.shape[1],
+        }
 
 
 def dc_encoder_base(use_charge=False, use_energy=False, use_mass=False, **kwargs):
