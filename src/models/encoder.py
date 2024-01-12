@@ -1,4 +1,5 @@
 import models.model_parts as mp
+import models.model_parts_pw as pw
 import torch as th
 from torch import nn
 
@@ -47,14 +48,17 @@ class Encoder(nn.Module):
         ce_units=256,  # units for transformation of mzab fourier vectors
         att_d=64,  # attention qkv dimension units
         att_h=4,  # attention qkv heads
-        pairwise_bias=False,  # use pairwise mz tensor to create SA-bias
-        pairwise_units=256,
         ffn_multiplier=4,  # multiply inp units for 1st FFN transform
         depth=9,  # number of transblocks
         prenorm=True,  # normalization before attention/ffn layers
         norm_type="layer",  # normalization type
         preembed=True,  # embed/add charge/energy/mass before FFN
         recycling_its=1,  # recycling iterations
+        pairwise_bias=False,  # use pairwise mz tensor to create SA-bias
+        pairwise_units=128,  # units to project pw tensor to after sinusoidal expansion
+        pw_attention_ch=32,  # triangle_attention_channels
+        pw_attention_h=4,  # triangle attention heads
+        pw_blocks=1,  # number of PairStack blocks for pairwise features
         device=th.device("cpu"),
     ):
         super(Encoder, self).__init__()
@@ -85,9 +89,26 @@ class Encoder(nn.Module):
         self.MzSeq = nn.Sequential(nn.Linear(mdim, mdim), nn.SiLU())
 
         # Pairwise mz
-        # - subidvide and expand based on mz_units, transform to pw_units
-        mdimpw = self.pw_units // 4 if subdivide else self.pw_units
-        self.MzpwSeq = nn.Sequential(nn.Linear(mdim, mdimpw), nn.SiLU())
+        if pairwise_bias:
+            # - subidvide and expand based on mz_units, transform to pw_units
+            mdimpw = self.pw_units // 4 if subdivide else self.pw_units
+            self.MzpwSeq = nn.Sequential(nn.Linear(mdim, mdimpw), nn.SiLU())
+            self.alphapw = nn.Parameter(th.tensor(0.1), requires_grad=True)
+            self.pospw = pw.RelPos(self.msl, 128)
+            # Evolve features
+            multdict = {"in_dim": self.pw_units, "c": 128}
+            attdict = {
+                "in_dim": self.pw_units,
+                "c": pw_attention_ch,
+                "h": pw_attention_h,
+            }
+            ptdict = {"in_dim": self.pw_units, "n": 4}
+            self.PwSeq = nn.Sequential(
+                *[
+                    pw.PairStack(multdict, attdict, ptdict, drop_rate=0)
+                    for m in range(pw_blocks)
+                ]
+            )
 
         # charge/energy/mass embedding transformation
         self.atleast1 = use_charge or use_energy or use_mass
@@ -258,7 +279,12 @@ class Encoder(nn.Module):
         mzab_dic = self.MzAb(x, inp_mask)
         mabemb = mzab_dic["1d"]
         pwemb = mzab_dic["2d"]
-        """mabemb = tf.concat([mabemb, TagArray], axis=-1) # add before self.first"""
+        if self.pairwise_bias:
+            pwemb = pwemb + self.alphapw * self.pospw(
+                x.shape[1]
+            )  # MUST SIZE DYNAMICALLY
+            pwemb = self.PwSeq(pwemb)
+
         out = self.first(mabemb) + self.alpha * self.pos[: x.shape[1]]
 
         # Reycling the embedding with normalization, perhaps dense transform
@@ -310,6 +336,7 @@ class Encoder(nn.Module):
         if return_mask:
             Output["mask"] = mask
 
+        Output["num_cem_tokens"] = 0
         return Output
 
 
@@ -323,22 +350,28 @@ BASE_ARCH_DICT = dict(
     depth=9,
     ffn_multiplier=4,
     prenorm=True,
-    use_charge=False,
-    use_energy=False,
-    use_mass=False,
     recycling_its=1,
 )
 
 
-def encoder_base_arch(**kwargs):
-    model = Encoder(**BASE_ARCH_DICT)
+def encoder_base_arch(use_charge=False, use_energy=False, use_mass=False, **kwargs):
+    model = Encoder(
+        **BASE_ARCH_DICT,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
+    )
     return model
 
 
-def encoder_base_pairwise(**kwargs):
+def encoder_base_pairwise(use_charge=False, use_energy=False, use_mass=False, **kwargs):
     model = Encoder(
         pairwise_bias=True,  # use pairwise mz tensor to create SA-bias
-        pairwise_units=256,
+        pairwise_units=128,
+        pw_blocks=1,
         **BASE_ARCH_DICT,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
     )
     return model

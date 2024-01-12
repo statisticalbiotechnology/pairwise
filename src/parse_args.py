@@ -19,7 +19,7 @@ def get_args_parser(conf_parser):
         "--decoder_model",
         default="",
         type=str,
-        help="Name of the encoder model to train",
+        help="Name of the decoder model to train",
     )
     parser.add_argument(
         "--encoder_weights",
@@ -48,19 +48,32 @@ def get_args_parser(conf_parser):
         help="Which finetuning task to perform",
     )
     parser.add_argument(
+        "--downstream_encoder",
+        default="best",
+        choices=["best", "last"],
+        type=str,
+        help="If pretraining, use the best/last encoder checkpoint achieved during pretraining",
+    )
+    parser.add_argument(
         "--pretrain",
         default=1,
         type=int,
         help="Bool (0/1): toggle pretraining",
     )
     parser.add_argument(
-        "--input_mass",
+        "--use_mass",
         default=0,
         type=int,
         help="Bool (0/1): input precursor mass",
     )
     parser.add_argument(
-        "--input_charge",
+        "--use_energy",
+        default=0,
+        type=int,
+        help="Bool (0/1): input energy",
+    )
+    parser.add_argument(
+        "--use_charge",
         default=0,
         type=int,
         help="Bool (0/1): input precursor charge",
@@ -174,6 +187,12 @@ def get_args_parser(conf_parser):
     )
     parser.add_argument("--log_dir", default="outs/log", help="path where to log")
     parser.add_argument(
+        "--barebones",
+        type=int,
+        default=0,
+        help="Bool (0/1): barebones mode",
+    )
+    parser.add_argument(
         "--save_top_k",
         type=int,
         default=1,
@@ -280,8 +299,9 @@ def sanity_checks(args):
     # make sure int booleans are bool
     args.log_wandb = bool(args.log_wandb)
     args.save_last = bool(args.save_last)
-    args.input_mass = bool(args.input_mass)
-    args.input_charge = bool(args.input_charge)
+    args.use_mass = bool(args.use_mass)
+    args.use_charge = bool(args.use_charge)
+    args.use_energy = bool(args.use_energy)
     args.mask_zero_tokens = bool(args.mask_zero_tokens)
     args.anneal_lr = bool(args.anneal_lr)
     args.scale_lr_by_batchsize = bool(args.scale_lr_by_batchsize)

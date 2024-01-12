@@ -6,7 +6,7 @@ import wandb
 import numpy as np
 import random
 from parse_args import parse_args_and_config, create_output_dirs
-
+import time
 
 from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
 from pl_wrappers import (
@@ -19,10 +19,12 @@ import utils
 from loader_parquet import PeptideParser
 
 import models.encoder as encoders
+import models.dc_encoder as dc_encoders
 import models.decoder as decoders
 
 ENCODER_DICT = {
     **encoders.__dict__,
+    **dc_encoders.__dict__,
 }
 DECODER_DICT = {
     **decoders.__dict__,
@@ -74,17 +76,18 @@ def main(args, ds_config=None):
 
     callbacks = []
     # Checkpoint callback
-    callbacks += [
-        ModelCheckpoint(
-            dirpath=args.output_dir,
-            filename="{epoch}-{val_loss:.2f}",
-            monitor="val_loss",  # requires that we log something called "val_loss"
-            mode="min",
-            save_top_k=args.save_top_k,
-            save_last=args.save_last,
-            every_n_epochs=args.every_n_epochs,
-        )
-    ]
+    if not args.barebones:
+        callbacks += [
+            ModelCheckpoint(
+                dirpath=args.output_dir,
+                filename="{epoch}-{val_loss:.2f}",
+                monitor="val_loss",  # requires that we log something called "val_loss"
+                mode="min",
+                save_top_k=args.save_top_k,
+                save_last=args.save_last,
+                every_n_epochs=args.every_n_epochs,
+            )
+        ]
 
     if args.anneal_lr:
         # Cosine annealing LR with warmup callback
@@ -106,7 +109,11 @@ def main(args, ds_config=None):
     )
 
     # Define encoder model
-    encoder = ENCODER_DICT[args.encoder_model]()
+    encoder = ENCODER_DICT[args.encoder_model](
+        use_charge=args.use_charge,
+        use_mass=args.use_mass,
+        use_energy=args.use_energy,
+    )
 
     if args.pretraining_task not in PRETRAIN_TASK_DICT:
         raise NotImplementedError(
@@ -153,18 +160,22 @@ def main(args, ds_config=None):
             benchmark=True,
             default_root_dir=args.log_dir,
             # profiler="simple",
+            barebones=args.barebones,
         )
 
         if args.resume:
             print(f"Resuming training from trainer state: {args.encoder_weights}")
 
+        start_time = time.time()
         # This is the call to start training the model
         pretrainer.fit(
             pl_encoder, ckpt_path=args.encoder_weights if args.resume else None
         )
+        end_time = time.time()  # End time measurement
+        print(f"Pretraining finished in {end_time - start_time} seconds")
 
         # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
-        if args.save_top_k > 0 and args.pretrain:
+        if args.save_top_k > 0 and args.pretrain and not args.barebones:
             pretrainer.test(ckpt_path="best")
 
     elif args.encoder_weights:
@@ -178,13 +189,22 @@ def main(args, ds_config=None):
     # ----------- Downstream Finetuning -----------
     # ---------------------------------------------
 
-    # # Load best encoder if pretraining has been done
-    # if args.pretrain:
-    #     encoder_path = pretrainer.checkpoint_callback.state_dict()["best_model_path"]
-    #     pl_encoder.load_from_checkpoint(encoder_path)
+    # Load best encoder if pretraining has been done
+    if args.pretrain:
+        ckpt_str = (
+            "best_model_path"
+            if args.downstream_encoder == "best"
+            else "last_model_path"
+        )
+        encoder_path = pretrainer.checkpoint_callback.state_dict()[ckpt_str]
+        encoder_ckpt = torch.load(encoder_path)
+        pl_encoder.load_state_dict(encoder_ckpt["state_dict"])
 
     datasets_ds, collate_fn_ds, amod_dict = utils.get_ninespecies_dataset_splits(
-        args.downstream_root_dir, ds_config, subset=args.subset
+        args.downstream_root_dir,
+        ds_config,
+        max_peaks=args.max_peaks,
+        subset=args.subset,
     )
 
     if args.downstream_task != "none":
@@ -232,13 +252,18 @@ def main(args, ds_config=None):
             benchmark=True,
             default_root_dir=args.log_dir,
             # profiler="simple",
+            # profiler="advanced",
+            barebones=args.barebones,
         )
 
+        start_time = time.time()
         # This is the call to start training the model
         ds_trainer.fit(pl_downstream)
+        end_time = time.time()  # End time measurement
+        print(f"Downstream finetuning finished in {end_time - start_time} seconds")
 
         # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
-        if args.save_top_k > 0:
+        if args.save_top_k > 0 and not args.barebones:
             ds_trainer.test(ckpt_path="best")
 
     # Flag the run as finished to the wandb server
@@ -258,5 +283,6 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
+    pl.seed_everything(args.seed)
     # run
     main(args, ds_config)

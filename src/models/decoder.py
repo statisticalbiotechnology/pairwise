@@ -166,7 +166,7 @@ class Decoder(pl.LightningModule):
     ):
         out, ce_emb = self.EmbedInputs(intseq, charge=charge, energy=energy, mass=mass)
 
-        seqmask = self.sequence_mask(seqlen, max(seqlen))
+        seqmask = self.sequence_mask(seqlen, out.shape[1])  # max(seqlen))
 
         out = self.Main(
             out, kv_feats=kv_feats, embed=ce_emb, spec_mask=specmask, seq_mask=seqmask
@@ -193,6 +193,7 @@ class DenovoDecoder(pl.LightningModule):
         # self.pred_token = self.inpdict['<p>']
         dec_config["num_inp_tokens"] = len(self.inpdict)
 
+        self.predcats = len(self.outdict)
         self.scale = Scale(self.outdict)
 
         self.dec_config = dec_config
@@ -201,7 +202,7 @@ class DenovoDecoder(pl.LightningModule):
         self.initialize_variables()
 
     def prepend_startok(self, intseq):
-        hold = th.zeros(intseq.shape[0], 1, dtype=th.int32, device=self.device)
+        hold = th.zeros(intseq.shape[0], 1, dtype=th.int32, device=intseq.device)
         start = th.fill(hold, self.start_token)
         out = th.cat([start, intseq], dim=1)
 
@@ -525,19 +526,21 @@ class DenovoDecoder(pl.LightningModule):
         bs = enc_out["emb"].shape[0]
         # starting intseq array
         intseq = self.initial_intseq(bs, self.seq_len).to(dev)
+        probs = th.zeros(bs, self.seq_len, self.predcats).to(dev)
         for i in range(self.seq_len):
             index = int(i)
 
             dec_out = self(intseq, enc_out, batdic, False)
 
             predictions = self.greedy(dec_out[:, index])
+            probs[:, index, :] = dec_out[:, index]
 
             if index < self.seq_len - 1:
                 intseq = self.set_tokens(intseq, index + 1, predictions)
 
         intseq = th.cat([intseq[:, 1:], predictions[:, None]], dim=1)
 
-        return intseq
+        return intseq, probs
 
     def correct_sequence_(self, enc_out, batdic, softmax=False):
         bs = enc_out["emb"].shape[0]
@@ -615,47 +618,47 @@ def decoder_greedy_base(token_dict, kv_indim=256, **kwargs):
     return model
 
 
-"""
-def ones(mod, mul=1e-3):
-    #if hasattr(mod, 'weight'):
-    #    parm = mod.weight
-    #    if parm is not None:
-    #        setattr(mod, 'weight', nn.Parameter(mul*th.ones_like(parm)))
-    if hasattr(mod, 'bias'):
-        parm = mod.bias
-        if parm is not None:
-            setattr(mod, 'bias', nn.Parameter(th.zeros_like(parm)))
-    if hasattr(mod, 'eps'):
-        mod.eps = 1e-3
+def decoder_greedy_small(token_dict, kv_indim=256, **kwargs):
+    decoder_config = {
+        "kv_indim": kv_indim,
+        "running_units": 128,
+        "sequence_length": 30,
+        "depth": 6,
+        "d": 64,
+        "h": 4,
+        "ffn_multiplier": 1,
+        "ce_units": 128,
+        "use_charge": True,
+        "use_energy": False,
+        "use_mass": True,
+        "norm_type": "layer",
+        "prenorm": True,
+        "preembed": True,
+        # penultimate_units: #?
+        "pool": False,
+    }
+    model = DenovoDecoder(token_dict, decoder_config, **kwargs)
+    return model
 
-from models.encoder import Encoder
-import yaml
-fpath = '/cmnfs/home/j.lapin/projects/foundational/yaml/downstream.yaml'
-with open(fpath) as stream:
-    config = yaml.safe_load(stream)
-with open("/cmnfs/home/j.lapin/projects/foundational/yaml/datasets.yaml", 'r') as stream:
-    dc = yaml.safe_load(stream)
-with open("/cmnfs/home/j.lapin/projects/foundational/yaml/models.yaml", 'r') as stream:
-    mconf = yaml.safe_load(stream)
 
-#from loaders.loader import LoadObj
-#L = LoadObj(**dc['pretrain'])
-from loaders.loader_parquet import LoaderDS 
-Lds = LoaderDS(config['loader'])
-
-encoder = Encoder(**mconf['encoder_dict'])
-dnvdec = DenovoDecoder(Lds.amod_dic, config['denovo_ar']['head_dict'], encoder)
-
-batch = Lds.load_batch(np.arange(100), SeqInts=True)
-enc_inp = {
-    'x': th.cat([batch['mz'][...,None], batch['ab'][...,None]], dim=-1),
-    'charge': batch['charge'],
-    'mass': batch['mass'],
-    'length': batch['length'],
-    'return_mask': True
-}
-enc_out = encoder(**enc_inp)
-
-out = dnvdec.predict_sequence(enc_out, batch) 
-out = dnvdec.correct_sequence_(enc_out, batch, softmax=True)
-"""
+def decoder_greedy_tiny(token_dict, kv_indim=256, **kwargs):
+    decoder_config = {
+        "kv_indim": kv_indim,
+        "running_units": 32,
+        "sequence_length": 30,
+        "depth": 2,
+        "d": 64,
+        "h": 4,
+        "ffn_multiplier": 1,
+        "ce_units": 32,
+        "use_charge": True,
+        "use_energy": False,
+        "use_mass": True,
+        "norm_type": "layer",
+        "prenorm": True,
+        "preembed": True,
+        # penultimate_units: #?
+        "pool": False,
+    }
+    model = DenovoDecoder(token_dict, decoder_config, **kwargs)
+    return model

@@ -91,9 +91,10 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.weight_decay = args.weight_decay
         self.datasets = datasets
         self.lr = args.lr
-        self.input_charge = args.input_charge
-        self.input_mass = args.input_mass
+        self.use_charge = args.use_charge
+        self.use_mass = args.use_mass
         self.mask_zero_tokens = args.mask_zero_tokens
+        self.log_wandb = args.log_wandb
         self.tracker = BestMetricTracker()
         self.best_metrics_logged = (
             False  # keep track of if the best achieved metrics have been logged
@@ -111,8 +112,8 @@ class BasePLWrapper(ABC, pl.LightningModule):
         return (
             mzab,
             {
-                "mass": spectra["mass"] if self.input_mass else None,
-                "charge": spectra["charge"] if self.input_charge else None,
+                "mass": spectra["mass"] if self.use_mass else None,
+                "charge": spectra["charge"] if self.use_charge else None,
             },
         ), batch_size
 
@@ -175,12 +176,16 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.log_dict(
             {**train_stats},
             on_epoch=True,
+            on_step=True,
             batch_size=batch_size,
             sync_dist=True,
         )
         self.running_train_loss.update(train_stats["train_loss"])
         self.log(
-            "run_train_loss:", self.running_train_loss.get_running_loss(), prog_bar=True
+            "run_train_loss:",
+            self.running_train_loss.get_running_loss(),
+            prog_bar=True,
+            sync_dist=True,
         )
 
         self.manual_backward(loss)
@@ -199,12 +204,16 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.log_dict(
             {**val_stats},
             on_epoch=True,
+            on_step=True,
             batch_size=batch_size,
             sync_dist=True,
         )
         self.running_val_loss.update(val_stats["val_loss"])
         self.log(
-            "run_val_loss:", self.running_val_loss.get_running_loss(), prog_bar=True
+            "run_val_loss:",
+            self.running_val_loss.get_running_loss(),
+            prog_bar=True,
+            sync_dist=True,
         )
         return {"val_stats": val_stats, "returns": returns}
 
@@ -230,6 +239,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             drop_last=True,
             collate_fn=self.collate_fn,
             persistent_workers=self.num_workers > 0,
+            shuffle=True,
         )
 
     def val_dataloader(self):
@@ -311,7 +321,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.log("lr_head", cur_lr_head, on_step=False, on_epoch=True)
 
     def on_train_end(self):
-        if not self.best_metrics_logged:
+        if not self.best_metrics_logged and self.log_wandb:
             self.logger.experiment.log(self.tracker.best_metrics)
 
 
@@ -354,8 +364,8 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         return (
             mzab,
             {
-                "mass": spectra["precursor_mz"] if self.input_mass else None,
-                "charge": spectra["precursor_charge"] if self.input_charge else None,
+                "mass": spectra["precursor_mz"] if self.use_mass else None,
+                "charge": spectra["precursor_charge"] if self.use_charge else None,
                 "length": spectra["lengths"] if self.mask_zero_tokens else None,
             },
             target,
@@ -364,14 +374,17 @@ class TrinaryMZPLWrapper(BasePLWrapper):
     def forward(self, parsed_batch, **kwargs):
         mzab, input_dict, target = parsed_batch
         outs = self.encoder(mzab, **input_dict, **kwargs)
-        outs = self.head(outs["emb"])
+        # Additional tokens added for charge/energy/mass
+        num_cem_tokens = outs["num_cem_tokens"]
+        embeds = outs["emb"][:, num_cem_tokens:, :]
+        outs = self.head(embeds)
         return outs
 
     def _get_losses(self, returns, labels):
         loss = F.cross_entropy(
             returns.transpose(-1, -2),
             labels,
-            reduction="mean",  # TODO: verify that mean reduction is what we want here
+            reduction="mean",
         )
         return loss
 
@@ -448,109 +461,160 @@ class DeNovoPLWrapper(BasePLWrapper):
         self.decoder = decoder
         self.denovo_metrics = DeNovoMetrics()
         self.amod_dict = amod_dict
-        self.int_to_aa = {v: k for k, v in amod_dict.items()}
-        self.null_token = "X"
 
-        assert all(
-            key in self.denovo_metrics.residues
-            for key in self.amod_dict
-            if key != self.null_token
-        ), "All keys except the null token in amod_dict must be in self.denovo_metrics.residues"
+    def _mzab_array(self, batch):
+        mz_arr = batch["mz_array"]
+        int_arr = batch["intensity_array"]
+        mzab = torch.stack([mz_arr, int_arr], dim=-1)
+        return mzab
 
-    def to_aa_sequence(self, int_tensors: torch.Tensor | list):
-        # Check if the input is a Tensor and convert it to a list
-        if isinstance(int_tensors, torch.Tensor):
-            int_tensors = int_tensors.tolist()
-
-        def convert_sequence(seq):
-            # Convert to amino acids and strip null tokens
-            return [
-                self.int_to_aa[i] for i in seq if self.int_to_aa[i] != self.null_token
-            ]
-
-        # Check if the input is a list of lists or a single list
-        if int_tensors and isinstance(int_tensors[0], list):
-            # Convert each sequence in the list of lists into strings
-            aa_sequences = [convert_sequence(seq) for seq in int_tensors]
-        else:
-            # Convert the single sequence into a string
-            aa_sequences = convert_sequence(int_tensors)
-
-        return aa_sequences
-
-    def deepnovo_metrics(self, preds, target, aa_conf, threshold=None):
-        mean_conf = aa_conf.mean(dim=-1)
-        target_str = self.to_aa_sequence(target)
-        pred_str = self.to_aa_sequence(preds)
-        (
-            aa_prec,
-            aa_recall,
-            pep_recall,
-            pep_precision,
-        ) = self.denovo_metrics.compute_precision_recall(
-            target_str, pred_str, aa_conf.tolist()
-        )
-        pep_auc = self.denovo_metrics.calc_auc(target_str, pred_str, mean_conf.tolist())
+    def _encoder_dict(self, batch):
         return {
-            "aa_prec": aa_prec,
-            "aa_recall": aa_recall,
-            "pep_recall": pep_recall,
-            "pep_precision": pep_precision,
-            "pep_auc": pep_auc,
+            "mass": batch["mass"] if self.encoder.use_mass else None,
+            "charge": batch["charge"] if self.encoder.use_charge else None,
+            "length": batch["lengths"] if self.mask_zero_tokens else None,
         }
 
-    def _parse_batch(self, batch):
+    def _decoder_dict(self, batch):
+        return {
+            "mass": batch["mass"] if self.decoder.decoder.use_mass else None,
+            "charge": batch["charge"] if self.decoder.decoder.use_charge else None,
+        }
+
+    def _parse_batch(self, batch, full_seqint=False):
         spectra = batch
-        mz_arr = spectra["mz_array"]
-        int_arr = spectra["intensity_array"]
         intseq = spectra["intseq"]
 
-        batch_size = mz_arr.shape[0]
-        mzab = torch.stack([mz_arr, int_arr], dim=-1)
+        batch_size, sl = spectra["mz_array"].shape
 
-        encoder_input_dict = {
-            "mass": spectra["mass"] if self.input_mass else None,
-            "charge": spectra["charge"] if self.input_charge else None,
-            "length": spectra["lengths"] if self.mask_zero_tokens else None,
-        }
+        # Encoder input - mz/ab
+        mzab = self._mzab_array(spectra)
 
-        decoder_input_dict = {
-            "mass": spectra["mass"] if self.input_mass else None,
-            "charge": spectra["charge"] if self.input_charge else None,
-        }
+        # Take the variable batch['seqint'] and add a start token to the
+        # beginning and null on the end
+        intseq = self.decoder.prepend_startok(batch["intseq"][..., :-1])
 
-        return (mzab, encoder_input_dict, intseq, decoder_input_dict), batch_size
+        # Find the indices first null tokens so that when you choose random
+        # token you avoid trivial trailing null tokens (beyond final null)
+        nonnull = (intseq != self.decoder.inpdict["X"]).type(torch.int32).sum(1)
+
+        # Choose random tokens to predict
+        # - the values of inds will be final non-hidden value in decoder input
+        # - batch['seqint'](inds) will be the target for decoder output
+        # - must use combination of rand() and round() because int32 is not
+        #   yet implemented when feeding vectors into low/high arguments
+        uniform = torch.rand(batch_size, device=nonnull.device) * nonnull
+        inds = uniform.floor().type(torch.int32)
+
+        # Fill with hidden tokens to the end
+        # - this will be the decoder's input
+        intseq_ = self.decoder.fill2c(intseq, inds, "<h>", output=False)
+
+        # Indices of chosen predict tokens
+        # - save for LossFunction
+        inds_ = [torch.arange(inds.shape[0], dtype=torch.int32), inds]
+        self.inds = inds_
+
+        # Target is the actual (intseq) identity of the chosen predict indices
+        targ = (batch["intseq"] if full_seqint else batch["intseq"][inds_]).type(
+            torch.int64
+        )
+
+        # Encoder input - non mz/ab
+        encoder_input_dict = self._encoder_dict(spectra)
+        # encoder_input_dict = {
+        #    "mass": spectra["mass"] if self.encoder.use_mass else None,
+        #    "charge": spectra["charge"] if self.encoder.use_charge else None,
+        #    "length": spectra["lengths"] if self.mask_zero_tokens else None,
+        # }
+
+        # Decoder input
+        decoder_input_dict = self._decoder_dict(batch)
+        # decoder_input_dict = {
+        #    "mass": spectra["mass"] if self.decoder.decoder.use_mass else None,
+        #    "charge": spectra["charge"] if self.decoder.decoder.use_charge else None,
+        # }
+
+        return (mzab, encoder_input_dict, intseq_, decoder_input_dict, targ), batch_size
 
     def forward(self, parsed_batch, **kwargs):
-        mzab, encoder_input_dict, intseq, decoder_input_dict = parsed_batch
+        mzab, encoder_input_dict, intseq, decoder_input_dict, _ = parsed_batch
         outs = self.encoder(mzab, **encoder_input_dict, return_mask=True, **kwargs)
         preds = self.decoder(intseq, outs, decoder_input_dict)
         return preds
 
     def _get_losses(self, preds, labels):
-        preds = torch.einsum("bsc->bcs", preds)
-        loss = F.cross_entropy(preds, labels)
+        targ_one_hot = F.one_hot(labels, self.predcats).type(torch.float32)
+        preds = preds[self.inds]
+        loss = F.cross_entropy(preds, targ_one_hot)
         return loss
 
     def _get_train_stats(self, returns, batch):
-        _, _, intseq, _ = batch
-        logits = returns
-        aa_conf, preds = logits.max(dim=-1)
-        loss = self._get_losses(logits, intseq)
-        naive_metrics = NaiveAccRecPrec(intseq, preds, self.amod_dict["X"])
-        deepnovo_metrics = self.deepnovo_metrics(preds, intseq, aa_conf)
-        stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
+        _, _, intseq, _, targ = batch
+        preds = returns
+        loss = self._get_losses(preds, targ)
+        # naive_metrics = NaiveAccRecPrec(
+        #    intseq, preds.argmax(dim=-1), self.amod_dict["X"]
+        # )
+        stats = {"loss": loss}  # , **naive_metrics}
         return loss, stats
 
-    def _get_eval_stats(self, returns, batch):
-        _, _, intseq, _ = batch
-        logits = returns
-        aa_conf, preds = logits.max(dim=-1)
-        loss = self._get_losses(logits, intseq)
-        naive_metrics = NaiveAccRecPrec(intseq, preds, self.amod_dict["X"])
-        deepnovo_metrics = self.deepnovo_metrics(preds, intseq, aa_conf)
+    def validation_step(self, batch, batch_idx, **kwargs):
+        mzab = self._mzab_array(batch)
+        batch_size = mzab.shape[0]
+        encinpdict = self._encoder_dict(batch)
+        encout = self.encoder(mzab, **encinpdict, return_mask=True, **kwargs)
+        decinpdict = self._decoder_dict(batch)
+        returns, probs = self.decoder.predict_sequence(encout, decinpdict)
+        val_stats = self._get_eval_stats(returns, probs, batch)
+        val_stats = {
+            "val_" + key: val.detach().item() for key, val in val_stats.items()
+        }
+        self.log_dict(
+            {**val_stats},
+            on_epoch=True,
+            batch_size=batch_size,
+            sync_dist=True,
+        )
+        self.running_val_loss.update(val_stats["val_loss"])
+        self.log(
+            "run_val_loss:",
+            self.running_val_loss.get_running_loss(),
+            prog_bar=True,
+            sync_dist=True,
+        )
+        return {"val_stats": val_stats, "returns": returns}
+
+    def _get_eval_stats(self, returns, probs, batch):
+        targ = batch["intseq"]
+        preds = returns[:, : targ.shape[1]]
+
+        scores_ = probs[:, : targ.shape[1]].transpose(-1, -2)
+        loss = F.cross_entropy(scores_, targ)
+        """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
+        naive_metrics = NaiveAccRecPrec(targ, preds, self.amod_dict["X"])
+        deepnovo_metrics = self.deepnovo_metrics(preds, batch["intseq"], scores_)
         stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
         return stats
+
+    def test_step(self, batch, batch_idx, **kwargs):
+        mzab = self._mzab_array(batch)
+        batch_size = mzab.shape[0]
+        encinpdict = self._encoder_dict(batch)
+        encout = self.encoder(mzab, **encinpdict, return_mask=True, **kwargs)
+        decinpdict = self._decoder_dict(batch)
+        returns, probs = self.decoder.predict_sequence(encout, decinpdict)
+        test_stats = self._get_eval_stats(returns, probs, batch)
+        test_stats = {
+            "test_" + key: val.detach().item() for key, val in test_stats.items()
+        }
+        self.log_dict(
+            {**test_stats},
+            on_epoch=True,
+            batch_size=batch_size,
+            sync_dist=True,
+        )
+        return {"test_stats": test_stats, "returns": returns}
 
     def on_validation_epoch_end(self):
         pass
@@ -560,13 +624,13 @@ class DeNovoPLWrapper(BasePLWrapper):
             torch.optim.Adam(
                 self.encoder.parameters(),
                 lr=self.lr,
-                betas=(0.9, 0.9999),
+                betas=(0.9, 0.999),
                 weight_decay=self.weight_decay,
             ),
             torch.optim.Adam(
                 self.decoder.parameters(),
                 lr=self.lr,
-                betas=(0.9, 0.9999),
+                betas=(0.9, 0.999),
                 weight_decay=self.weight_decay,
             ),
         ]
