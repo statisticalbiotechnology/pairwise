@@ -461,6 +461,57 @@ class DeNovoPLWrapper(BasePLWrapper):
         self.decoder = decoder
         self.denovo_metrics = DeNovoMetrics()
         self.amod_dict = amod_dict
+        self.int_to_aa = {v: k for k, v in amod_dict.items()}
+        self.null_token = "X"
+
+        assert all(
+            key in self.denovo_metrics.residues
+            for key in self.amod_dict
+            if key != self.null_token
+        ), "All keys except the null token in amod_dict must be in self.denovo_metrics.residues"
+
+    def to_aa_sequence(self, int_tensors: torch.Tensor | list):
+        # Check if the input is a Tensor and convert it to a list
+        if isinstance(int_tensors, torch.Tensor):
+            int_tensors = int_tensors.tolist()
+
+        def convert_sequence(seq):
+            # Convert to amino acids and strip null tokens
+            return [
+                self.int_to_aa[i] for i in seq if self.int_to_aa[i] != self.null_token
+            ]
+
+        # Check if the input is a list of lists or a single list
+        if int_tensors and isinstance(int_tensors[0], list):
+            # Convert each sequence in the list of lists into strings
+            aa_sequences = [convert_sequence(seq) for seq in int_tensors]
+        else:
+            # Convert the single sequence into a string
+            aa_sequences = convert_sequence(int_tensors)
+
+        return aa_sequences
+
+    def deepnovo_metrics(self, preds, target, aa_conf, threshold=0.9):
+        mean_conf = aa_conf.mean(dim=-1)
+        target_str = self.to_aa_sequence(target)
+        pred_str = self.to_aa_sequence(preds)
+
+        (
+            aa_prec,
+            aa_recall,
+            pep_recall,
+            pep_precision,
+        ) = self.denovo_metrics.compute_precision_recall(
+            target_str, pred_str, mean_conf.tolist(), threshold=threshold
+        )
+        pep_auc = self.denovo_metrics.calc_auc(target_str, pred_str, mean_conf.tolist())
+        return {
+            "aa_prec": aa_prec,
+            "aa_recall": aa_recall,
+            "pep_recall": pep_recall,
+            "pep_precision": pep_precision,
+            "pep_auc": pep_auc,
+        }
 
     def _mzab_array(self, batch):
         mz_arr = batch["mz_array"]
@@ -585,15 +636,17 @@ class DeNovoPLWrapper(BasePLWrapper):
         )
         return {"val_stats": val_stats, "returns": returns}
 
-    def _get_eval_stats(self, returns, probs, batch):
+    def _get_eval_stats(self, returns, logits, batch):
         targ = batch["intseq"]
         preds = returns[:, : targ.shape[1]]
 
-        scores_ = probs[:, : targ.shape[1]].transpose(-1, -2)
-        loss = F.cross_entropy(scores_, targ)
+        logits = logits[:, : targ.shape[1]]
+        logits_ce = logits.transpose(-1, -2)
+        aa_confidence, _ = F.softmax(logits, dim=-1).max(dim=-1)
+        loss = F.cross_entropy(logits_ce, targ)
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
         naive_metrics = NaiveAccRecPrec(targ, preds, self.amod_dict["X"])
-        deepnovo_metrics = self.deepnovo_metrics(preds, batch["intseq"], scores_)
+        deepnovo_metrics = self.deepnovo_metrics(preds, batch["intseq"], aa_confidence)
         stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
         return stats
 
