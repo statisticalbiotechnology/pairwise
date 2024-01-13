@@ -50,6 +50,7 @@ def main(args, ds_config=None):
     print(f"Saving checkpoints in {args.output_dir}")
     print(f"Saving logs in {args.log_dir}")
 
+    config = {**vars(args), "downstream": ds_config}
     # Wandb stuff
     run = None
     logger = None
@@ -57,12 +58,13 @@ def main(args, ds_config=None):
         run = wandb.init(
             project=args.wandb_project,
             entity=args.wandb_entity,
-            config=vars(args),
+            config=config,
             dir=args.log_dir,
             anonymous="allow",
         )
         # this step is for automated hparam sweeping
         update_args(args, dict(run.config))
+        config = dict(run.config)
         logger = WandbLogger()
 
     # lr scaling by batch size trick
@@ -230,6 +232,7 @@ def main(args, ds_config=None):
             datasets=datasets_ds,
             collate_fn=collate_fn_ds,
             amod_dict=amod_dict,
+            conf_threshold=config["downstream"]["conf_threshold"],
         )
 
         print(

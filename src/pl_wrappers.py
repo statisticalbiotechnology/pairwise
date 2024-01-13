@@ -455,14 +455,23 @@ class TrinaryMZPLWrapper(BasePLWrapper):
 
 class DeNovoPLWrapper(BasePLWrapper):
     def __init__(
-        self, encoder, decoder, datasets, args, collate_fn=None, amod_dict=None
+        self,
+        encoder,
+        decoder,
+        datasets,
+        args,
+        collate_fn=None,
+        amod_dict=None,
+        conf_threshold=None,
     ):
         super().__init__(encoder, datasets, args, collate_fn=collate_fn)
         self.decoder = decoder
         self.denovo_metrics = DeNovoMetrics()
         self.amod_dict = amod_dict
+        self.predcats = len(amod_dict)
         self.int_to_aa = {v: k for k, v in amod_dict.items()}
         self.null_token = "X"
+        self.conf_threshold = conf_threshold
 
         assert all(
             key in self.denovo_metrics.residues
@@ -491,7 +500,7 @@ class DeNovoPLWrapper(BasePLWrapper):
 
         return aa_sequences
 
-    def deepnovo_metrics(self, preds, target, aa_conf, threshold=0.9):
+    def deepnovo_metrics(self, preds, target, aa_conf):
         mean_conf = aa_conf.mean(dim=-1)
         target_str = self.to_aa_sequence(target)
         pred_str = self.to_aa_sequence(preds)
@@ -502,7 +511,7 @@ class DeNovoPLWrapper(BasePLWrapper):
             pep_recall,
             pep_precision,
         ) = self.denovo_metrics.compute_precision_recall(
-            target_str, pred_str, mean_conf.tolist(), threshold=threshold
+            target_str, pred_str, mean_conf.tolist(), threshold=self.conf_threshold
         )
         pep_auc = self.denovo_metrics.calc_auc(target_str, pred_str, mean_conf.tolist())
         return {
@@ -619,7 +628,8 @@ class DeNovoPLWrapper(BasePLWrapper):
         returns, probs = self.decoder.predict_sequence(encout, decinpdict)
         val_stats = self._get_eval_stats(returns, probs, batch)
         val_stats = {
-            "val_" + key: val.detach().item() for key, val in val_stats.items()
+            "val_" + key: val.detach().item() if isinstance(val, torch.Tensor) else val
+            for key, val in val_stats.items()
         }
         self.log_dict(
             {**val_stats},
@@ -659,7 +669,8 @@ class DeNovoPLWrapper(BasePLWrapper):
         returns, probs = self.decoder.predict_sequence(encout, decinpdict)
         test_stats = self._get_eval_stats(returns, probs, batch)
         test_stats = {
-            "test_" + key: val.detach().item() for key, val in test_stats.items()
+            "test_" + key: val.detach().item() if isinstance(val, torch.Tensor) else val
+            for key, val in test_stats.items()
         }
         self.log_dict(
             {**test_stats},
