@@ -5,8 +5,8 @@ wandb_project: debug
 wandb_entity: kall
 log_wandb: 1
 num_workers: 16
-matmul_precision: medium
-# precision: bf16-mixed
+matmul_precision: high
+precision: 32-true
 ### Models
 encoder_model: encoder_base_arch
 ###
@@ -15,15 +15,16 @@ min_lr: 0
 warmup_epochs: 0
 ### Training hyperparameters
 batch_size: 100
-blr: 5e-5
-epochs: 10
-input_mass: 1
-input_charge: 1
-max_peaks: 100
+blr: 4e-5
+weight_decay: 0
+epochs: 30
+# use_mass: 1
+# use_charge: 1
+max_peaks: 300
 # Task
 pretrain: 0
 pretraining_task: trinary_mz
 # De novo
 downstream_task: denovo
 decoder_model: decoder_greedy_base
-downstream_root_dir: /proj/bedrock/datasets/9_species
+downstream_root_dir: /proj/bedrock/datasets/9_species_xy
