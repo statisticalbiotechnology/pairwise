@@ -15,7 +15,7 @@ RESIDUES = {
     "P": 97.052764,
     "V": 99.068414,
     "T": 101.047670,
-    "C(+57.02)": 160.030649,
+    "C_+57.02": 160.030649,
     "C": 160.030649,  # V1
     "L": 113.084064,
     "I": 113.084064,
@@ -30,10 +30,10 @@ RESIDUES = {
     "R": 156.101111,
     "Y": 163.063329,
     "W": 186.079313,
-    "M(+15.99)": 147.035400,
-    "M(ox)": 147.035400,  # V1
-    "N(+.98)": 115.026943,
-    "Q(+.98)": 129.042594,
+    "M_+15.99": 147.035400,
+    "M_ox": 147.035400,  # V1
+    "N_+.98": 115.026943,
+    "Q_+.98": 129.042594,
 }
 
 
@@ -165,14 +165,15 @@ class Metrics:
         conf: list[float],
     ) -> float:
         """Calculate the peptide-level AUC."""
-        x, y = self._get_pr_curve(targs, preds, conf)
+        x, y = self._get_pr_curve(targs, preds, np.array(conf))
         recall, precision = np.array(x)[::-1], np.array(y)[::-1]
 
         width = recall[1:] - recall[:-1]
         height = np.minimum(precision[1:], precision[:-1])
         top = np.maximum(precision[1:], precision[:-1])
         side = top - height
-        return (width * height).sum() + 0.5 * (side * width).sum()  # type: ignore
+        auc = (width * height).sum() + 0.5 * (side * width).sum()  # type: ignore
+        return float(auc)
 
     def _get_pr_curve(
         self,
@@ -183,7 +184,7 @@ class Metrics:
     ) -> tuple[list[float], list[float]]:
         x, y = [], []
         t_idx = np.argsort(np.array(conf))
-        t_idx = t_idx[~conf[t_idx].isna()]
+        t_idx = t_idx[~np.isnan(conf[t_idx])]
         t_idx = list(t_idx[(t_idx.shape[0] * np.arange(N) / N).astype(int)]) + [
             t_idx[-1]
         ]

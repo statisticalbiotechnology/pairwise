@@ -1,7 +1,9 @@
+task: denovo
 top_pks: 100
 pep_length: [0, 30]
 charge: [0, 10]
 add_mass: True
+conf_threshold: 0.9
 paths:
   train:
     - train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet
