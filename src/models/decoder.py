@@ -199,6 +199,9 @@ class DenovoDecoder(pl.LightningModule):
         self.dec_config = dec_config
         self.decoder = Decoder(**dec_config)
 
+        self.use_mass = dec_config["use_mass"]
+        self.use_charge = dec_config["use_charge"]
+
         self.initialize_variables()
 
     def prepend_startok(self, intseq):
@@ -521,7 +524,7 @@ class DenovoDecoder(pl.LightningModule):
     # from the dataset. The batch dictionary has any necessary inputs for
     # the decoder.
     # @tf.function
-    def predict_sequence(self, enc_out, batdic):
+    def predict_sequence(self, enc_out, mass=None, charge=None):
         dev = enc_out["emb"].device
         bs = enc_out["emb"].shape[0]
         # starting intseq array
@@ -530,7 +533,9 @@ class DenovoDecoder(pl.LightningModule):
         for i in range(self.seq_len):
             index = int(i)
 
-            dec_out = self(intseq, enc_out, batdic, False)
+            dec_out = self.forward(
+                intseq, enc_out, mass=mass, charge=charge, softmax=False
+            )
 
             predictions = self.greedy(dec_out[:, index])
             probs[:, index, :] = dec_out[:, index]
@@ -575,20 +580,22 @@ class DenovoDecoder(pl.LightningModule):
 
     def forward(
         self,
-        intseq,
+        input_intseq,
         enc_out,
-        batdic,
+        mass=None,
+        charge=None,
+        energy=None,
         softmax=False,
     ):
         dec_inp = self.decinp(
-            intseq,
+            input_intseq,
             enc_out,
-            charge=batdic["charge"],
-            mass=batdic["mass"],
-            energy=None,
+            charge=charge,
+            mass=mass,
+            energy=energy,
         )
 
-        output = self.decoder(**dec_inp)
+        output = self.decoder.forward(**dec_inp)
         if softmax:
             output = th.softmax(output, dim=-1)
 

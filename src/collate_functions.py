@@ -122,7 +122,7 @@ def pad_peaks(
     batch = torch.utils.data.default_collate(batch)
     batch["mz_array"] = mz_array
     batch["intensity_array"] = intensity_array
-    batch["lengths"] = lengths
+    batch["peak_lengths"] = lengths
 
     for key, val in batch.items():
         if isinstance(val, torch.Tensor) and torch.is_floating_point(val):

@@ -1,3 +1,4 @@
+from copy import deepcopy
 import torch
 from torch import nn
 import pytorch_lightning as pl
@@ -124,7 +125,9 @@ class BasePLWrapper(ABC, pl.LightningModule):
             outs = self.head(outs)
         return outs
 
-    @abstractmethod
+    def eval_forward(self, parsed_batch, **kwargs):
+        return self.forward(parsed_batch, **kwargs)
+
     def _get_losses(self, returns, parsed_batch):
         # example
         # preds = returns["preds"]
@@ -195,7 +198,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         parsed_batch, batch_size = self._parse_batch(batch)
-        returns = self.forward(parsed_batch)
+        returns = self.eval_forward(parsed_batch)
         val_stats = self._get_eval_stats(returns, parsed_batch)
         val_stats = {
             "val_" + key: val.detach().item() if isinstance(val, torch.Tensor) else val
@@ -219,7 +222,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         parsed_batch, batch_size = self._parse_batch(batch)
-        returns = self.forward(parsed_batch)
+        returns = self.eval_forward(parsed_batch)
         test_stats = self._get_eval_stats(returns, parsed_batch)
         test_stats = {
             "test_" + key: val.detach().item() if isinstance(val, torch.Tensor) else val
@@ -366,7 +369,7 @@ class TrinaryMZPLWrapper(BasePLWrapper):
             {
                 "mass": spectra["precursor_mz"] if self.use_mass else None,
                 "charge": spectra["precursor_charge"] if self.use_charge else None,
-                "length": spectra["lengths"] if self.mask_zero_tokens else None,
+                "length": spectra["peak_lengths"] if self.mask_zero_tokens else None,
             },
             target,
         ), batch_size
@@ -468,16 +471,171 @@ class DeNovoPLWrapper(BasePLWrapper):
         self.decoder = decoder
         self.denovo_metrics = DeNovoMetrics()
         self.amod_dict = amod_dict
-        self.predcats = len(amod_dict)
+        self.in_dict = deepcopy(self.amod_dict)
+        self.out_dict = deepcopy(self.amod_dict)
         self.int_to_aa = {v: k for k, v in amod_dict.items()}
         self.null_token = "X"
         self.conf_threshold = conf_threshold
+
+        self.SOS = len(amod_dict)
+        self.in_dict["<SOS>"] = self.SOS
+        self.EOS = len(amod_dict)
+        self.out_dict["<EOS>"] = self.EOS
+
+        self.predcats = len(self.out_dict)
 
         assert all(
             key in self.denovo_metrics.residues
             for key in self.amod_dict
             if key != self.null_token
         ), "All keys except the null token in amod_dict must be in self.denovo_metrics.residues"
+
+    def _mzab_array(self, batch):
+        mz_arr = batch["mz_array"]
+        int_arr = batch["intensity_array"]
+        mzab = torch.stack([mz_arr, int_arr], dim=-1)
+        return mzab
+
+    def _encoder_dict(self, batch):
+        return {
+            "mass": batch["mass"] if self.encoder.use_mass else None,
+            "charge": batch["charge"] if self.encoder.use_charge else None,
+            "length": batch["lengths"] if self.mask_zero_tokens else None,
+        }
+
+    def _decoder_dict(self, batch):
+        return {
+            "mass": batch["mass"] if self.decoder.decoder.use_mass else None,
+            "charge": batch["charge"] if self.decoder.decoder.use_charge else None,
+        }
+
+    def _prepend_SOS_tokens(self, intseq: torch.Tensor):
+        batch_size = intseq.shape[0]
+        sos_tokens = torch.tensor([[self.SOS]], device=intseq.device).repeat(
+            (batch_size, 1)
+        )
+        input = torch.cat([sos_tokens, intseq], dim=1)
+        return input
+
+    def _append_EOS_tokens(self, intseq: torch.Tensor, pep_lengths: torch.Tensor):
+        batch_size = intseq.shape[0]
+
+        # append one step of null_tokens
+        null_tokens = torch.tensor(
+            [[self.amod_dict["X"]]], device=intseq.device
+        ).repeat((batch_size, 1))
+        intseq_ = torch.cat([intseq, null_tokens], dim=1)
+
+        # impute self.EOS at positions specificed by pep_lengths
+        impute_inds = [torch.arange(batch_size), pep_lengths.squeeze(1)]
+
+        eos_tokens = torch.tensor([self.EOS], device=intseq.device).repeat((batch_size))
+        intseq_[impute_inds] = eos_tokens
+        return intseq_
+
+    def _input_target(self, batch):
+        intseq = batch["intseq"]  # shape = (batch_size, sequence_len)
+        lengths = batch["peptide_lengths"]
+        input = self._prepend_SOS_tokens(intseq)
+        target = self._append_EOS_tokens(intseq, lengths)
+        return input, target
+
+    def _parse_batch(self, batch):
+        input, target = self._input_target(batch)
+        batch_size = input.shape[0]
+        # Encoder input - mz/ab
+        mzab = self._mzab_array(batch)
+
+        parsed_batch = {
+            "mz_ab": mzab,
+            "mass": batch["mass"],
+            "charge": batch["charge"],
+            "input_intseq": input,
+            "target_intseq": target,
+            "peak_lengths": batch["lengths"],
+            "peptide_lengths": batch["peptide_lengths"],
+        }
+        return parsed_batch, batch_size
+
+    def forward(self, parsed_batch, **kwargs):
+        outs = self.encoder(
+            parsed_batch["mz_ab"],
+            length=parsed_batch["peak_lengths"],
+            mass=parsed_batch["mass"] if self.encoder.use_mass else None,
+            charge=parsed_batch["charge"] if self.encoder.use_charge else None,
+            return_mask=True,
+            **kwargs
+        )
+        preds = self.decoder(
+            parsed_batch["input_intseq"],
+            outs,
+            mass=parsed_batch["mass"] if self.decoder.use_mass else None,
+            charge=parsed_batch["charge"] if self.decoder.use_charge else None,
+        )
+        return preds
+
+    def eval_forward(self, parsed_batch, **kwargs):
+        precursors = parsed_batch["precursors"]
+        outs = self.encoder(
+            parsed_batch["mz_ab"],
+            length=parsed_batch["peak_lengths"],
+            **precursors,
+            return_mask=True,
+            **kwargs
+        )
+        preds = self.decoder.predict_sequence(
+            outs,
+            mass=parsed_batch["mass"] if self.decoder.use_mass else None,
+            charge=parsed_batch["charge"] if self.decoder.use_charge else None,
+        )
+        return preds
+
+    def _get_train_loss(self, logits: torch.Tensor, labels: torch.Tensor):
+        # logits.shape = (batch_size, sequence_len, num_classes)
+        logits = logits.transpose(-2, -1)
+        # logits.shape = (batch_size, num_classes, sequence_len)
+        loss = F.cross_entropy(logits, labels)
+        return loss
+
+    def _get_train_stats(self, returns, parsed_batch):
+        target = parsed_batch["target_intseq"]
+        logits = returns
+        loss = self._get_train_loss(logits, target)
+        stats = {"loss": loss}  # , **naive_metrics}
+        return loss, stats
+
+    def _get_eval_stats(self, returns, logits, batch):
+        targ = batch["intseq"]
+        preds = returns[:, : targ.shape[1]]
+
+        logits = logits[:, : targ.shape[1]]
+        logits_ce = logits.transpose(-1, -2)
+        aa_confidence, _ = F.softmax(logits, dim=-1).max(dim=-1)
+        loss = F.cross_entropy(logits_ce, targ)
+        """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
+        naive_metrics = NaiveAccRecPrec(targ, preds, self.amod_dict["X"])
+        deepnovo_metrics = self.deepnovo_metrics(preds, batch["intseq"], aa_confidence)
+        stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
+        return stats
+
+    def on_validation_epoch_end(self):
+        pass
+
+    def configure_optimizers(self):
+        return [
+            torch.optim.Adam(
+                self.encoder.parameters(),
+                lr=self.lr,
+                betas=(0.9, 0.999),
+                weight_decay=self.weight_decay,
+            ),
+            torch.optim.Adam(
+                self.decoder.parameters(),
+                lr=self.lr,
+                betas=(0.9, 0.999),
+                weight_decay=self.weight_decay,
+            ),
+        ]
 
     def to_aa_sequence(self, int_tensors: torch.Tensor | list):
         # Check if the input is a Tensor and convert it to a list
@@ -521,180 +679,3 @@ class DeNovoPLWrapper(BasePLWrapper):
             "pep_precision": pep_precision,
             "pep_auc": pep_auc,
         }
-
-    def _mzab_array(self, batch):
-        mz_arr = batch["mz_array"]
-        int_arr = batch["intensity_array"]
-        mzab = torch.stack([mz_arr, int_arr], dim=-1)
-        return mzab
-
-    def _encoder_dict(self, batch):
-        return {
-            "mass": batch["mass"] if self.encoder.use_mass else None,
-            "charge": batch["charge"] if self.encoder.use_charge else None,
-            "length": batch["lengths"] if self.mask_zero_tokens else None,
-        }
-
-    def _decoder_dict(self, batch):
-        return {
-            "mass": batch["mass"] if self.decoder.decoder.use_mass else None,
-            "charge": batch["charge"] if self.decoder.decoder.use_charge else None,
-        }
-
-    def _parse_batch(self, batch, full_seqint=False):
-        spectra = batch
-        intseq = spectra["intseq"]
-
-        batch_size, sl = spectra["mz_array"].shape
-
-        # Encoder input - mz/ab
-        mzab = self._mzab_array(spectra)
-
-        # Take the variable batch['seqint'] and add a start token to the
-        # beginning and null on the end
-        intseq = self.decoder.prepend_startok(batch["intseq"][..., :-1])
-
-        # Find the indices first null tokens so that when you choose random
-        # token you avoid trivial trailing null tokens (beyond final null)
-        nonnull = (intseq != self.decoder.inpdict["X"]).type(torch.int32).sum(1)
-
-        # Choose random tokens to predict
-        # - the values of inds will be final non-hidden value in decoder input
-        # - batch['seqint'](inds) will be the target for decoder output
-        # - must use combination of rand() and round() because int32 is not
-        #   yet implemented when feeding vectors into low/high arguments
-        uniform = torch.rand(batch_size, device=nonnull.device) * nonnull
-        inds = uniform.floor().type(torch.int32)
-
-        # Fill with hidden tokens to the end
-        # - this will be the decoder's input
-        intseq_ = self.decoder.fill2c(intseq, inds, "<h>", output=False)
-
-        # Indices of chosen predict tokens
-        # - save for LossFunction
-        inds_ = [torch.arange(inds.shape[0], dtype=torch.int32), inds]
-        self.inds = inds_
-
-        # Target is the actual (intseq) identity of the chosen predict indices
-        targ = (batch["intseq"] if full_seqint else batch["intseq"][inds_]).type(
-            torch.int64
-        )
-
-        # Encoder input - non mz/ab
-        encoder_input_dict = self._encoder_dict(spectra)
-        # encoder_input_dict = {
-        #    "mass": spectra["mass"] if self.encoder.use_mass else None,
-        #    "charge": spectra["charge"] if self.encoder.use_charge else None,
-        #    "length": spectra["lengths"] if self.mask_zero_tokens else None,
-        # }
-
-        # Decoder input
-        decoder_input_dict = self._decoder_dict(batch)
-        # decoder_input_dict = {
-        #    "mass": spectra["mass"] if self.decoder.decoder.use_mass else None,
-        #    "charge": spectra["charge"] if self.decoder.decoder.use_charge else None,
-        # }
-
-        return (mzab, encoder_input_dict, intseq_, decoder_input_dict, targ), batch_size
-
-    def forward(self, parsed_batch, **kwargs):
-        mzab, encoder_input_dict, intseq, decoder_input_dict, _ = parsed_batch
-        outs = self.encoder(mzab, **encoder_input_dict, return_mask=True, **kwargs)
-        preds = self.decoder(intseq, outs, decoder_input_dict)
-        return preds
-
-    def _get_losses(self, preds, labels):
-        targ_one_hot = F.one_hot(labels, self.predcats).type(torch.float32)
-        preds = preds[self.inds]
-        loss = F.cross_entropy(preds, targ_one_hot)
-        return loss
-
-    def _get_train_stats(self, returns, batch):
-        _, _, intseq, _, targ = batch
-        preds = returns
-        loss = self._get_losses(preds, targ)
-        # naive_metrics = NaiveAccRecPrec(
-        #    intseq, preds.argmax(dim=-1), self.amod_dict["X"]
-        # )
-        stats = {"loss": loss}  # , **naive_metrics}
-        return loss, stats
-
-    def validation_step(self, batch, batch_idx, **kwargs):
-        mzab = self._mzab_array(batch)
-        batch_size = mzab.shape[0]
-        encinpdict = self._encoder_dict(batch)
-        encout = self.encoder(mzab, **encinpdict, return_mask=True, **kwargs)
-        decinpdict = self._decoder_dict(batch)
-        returns, probs = self.decoder.predict_sequence(encout, decinpdict)
-        val_stats = self._get_eval_stats(returns, probs, batch)
-        val_stats = {
-            "val_" + key: val.detach().item() if isinstance(val, torch.Tensor) else val
-            for key, val in val_stats.items()
-        }
-        self.log_dict(
-            {**val_stats},
-            on_epoch=True,
-            batch_size=batch_size,
-            sync_dist=True,
-        )
-        self.running_val_loss.update(val_stats["val_loss"])
-        self.log(
-            "run_val_loss:",
-            self.running_val_loss.get_running_loss(),
-            prog_bar=True,
-            sync_dist=True,
-        )
-        return {"val_stats": val_stats, "returns": returns}
-
-    def _get_eval_stats(self, returns, logits, batch):
-        targ = batch["intseq"]
-        preds = returns[:, : targ.shape[1]]
-
-        logits = logits[:, : targ.shape[1]]
-        logits_ce = logits.transpose(-1, -2)
-        aa_confidence, _ = F.softmax(logits, dim=-1).max(dim=-1)
-        loss = F.cross_entropy(logits_ce, targ)
-        """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
-        naive_metrics = NaiveAccRecPrec(targ, preds, self.amod_dict["X"])
-        deepnovo_metrics = self.deepnovo_metrics(preds, batch["intseq"], aa_confidence)
-        stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
-        return stats
-
-    def test_step(self, batch, batch_idx, **kwargs):
-        mzab = self._mzab_array(batch)
-        batch_size = mzab.shape[0]
-        encinpdict = self._encoder_dict(batch)
-        encout = self.encoder(mzab, **encinpdict, return_mask=True, **kwargs)
-        decinpdict = self._decoder_dict(batch)
-        returns, probs = self.decoder.predict_sequence(encout, decinpdict)
-        test_stats = self._get_eval_stats(returns, probs, batch)
-        test_stats = {
-            "test_" + key: val.detach().item() if isinstance(val, torch.Tensor) else val
-            for key, val in test_stats.items()
-        }
-        self.log_dict(
-            {**test_stats},
-            on_epoch=True,
-            batch_size=batch_size,
-            sync_dist=True,
-        )
-        return {"test_stats": test_stats, "returns": returns}
-
-    def on_validation_epoch_end(self):
-        pass
-
-    def configure_optimizers(self):
-        return [
-            torch.optim.Adam(
-                self.encoder.parameters(),
-                lr=self.lr,
-                betas=(0.9, 0.999),
-                weight_decay=self.weight_decay,
-            ),
-            torch.optim.Adam(
-                self.decoder.parameters(),
-                lr=self.lr,
-                betas=(0.9, 0.999),
-                weight_decay=self.weight_decay,
-            ),
-        ]
