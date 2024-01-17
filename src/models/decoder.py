@@ -182,13 +182,16 @@ class Decoder(pl.LightningModule):
 class DenovoDecoder(pl.LightningModule):
     def __init__(self, token_dict, dec_config):
         super(DenovoDecoder, self).__init__()
-        self.outdict = deepcopy(token_dict)
-        self.inpdict = deepcopy(token_dict)
+        # self.outdict = deepcopy(token_dict)
+        # self.inpdict = deepcopy(token_dict)
+        raise NotImplementedError(
+            "Make sure the model accepts the amod, input and output dicts instead"
+        )
         self.NT = self.outdict["X"]
-        self.inpdict["<s>"] = len(self.inpdict)
-        self.start_token = self.inpdict["<s>"]
-        self.inpdict["<h>"] = len(self.inpdict)
-        self.hidden_token = self.inpdict["<h>"]
+        # self.inpdict["<s>"] = len(self.inpdict)
+        # self.start_token = self.inpdict["<s>"]
+        # self.inpdict["<h>"] = len(self.inpdict)
+        # self.hidden_token = self.inpdict["<h>"]
         # self.inpdict['<p>'] = len(self.inpdict)
         # self.pred_token = self.inpdict['<p>']
         dec_config["num_inp_tokens"] = len(self.inpdict)
@@ -602,9 +605,9 @@ class DenovoDecoder(pl.LightningModule):
         return output
 
 
-def decoder_greedy_base(token_dict, kv_indim=256, **kwargs):
+def decoder_greedy_base(token_dict, d_model=256, **kwargs):
     decoder_config = {
-        "kv_indim": kv_indim,
+        "kv_indim": d_model,
         "running_units": 512,
         "sequence_length": 30,
         "depth": 9,
@@ -625,9 +628,9 @@ def decoder_greedy_base(token_dict, kv_indim=256, **kwargs):
     return model
 
 
-def decoder_greedy_small(token_dict, kv_indim=256, **kwargs):
+def decoder_greedy_small(token_dict, d_model=256, **kwargs):
     decoder_config = {
-        "kv_indim": kv_indim,
+        "kv_indim": d_model,
         "running_units": 128,
         "sequence_length": 30,
         "depth": 6,
@@ -648,9 +651,9 @@ def decoder_greedy_small(token_dict, kv_indim=256, **kwargs):
     return model
 
 
-def decoder_greedy_tiny(token_dict, kv_indim=256, **kwargs):
+def decoder_greedy_tiny(token_dict, d_model=256, **kwargs):
     decoder_config = {
-        "kv_indim": kv_indim,
+        "kv_indim": d_model,
         "running_units": 32,
         "sequence_length": 30,
         "depth": 2,
