@@ -8,10 +8,21 @@ import torch.nn as nn
 from depthcharge.transformers.peptides import generate_tgt_mask
 
 
+def generate_causal_tgt_mask(sz: int) -> torch.Tensor:
+    """Generate a square causal mask for the sequence.
+
+    Parameters
+    ----------
+    sz : int
+        The length of the target sequence.
+    """
+    return torch.triu(torch.ones((sz, sz), dtype=torch.bool), diagonal=1)
+
+
 class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecoder):
     def __init__(
         self,
-        amod_dict: dict,
+        token_dicts: dict,
         d_model: int = 128,
         nhead: int = 8,
         dim_feedforward: int = 1024,
@@ -23,10 +34,18 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
         use_charge: bool = True,
         max_seq_len: int = 30,
     ) -> None:
-        self.amod_dict = amod_dict
-        n_tokens = len(amod_dict)
+        self.amod_dict = token_dicts["amod_dict"]
+        self.input_dict = token_dicts["input_dict"]
+        self.SOS = self.input_dict["<SOS>"]
+        self.output_dict = token_dicts["output_dict"]
+        self.EOS = self.output_dict["<EOS>"]
+
+        self.num_input_tokens = len(self.input_dict)
+        self.num_output_tokens = len(self.output_dict)
+
         super().__init__(
-            n_tokens,
+            self.num_input_tokens
+            - 1,  # depthcharge already adds one for the start token
             d_model,
             nhead,
             dim_feedforward,
@@ -35,19 +54,26 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
             positional_encoder,
             max_charge,
         )
-        self.n_tokens = n_tokens
+
+        self.d_model = d_model
         self.use_mass = use_mass
         self.use_charge = use_charge
         self.max_seq_len = max_seq_len
-        self.start_token = len(amod_dict)
-        self.null_token = self.amod_dict["X"]
+
+        # Override the final projection with
+        # the correct num_classes
+        self.final = torch.nn.Linear(
+            d_model,
+            self.num_output_tokens,
+        )
 
     def forward(
         self,
-        intseq: torch.Tensor | None,
+        input_intseq: torch.Tensor,
         encoder_out: dict[torch.Tensor],
-        precusor_dict: dict | None,
-        include_null_in_tgt: bool = True,
+        mass: torch.Tensor | None = None,
+        charge: torch.Tensor | None = None,
+        peptide_lengths: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Predict the next amino acid for a collection of sequences.
 
@@ -62,8 +88,13 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
                 ``SpectrumEncoder``.
             "mask" : torch.Tensor of shape (batch_size, n_peaks)
                 The mask that indicates which elements of ``memory`` are padding.
-        precursor_dict : dict of torch.Tensors of size (batch_size, 1)
-            with keys "mass", "charge".
+        mass: float torch.Tensor of size (batch_size, 1)
+            precursor mass
+        charge: int torch.Tensor of size (batch_size, 1)
+            precursor charge
+        peptide_lengths: int torch.Tensor of size (batch_size, 1)
+            length of the ground-truth peptides. used during training for key_padding_mask
+
         Returns
         -------
         output_dict: dict
@@ -81,138 +112,108 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
         memory_key_padding_mask = encoder_out["mask"]
         batch_size = memory.shape[0]
 
-        start_tokens = torch.tensor(
-            [[self.start_token]], dtype=torch.long, device=self.device
-        ).repeat((batch_size, 1))
-        # Prepare sequences
-        if intseq is None:
-            intseq_ = start_tokens
-        else:
-            intseq_ = torch.cat([start_tokens, intseq], dim=1)
-
         # Encode tokens:
-        tokens = self.aa_encoder(intseq_)
+        tokens = self.aa_encoder(input_intseq)
 
-        # Additional tokens for charge/energy/mass/start
-        num_start_tokens = 1
-
-        # Encode and concat precursor info
-        if precusor_dict:
-            if "mass" in precusor_dict:
-                masses = self.mass_encoder(precusor_dict["mass"][:, None])
+        if mass is not None and charge is not None:
+            # Encode and concat precursor info
+            if mass is not None:
+                masses = self.mass_encoder(mass[:, None])
                 if not self.use_mass:
-                    warnings.warn(
-                        f"This model is not trained to include precursor mass"
-                    )
+                    warnings.warn("Not trained to include precursor mass")
             else:
                 masses = 0
-            if "charge" in precusor_dict:
-                charges = self.charge_encoder(precusor_dict["charge"].int() - 1)
+            if charge is not None:
+                charges = self.charge_encoder(charge.int() - 1)
                 charges = charges[:, None, :]
                 if not self.use_charge:
-                    warnings.warn(
-                        f"This model is not trained to include precursor charge"
-                    )
+                    warnings.warn("Not trained to include precursor charge")
             else:
                 charges = 0
             precursors = masses + charges
-
-            tgt = torch.cat([precursors, tokens], dim=1)
-            num_start_tokens += 1
         else:
-            tgt = tokens
+            empty = [[[]] * self.d_model] * batch_size
+            precursors = torch.tensor(empty, device=self.device).transpose(-2, -1)
 
-        # Feed through model:
-        # tgt_key_padding_mask = tgt.sum(axis=2) == 0
+        # Concat precursors
+        num_precursor_tokens = precursors.shape[1]
+        tgt = torch.cat([precursors, tokens], dim=1)
 
-        pad_mask = self.get_padding_mask(intseq, num_start_tokens, include_null=True)
-        # pad_mask = torch.tensor([[False]], device=intseq.device).repeat(
-        #     (batch_size, tgt.shape[1])
-        # )
         tgt = self.positional_encoder(tgt)
-        tgt_mask = generate_tgt_mask(tgt.shape[1]).to(self.device)
+
+        # Causal mask
+        # tgt_mask = generate_tgt_mask(tgt.shape[1]).to(self.device)
+        tgt_mask = generate_causal_tgt_mask(tgt.shape[1]).to(self.device)
+
+        # Forward
         dec_embeds = self.transformer_decoder.forward(
             tgt=tgt,
             memory=memory,
             tgt_mask=tgt_mask,
             # tgt_is_causal=True,
-            tgt_key_padding_mask=pad_mask,
+            tgt_key_padding_mask=None,
             memory_key_padding_mask=memory_key_padding_mask,
         )
         logits = self.final(dec_embeds)
-        logits = logits[:, num_start_tokens:, :]  # remove c/e/m/start tokens
 
-        target_inds = self.get_target_inds(intseq, include_null=True)
-        return {"logits": logits, "target_inds": target_inds, "intseq": intseq}
+        # Remove precursor token(s)
+        logits = logits[:, num_precursor_tokens:, :]
 
-    def get_padding_mask(self, intseq, num_start_tokens, include_null=True):
-        batch_size = intseq.shape[0]
-        nonnull = (
-            (intseq != self.amod_dict["X"]).type(torch.int32).sum(dim=1, keepdim=True)
-        )
+        # Create padding mask for the loss
+        # True == pad_token
+        # False == normal token (incl start)
+        if peptide_lengths is None:
+            padding_mask = None
+        else:
+            padding_mask = self.get_padding_mask(
+                input_intseq,
+                peptide_lengths,
+                0,
+            )
+        return {"logits": logits, "padding_mask": padding_mask}
 
-        if include_null:
-            # Add 1 to the entries that include the null_token,
-            # so that the null_token has a chance to be included as well
-            lens = torch.ones((intseq.shape[0], 1)).type_as(intseq) * intseq.shape[1]
-            with_null = nonnull != lens
-            nonnull[with_null] += 1
+    def get_padding_mask(self, input_intseq, peptide_lengths, num_extra_tokens):
+        batch_size = input_intseq.shape[0]
 
-        tiles = (
-            torch.arange(intseq.shape[1])
+        total_len = peptide_lengths + num_extra_tokens
+        inds = (
+            torch.arange(
+                input_intseq.shape[1] + num_extra_tokens, device=input_intseq.device
+            )
             .unsqueeze(0)
-            .tile(intseq.shape[0], 1)
-            .type_as(intseq)
+            .repeat((batch_size, 1))
         )
-        pad_mask = tiles >= nonnull
-        extra_pads = torch.tensor([[False]], device=pad_mask.device).repeat(
-            (batch_size, num_start_tokens)
-        )
-        pad_mask = torch.cat([extra_pads, pad_mask], dim=1)
+        pad_mask = inds > total_len
         return pad_mask
 
-    def get_target_inds(self, intseq: torch.Tensor, include_null=True):
-        nonnull = (
-            (intseq != self.amod_dict["X"]).type(torch.int32).sum(dim=1, keepdim=True)
-        )
-
-        if include_null:
-            # Add 1 to the entries that include the null_token,
-            # so that the null_token has a chance to be included as well
-            lens = torch.ones((intseq.shape[0], 1)).type_as(intseq) * intseq.shape[1]
-            with_null = nonnull != lens
-            nonnull[with_null] += 1
-
-        uniform = torch.rand((intseq.shape[0], 1), device=nonnull.device) * nonnull
-        inds = uniform.floor().type(torch.int32).squeeze(1)
-
-        inds_ = [torch.arange(inds.shape[0], dtype=torch.int32), inds]
-        return inds_
-
     def predict_sequence(
-        self, enc_out: dict[torch.Tensor], precursor_dict: dict[torch.Tensor]
+        self,
+        enc_out: dict[torch.Tensor],
+        mass: torch.Tensor | None = None,
+        charge: torch.Tensor | None = None,
     ):
         batch_size = enc_out["emb"].shape[0]
 
         # Initialize output tensors
-        intseq = torch.tensor(
-            [[self.null_token]], dtype=torch.long, device=self.device
+        input_intseq = torch.tensor(
+            [[self.SOS]], dtype=torch.long, device=self.device
         ).repeat((batch_size, 1))
-        logits = torch.zeros(batch_size, self.max_seq_len, self.n_tokens).type_as(
-            enc_out["emb"]
-        )
+
+        logits = torch.zeros(
+            batch_size, self.max_seq_len, self.num_output_tokens
+        ).type_as(enc_out["emb"])
 
         # Gather predictions (fixed length loop)
         for i in range(0, self.max_seq_len):
-            dec_out = self.forward(intseq, enc_out, precursor_dict)
+            dec_out = self.forward(input_intseq, enc_out, mass=mass, charge=charge)
             cur_logits = dec_out["logits"]
 
             predictions = self.greedy(cur_logits[:, i])
             logits[:, i, :] = cur_logits[:, i]
 
-            intseq = torch.cat([intseq, predictions], dim=1)
+            input_intseq = torch.cat([input_intseq, predictions], dim=1)
 
-        return intseq[:, 1:], logits
+        return input_intseq[:, 1:], logits
 
     def greedy(self, predict_logits: torch.Tensor):
         return predict_logits.argmax(dim=-1, keepdim=True).type(torch.int32)

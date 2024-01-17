@@ -1,3 +1,4 @@
+from copy import deepcopy
 import pandas as pd
 import numpy as np
 import torch as th
@@ -99,6 +100,10 @@ class PeptideParser:
         self.maxsl = config["pep_length"][1]  # + 1 # plus start token
         self.filter_charge(config["charge"][0], config["charge"][1])
         self.token_dict()
+        self.input_dict = deepcopy(self.amod_dic)
+        self.input_dict["<SOS>"] = len(self.amod_dic)
+        self.output_dict = deepcopy(self.amod_dic)
+        self.output_dict["<EOS>"] = len(self.amod_dic)
 
         self.scale = Scale(self.amod_dic)
         self.inds = {}
@@ -160,7 +165,12 @@ class PeptideParser:
         print("Found %d aa-mod combinations." % (len(self.amod_dic) - 1))
 
     def get_data(self):
-        return self.dfs, self.amod_dic
+        token_dicts = {
+            "amod_dict": self.amod_dic,
+            "input_dict": self.input_dict,
+            "output_dict": self.output_dict,
+        }
+        return self.dfs, token_dicts
 
 
 class PeptideDataset(Dataset):

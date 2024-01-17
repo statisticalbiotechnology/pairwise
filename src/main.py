@@ -21,6 +21,7 @@ from loader_parquet import PeptideParser
 import models.encoder as encoders
 import models.dc_encoder as dc_encoders
 import models.decoder as decoders
+import models.dc_decoder as dc_decoders
 
 ENCODER_DICT = {
     **encoders.__dict__,
@@ -28,6 +29,7 @@ ENCODER_DICT = {
 }
 DECODER_DICT = {
     **decoders.__dict__,
+    **dc_decoders.__dict__,
 }
 
 PRETRAIN_TASK_DICT = {
@@ -202,7 +204,7 @@ def main(args, ds_config=None):
         encoder_ckpt = torch.load(encoder_path)
         pl_encoder.load_state_dict(encoder_ckpt["state_dict"])
 
-    datasets_ds, collate_fn_ds, amod_dict = utils.get_ninespecies_dataset_splits(
+    datasets_ds, collate_fn_ds, token_dicts = utils.get_ninespecies_dataset_splits(
         args.downstream_root_dir,
         ds_config,
         max_peaks=args.max_peaks,
@@ -219,7 +221,7 @@ def main(args, ds_config=None):
             args.decoder_model
         ), f"argument decoder_model must be provided when downstream finetuning"
         decoder = DECODER_DICT[args.decoder_model](
-            amod_dict, kv_indim=encoder.running_units
+            token_dicts, d_model=encoder.running_units
         )
 
         if run is not None and utils.get_rank() == 0:
@@ -231,7 +233,7 @@ def main(args, ds_config=None):
             args=args,
             datasets=datasets_ds,
             collate_fn=collate_fn_ds,
-            amod_dict=amod_dict,
+            token_dicts=token_dicts,
             conf_threshold=config["downstream"]["conf_threshold"],
         )
 
@@ -257,6 +259,7 @@ def main(args, ds_config=None):
             # profiler="simple",
             # profiler="advanced",
             barebones=args.barebones,
+            # num_sanity_val_steps=0,
         )
 
         start_time = time.time()
