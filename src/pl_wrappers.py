@@ -12,12 +12,12 @@ from denovo_eval import Metrics as DeNovoMetrics
 from models.heads import ClassifierHead
 
 
-def NaiveAccRecPrec(target, prediction, null_value):
+def NaiveAccRecPrec(target, prediction, null_token):
     correct_bool = (target == prediction).type(torch.int32)
     num_correct = correct_bool.sum()
-    recall_bool = target != null_value
+    recall_bool = target != null_token
     recsum = correct_bool[recall_bool].sum()
-    prec_bool = prediction != null_value
+    prec_bool = prediction != null_token
     precsum = correct_bool[prec_bool].sum()
     total = target.shape[0] * target.shape[1]
     return {
@@ -25,6 +25,22 @@ def NaiveAccRecPrec(target, prediction, null_value):
         "recall_naive": recsum / recall_bool.sum(),
         "precision_naive": precsum / prec_bool.sum(),
     }
+
+
+def fill_null_after_first_EOS(prediction, null_token, EOS_token):
+    pred_without_eos = prediction.clone()
+    eos_mask = prediction == EOS_token
+    # Find the position of the first predicted EOS token
+    eos_positions = torch.argmax(eos_mask.int(), dim=1)
+
+    inds = (
+        torch.arange(prediction.shape[1], device=prediction.device)
+        .unsqueeze(0)
+        .repeat((prediction.shape[0], 1))
+    )
+    forward_fill_mask = inds > torch.ones_like(inds) * eos_positions.unsqueeze(1)
+    pred_without_eos[forward_fill_mask] = null_token
+    return pred_without_eos
 
 
 class RunningWindowLoss:
@@ -464,25 +480,23 @@ class DeNovoPLWrapper(BasePLWrapper):
         datasets,
         args,
         collate_fn=None,
-        amod_dict=None,
+        token_dicts=None,
         conf_threshold=None,
     ):
         super().__init__(encoder, datasets, args, collate_fn=collate_fn)
         self.decoder = decoder
         self.denovo_metrics = DeNovoMetrics()
-        self.amod_dict = amod_dict
-        self.in_dict = deepcopy(self.amod_dict)
-        self.out_dict = deepcopy(self.amod_dict)
-        self.int_to_aa = {v: k for k, v in amod_dict.items()}
+        self.amod_dict = token_dicts["amod_dict"]
+        self.int_to_aa = {v: k for k, v in self.amod_dict.items()}
         self.null_token = "X"
         self.conf_threshold = conf_threshold
 
-        self.SOS = len(amod_dict)
-        self.in_dict["<SOS>"] = self.SOS
-        self.EOS = len(amod_dict)
-        self.out_dict["<EOS>"] = self.EOS
+        self.input_dict = token_dicts["input_dict"]
+        self.SOS = self.input_dict["<SOS>"]
+        self.output_dict = token_dicts["output_dict"]
+        self.EOS = self.output_dict["<EOS>"]
 
-        self.predcats = len(self.out_dict)
+        self.predcats = len(self.output_dict)
 
         assert all(
             key in self.denovo_metrics.residues
@@ -552,7 +566,7 @@ class DeNovoPLWrapper(BasePLWrapper):
             "charge": batch["charge"],
             "input_intseq": input,
             "target_intseq": target,
-            "peak_lengths": batch["lengths"],
+            "peak_lengths": batch["peak_lengths"],
             "peptide_lengths": batch["peptide_lengths"],
         }
         return parsed_batch, batch_size
@@ -571,15 +585,16 @@ class DeNovoPLWrapper(BasePLWrapper):
             outs,
             mass=parsed_batch["mass"] if self.decoder.use_mass else None,
             charge=parsed_batch["charge"] if self.decoder.use_charge else None,
+            peptide_lengths=parsed_batch["peptide_lengths"],
         )
         return preds
 
     def eval_forward(self, parsed_batch, **kwargs):
-        precursors = parsed_batch["precursors"]
         outs = self.encoder(
             parsed_batch["mz_ab"],
             length=parsed_batch["peak_lengths"],
-            **precursors,
+            mass=parsed_batch["mass"] if self.encoder.use_mass else None,
+            charge=parsed_batch["charge"] if self.encoder.use_charge else None,
             return_mask=True,
             **kwargs
         )
@@ -590,31 +605,42 @@ class DeNovoPLWrapper(BasePLWrapper):
         )
         return preds
 
-    def _get_train_loss(self, logits: torch.Tensor, labels: torch.Tensor):
+    def _get_train_loss(
+        self, logits: torch.Tensor, labels: torch.Tensor, padding_mask: torch.Tensor
+    ):
         # logits.shape = (batch_size, sequence_len, num_classes)
         logits = logits.transpose(-2, -1)
         # logits.shape = (batch_size, num_classes, sequence_len)
-        loss = F.cross_entropy(logits, labels)
-        return loss
+        loss = F.cross_entropy(logits, labels, reduction="none")
+        masked_loss = loss * padding_mask
+        return masked_loss.mean()
 
     def _get_train_stats(self, returns, parsed_batch):
         target = parsed_batch["target_intseq"]
-        logits = returns
-        loss = self._get_train_loss(logits, target)
+        logits = returns["logits"]
+        padding_mask = (~returns["padding_mask"]).int()
+        loss = self._get_train_loss(logits, target, padding_mask)
         stats = {"loss": loss}  # , **naive_metrics}
         return loss, stats
 
-    def _get_eval_stats(self, returns, logits, batch):
-        targ = batch["intseq"]
-        preds = returns[:, : targ.shape[1]]
+    def _get_eval_stats(self, returns, parsed_batch):
+        targ = parsed_batch["target_intseq"]
+        preds, logits = returns
 
+        preds = preds[:, : targ.shape[1]]
         logits = logits[:, : targ.shape[1]]
+
+        preds_ffill = fill_null_after_first_EOS(
+            preds, null_token=self.amod_dict["X"], EOS_token=self.EOS
+        )
+
         logits_ce = logits.transpose(-1, -2)
         aa_confidence, _ = F.softmax(logits, dim=-1).max(dim=-1)
         loss = F.cross_entropy(logits_ce, targ)
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
-        naive_metrics = NaiveAccRecPrec(targ, preds, self.amod_dict["X"])
-        deepnovo_metrics = self.deepnovo_metrics(preds, batch["intseq"], aa_confidence)
+        naive_metrics = NaiveAccRecPrec(targ, preds_ffill, self.amod_dict["X"])
+        # deepnovo_metrics = self.deepnovo_metrics(preds_ffill, batch["intseq"], aa_confidence)
+        deepnovo_metrics = {}
         stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
         return stats
 
