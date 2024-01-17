@@ -59,7 +59,8 @@ def get_ninespecies_dataset_splits(data_root_dir, ds_config, max_peaks=300, subs
         path_dict[split] = path_list
 
     parser = PeptideParser(ds_config)
-    dfs, amod_dict = parser.get_data()
+    dfs, token_dicts = parser.get_data()
+    amod_dict = token_dicts["amod_dict"]
     dataset_train = PeptideDataset(dfs["train"], amod_dict)
     dataset_val = PeptideDataset(dfs["val"], amod_dict)
     dataset_test = PeptideDataset(dfs["test"], amod_dict)
@@ -74,7 +75,7 @@ def get_ninespecies_dataset_splits(data_root_dir, ds_config, max_peaks=300, subs
     return (
         (dataset_train, dataset_val, dataset_test),
         partial(pad_peptides, max_peaks=max_peaks, null_token_idx=amod_dict["X"]),
-        amod_dict,
+        token_dicts,
     )
 
 
