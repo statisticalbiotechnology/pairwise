@@ -639,8 +639,7 @@ class DeNovoPLWrapper(BasePLWrapper):
         loss = F.cross_entropy(logits_ce, targ)
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
         naive_metrics = NaiveAccRecPrec(targ, preds_ffill, self.amod_dict["X"])
-        # deepnovo_metrics = self.deepnovo_metrics(preds_ffill, batch["intseq"], aa_confidence)
-        deepnovo_metrics = {}
+        deepnovo_metrics = self.deepnovo_metrics(preds_ffill, targ, aa_confidence)
         stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
         return stats
 
@@ -663,9 +662,15 @@ class DeNovoPLWrapper(BasePLWrapper):
             ),
         ]
 
+    def _replace_eos_with_null(self, tensor: torch.Tensor):
+        tensor = tensor.clone()
+        tensor[tensor == self.EOS] = self.amod_dict[self.null_token]
+        return tensor
+
     def to_aa_sequence(self, int_tensors: torch.Tensor | list):
         # Check if the input is a Tensor and convert it to a list
         if isinstance(int_tensors, torch.Tensor):
+            int_tensors = self._replace_eos_with_null(int_tensors)
             int_tensors = int_tensors.tolist()
 
         def convert_sequence(seq):
