@@ -130,7 +130,9 @@ class Metrics:
             pred = self._split_peptide(predictions[i])
             conf = confidence[i]  # type: ignore
 
-            if pred[0] == "":
+            if pred == []:
+                pass
+            elif pred[0] == "":
                 pred = []
 
             n_targ_aa += len(targ)
