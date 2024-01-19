@@ -472,7 +472,7 @@ class TrinaryMZPLWrapper(BasePLWrapper):
                 self.best_metrics_logged = True
 
 
-class DeNovoPLWrapper(BasePLWrapper):
+class DeNovoTeacherForcing(BasePLWrapper):
     def __init__(
         self,
         encoder,

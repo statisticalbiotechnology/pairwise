@@ -10,7 +10,7 @@ import time
 
 from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
 from pl_wrappers import (
-    DeNovoPLWrapper,
+    DeNovoTeacherForcing,
     DummyPLWrapper,
     MaskedTrainingPLWrapper,
     TrinaryMZPLWrapper,
@@ -39,7 +39,8 @@ PRETRAIN_TASK_DICT = {
 }
 
 DOWNSTREAM_TASK_DICT = {
-    "denovo": DeNovoPLWrapper,
+    "denovo_tf": DeNovoTeacherForcing,
+    "denovo_random": ...,
 }
 
 
