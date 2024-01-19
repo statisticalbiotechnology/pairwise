@@ -265,7 +265,6 @@ class BasePLWrapper(ABC, pl.LightningModule):
             )
         return opts
 
-    @abstractmethod
     def on_validation_epoch_end(self):
         # Update the current best achieved value for each val metric
         # Get the per-epoch metric value from the logged metrics
@@ -275,24 +274,17 @@ class BasePLWrapper(ABC, pl.LightningModule):
             if cur_epoch > 0:
                 metrics = self.trainer.logged_metrics
 
-                # example
-                # self.tracker.update_metric(
-                #     "best_val_loss",
-                #     metrics["val_loss"].detach().cpu().item(),
-                #     maximize=False,
-                # )
-
-                # self.tracker.update_metric(
-                #     "best_val_r2_score",
-                #     metrics["val_r2_score"].detach().cpu().item(),
-                #     maximize=True,
-                # )
+                self.tracker.update_metric(
+                    "best_val_loss",
+                    metrics["val_loss"].detach().cpu().item(),
+                    maximize=False,
+                )
 
             # TODO: verify: don't think this part is needed bc of the "on_train_end"
-            # # at the last epoch, log the best metrics
-            # if cur_epoch == self.trainer.max_epochs - 1:
-            #     self.log_dict(self.tracker.best_metrics)
-            #     self.best_metrics_logged = True
+            # at the last epoch, log the best metrics
+            if cur_epoch == self.trainer.max_epochs - 1:
+                self.log_dict(self.tracker.best_metrics)
+                self.best_metrics_logged = True
 
     def on_train_epoch_end(self):  # log the learning rate
         opts = self.optimizers()

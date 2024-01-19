@@ -23,6 +23,14 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
         super().__init__(
             d_model, nhead, dim_feedforward, n_layers, dropout, peak_encoder
         )
+
+        if callable(peak_encoder):
+            self.peak_encoder = peak_encoder
+        elif peak_encoder:
+            self.peak_encoder = PeakEncoder(d_model)
+        else:
+            self.peak_encoder = torch.nn.Identity()
+
         self.running_units = self.d_model
         self.use_charge = use_charge
         self.use_energy = use_energy
@@ -98,7 +106,8 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
 
     def forward(
         self,
-        mz_int: torch.Tensor,
+        mz_int: torch.Tensor | None = None,
+        fourier_features: torch.Tensor | None = None,
         charge: torch.Tensor | None = None,
         energy: torch.Tensor | None = None,
         mass: torch.Tensor | None = None,
@@ -123,11 +132,18 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
             The memory mask specifying which elements were padding in X.
         """
 
+        assert (
+            sum(x is not None for x in [mz_int, fourier_features]) == 1
+        ), "Exactly one of mz_int and fourier_features must be specified"
+
         n_batch = mz_int.shape[0]
         zeros = ~mz_int.sum(dim=2).bool()
 
         # Encode peaks into fourier features
-        peaks = self.peak_encoder(mz_int)
+        if mz_int is not None:
+            peaks = self.peak_encoder(mz_int)
+        elif fourier_features:
+            peaks = fourier_features
 
         # Encode precursor information
         precursor_latents = self.precursor_hook(

@@ -2,6 +2,8 @@ import torch
 from wrappers.base_wrapper import BasePLWrapper
 from models.heads import ClassifierHead
 import torch.nn.functional as F
+import torch.nn as nn
+from depthcharge.encoders import PeakEncoder
 
 
 class TrinaryMZPLWrapper(BasePLWrapper):
@@ -110,3 +112,93 @@ class TrinaryMZPLWrapper(BasePLWrapper):
             if cur_epoch == self.trainer.max_epochs - 1:
                 self.log_dict(self.tracker.best_metrics)
                 self.best_metrics_logged = True
+
+
+class MaskedTrainingPLWrapper(BasePLWrapper):
+    def __init__(self, encoder, datasets, args, collate_fn=None, fourier_level=True):
+        self.fourier_level = fourier_level
+        if not fourier_level:
+            head = nn.Linear(encoder.running_units, 2)
+        else:
+            head = None
+
+        super().__init__(encoder, datasets, args, collate_fn, head=head)
+
+        self.mask_ratio = args.mask_ratio
+
+        self.peak_encoder = PeakEncoder(encoder.running_units)
+        self.mask_token = nn.Parameter(torch.randn(encoder.running_units))
+
+    def _random_masking(self, input: torch.Tensor):
+        N, L, D = input.shape  # batch, length, dim
+        len_keep = int(L * (1 - self.mask_ratio))
+
+        noise = torch.rand(N, L, device=input.device)  # noise in [0, 1]
+
+        # TODO: make sure pad tokens are never included in the input
+        # i e noise[arange>peak_lengths] = 0
+
+        ids_shuffle = torch.argsort(noise, dim=1)
+        inds_restore = torch.argsort(ids_shuffle, dim=1)
+
+        # keep the first subset
+        ids_keep = ids_shuffle[:, :len_keep]
+        input_subset = torch.gather(
+            input, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D)
+        )
+
+        return input_subset, inds_restore
+
+    def _create_input(self, input: torch.Tensor):
+        input_subset, ids_restore = self._random_masking(input)
+
+        # append mask tokens to sequence
+        mask_tokens = self.mask_token.repeat(
+            input_subset.shape[0], ids_restore.shape[1] + 1 - input_subset.shape[1], 1
+        )
+
+        x_ = torch.cat([input_subset, mask_tokens], dim=1)
+        x_ = torch.gather(
+            x_,
+            dim=1,
+            index=ids_restore.unsqueeze(-1).repeat(1, 1, input_subset.shape[2]),
+        )  # unshuffle
+        return x_
+
+    def _parse_batch(self, batch):
+        mz_arr = batch["mz_array"]
+        int_arr = batch["intensity_array"]
+        mzab = torch.stack([int_arr, int_arr], dim=-1)
+
+        batch_size = input.shape[0]
+
+        # input fourier features
+        input = self.peak_encoder(mzab)
+        target = input.clone()
+
+        # randomly drop
+        input, mask = self._random_masking(input)
+
+        parsed_batch = {"fourier_features": input, "target_mask": mask}
+
+        if self.fourier_level:
+            pass
+            # target should be fourier features
+
+        parsed_batch = {
+            **parsed_batch,
+            "mass": batch["mass"],
+            "charge": batch["charge"],
+            "target": target,
+            "peak_lengths": batch["peak_lengths"],
+        }
+        return parsed_batch, batch_size
+
+    def forward(self, parsed_batch, **kwargs):
+        mzab, input_dict, target = parsed_batch
+        outs = self.encoder(mzab, **input_dict, **kwargs)
+        # Additional tokens added for charge/energy/mass
+        num_cem_tokens = outs["num_cem_tokens"]
+        embeds = outs["emb"][:, num_cem_tokens:, :]
+        outs = self.head(embeds)
+        return outs
