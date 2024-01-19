@@ -49,7 +49,9 @@ def prepend_relative_path(root_dir, rel_path):
     return os.path.join
 
 
-def get_ninespecies_dataset_splits(data_root_dir, ds_config, max_peaks=300, subset=0):
+def get_ninespecies_dataset_splits(
+    data_root_dir, ds_config, max_peaks=300, subset=0, include_hidden=False
+):
     path_dict = ds_config["paths"]
 
     for split in ["train", "val", "test"]:
@@ -93,6 +95,61 @@ def get_num_parameters(model):
     for param in list(model.parameters()):
         sum += param.numel()
     return sum
+
+
+class Scale:
+    masses = {
+        "A": 71.037113805,
+        "R": 156.101111050,
+        "N": 114.042927470,
+        "D": 115.026943065,
+        "C": 103.009184505,
+        "Q": 128.058577540,
+        "E": 129.042593135,
+        "G": 57.021463735,
+        "H": 137.058911875,
+        "I": 113.084064015,
+        "L": 113.084064015,
+        "K": 128.094963050,
+        "M": 131.040484645,
+        "F": 147.068413945,
+        "P": 97.052763875,
+        "S": 87.032028435,
+        "T": 101.047678505,
+        "W": 186.079312980,
+        "Y": 163.063328575,
+        "V": 99.068413945,
+    }
+
+    def __init__(self, amod_dict):
+        self.amod_dict = amod_dict
+        int2mass = np.zeros((len(amod_dict)))
+        for aa, integer in amod_dict.items():
+            if len(aa.split("_")) == 2:
+                aa, modwt = aa.split("_")
+                int2mass[integer] = self.masses[aa] + eval(modwt)
+            else:
+                if aa in self.masses.keys():
+                    int2mass[integer] = self.masses[aa]
+                else:
+                    int2mass[integer] = 0
+
+        self.tok2mass = {key: int2mass[amod_dict[key]] for key in amod_dict.keys()}
+        self.mp = th.tensor(int2mass, dtype=th.float32)
+        """self.mp = tf.lookup.StaticVocabularyTable(
+            tf.lookup.KeyValueTensorInitializer(
+                list(int2mass.keys()), list(int2mass.values()),
+                key_dtype=tf.int64, value_dtype=tf.float32
+            ), num_oov_buckets=1
+        )"""
+
+    def intseq2mass(self, intseq):
+        return th.gather(self.mp, 0, intseq).sum(1)
+
+    def modseq2mass(self, modified_sequence):
+        return np.sum(
+            self.tok2mass[tok] for tok in partition_seq(modified_sequence)["seq"]
+        )
 
 
 if __name__ == "__main__":

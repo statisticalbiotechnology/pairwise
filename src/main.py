@@ -207,6 +207,7 @@ def main(args, ds_config=None):
         ds_config,
         max_peaks=args.max_peaks,
         subset=args.subset,
+        include_hidden=args.downstream_task == "denovo_random",
     )
 
     if args.downstream_task != "none":
