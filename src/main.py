@@ -9,12 +9,10 @@ from parse_args import parse_args_and_config, create_output_dirs
 import time
 
 from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
-from pl_wrappers import (
-    DeNovoTeacherForcing,
-    DummyPLWrapper,
-    MaskedTrainingPLWrapper,
-    TrinaryMZPLWrapper,
-)
+from wrappers.downstream_wrappers import DeNovoTeacherForcing
+from wrappers.pretrain_wrappers import TrinaryMZPLWrapper
+
+
 import utils
 from loader_parquet import PeptideParser
 
@@ -33,8 +31,7 @@ DECODER_DICT = {
 }
 
 PRETRAIN_TASK_DICT = {
-    "masked": MaskedTrainingPLWrapper,
-    "dummy": DummyPLWrapper,
+    # "masked": MaskedTrainingPLWrapper,
     "trinary_mz": TrinaryMZPLWrapper,
 }
 

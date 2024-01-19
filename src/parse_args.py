@@ -43,7 +43,7 @@ def get_args_parser(conf_parser):
     parser.add_argument(
         "--downstream_task",
         default="none",
-        choices=["denovo", "none"],
+        choices=["denovo_tf", "denovo_random", "none"],
         type=str,
         help="Which finetuning task to perform",
     )
