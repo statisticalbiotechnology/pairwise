@@ -201,19 +201,19 @@ def main(args, ds_config=None):
         encoder_ckpt = torch.load(encoder_path)
         pl_encoder.load_state_dict(encoder_ckpt["state_dict"])
 
-    datasets_ds, collate_fn_ds, token_dicts = utils.get_ninespecies_dataset_splits(
-        args.downstream_root_dir,
-        ds_config,
-        max_peaks=args.max_peaks,
-        subset=args.subset,
-        include_hidden=args.downstream_task == "denovo_random",
-    )
-
     if args.downstream_task != "none":
         # Extract pretrained encoder nn.Module
         if args.pretrain or args.encoder_weights:
             encoder = pl_encoder.encoder
 
+        # Load downstream dataset
+        datasets_ds, collate_fn_ds, token_dicts = utils.get_ninespecies_dataset_splits(
+            args.downstream_root_dir,
+            ds_config,
+            max_peaks=args.max_peaks,
+            subset=args.subset,
+            include_hidden=args.downstream_task == "denovo_random",
+        )
         # Define decoder model
         assert (
             args.decoder_model
