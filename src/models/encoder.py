@@ -246,7 +246,8 @@ class Encoder(nn.Module):
         # Create mask
         if length != None:
             grid = th.tile(
-                th.arange(x.shape[1], dtype=th.int32)[None], (x.shape[0], 1)
+                th.arange(x.shape[1], dtype=th.int32, device=x.device)[None],
+                (x.shape[0], 1),
             )  # bs, seq_len
             mask = grid >= length[:, None]
             mask = (1e5 * mask).type(th.float32)

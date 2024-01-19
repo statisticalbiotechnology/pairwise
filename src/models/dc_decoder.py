@@ -74,6 +74,7 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
         mass: torch.Tensor | None = None,
         charge: torch.Tensor | None = None,
         peptide_lengths: torch.Tensor | None = None,
+        causal: bool = True,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Predict the next amino acid for a collection of sequences.
 
@@ -94,6 +95,8 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
             precursor charge
         peptide_lengths: int torch.Tensor of size (batch_size, 1)
             length of the ground-truth peptides. used during training for key_padding_mask
+        causal: bool
+            if True, apply a causal mask to the sequence (needed for teacher forcing)
 
         Returns
         -------
@@ -143,7 +146,10 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
 
         # Causal mask
         # tgt_mask = generate_tgt_mask(tgt.shape[1]).to(self.device)
-        tgt_mask = generate_causal_tgt_mask(tgt.shape[1]).to(self.device)
+        if causal:
+            tgt_mask = generate_causal_tgt_mask(tgt.shape[1]).to(self.device)
+        else:
+            tgt_mask = None
 
         # Forward
         dec_embeds = self.transformer_decoder.forward(
@@ -191,6 +197,7 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
         enc_out: dict[torch.Tensor],
         mass: torch.Tensor | None = None,
         charge: torch.Tensor | None = None,
+        causal: bool = True,
     ):
         batch_size = enc_out["emb"].shape[0]
 
@@ -205,7 +212,9 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
 
         # Gather predictions (fixed length loop)
         for i in range(0, self.max_seq_len):
-            dec_out = self.forward(input_intseq, enc_out, mass=mass, charge=charge)
+            dec_out = self.forward(
+                input_intseq, enc_out, mass=mass, charge=charge, causal=causal
+            )
             cur_logits = dec_out["logits"]
 
             predictions = self.greedy(cur_logits[:, i])

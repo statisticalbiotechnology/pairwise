@@ -152,6 +152,7 @@ class DeNovoTeacherForcing(BasePLWrapper):
             outs,
             mass=parsed_batch["mass"] if self.decoder.use_mass else None,
             charge=parsed_batch["charge"] if self.decoder.use_charge else None,
+            causal=True,
         )
         return preds
 
@@ -276,3 +277,96 @@ class DeNovoRandom(DeNovoTeacherForcing):
         super().__init__(
             encoder, decoder, datasets, args, collate_fn, token_dicts, conf_threshold
         )
+        assert (
+            "<H>" in token_dicts["input_dict"].keys()
+        ), "Needs to include the hidden token"
+
+    def _get_train_loss(self, preds, labels):
+        targ_one_hot = F.one_hot(labels, self.predcats).type(torch.float32)
+        preds = preds[self.inds]
+        loss = F.cross_entropy(preds, targ_one_hot)
+        return loss
+
+    def _parse_batch(self, batch):
+        input, target = self._input_target(batch)
+        batch_size = input.shape[0]
+        # Encoder input - mz/ab
+        mzab = self._mzab_array(batch)
+
+        parsed_batch = {
+            "mz_ab": mzab,
+            "mass": batch["mass"],
+            "charge": batch["charge"],
+            "input_intseq": input,
+            "target_intseq": target,
+            "peak_lengths": batch["peak_lengths"],
+            "peptide_lengths": batch["peptide_lengths"],
+        }
+        return parsed_batch, batch_size
+
+    def fill2c(self, int_array, inds, tokentyp="X", output=True):
+        tokint = self.null_token if output else self.input_dict[tokentyp]
+        all_inds = torch.tile(
+            torch.arange(int_array.shape[1], dtype=torch.int32, device=self.device)[
+                None
+            ],
+            [int_array.shape[0], 1],
+        )
+
+        out = int_array
+        out[all_inds > inds[:, None]] = tokint
+
+        return out
+
+    def _input_target(self, batch):
+        intseq = batch["intseq"]
+
+        batch_size, sl = batch["mz_array"].shape
+
+        # Take the variable batch['seqint'] and add a start token to the
+        # beginning and null on the end
+        # intseq = self.decoder.prepend_startok(batch["intseq"][..., :-1])
+        intseq = self._prepend_SOS_tokens(batch["intseq"])
+
+        # Find the indices first null tokens so that when you choose random
+        # token you avoid trivial trailing null tokens (beyond final null)
+        nonnull = (intseq != self.input_dict["X"]).type(torch.int32).sum(1)
+
+        # Choose random tokens to predict
+        # - the values of inds will be final non-hidden value in decoder input
+        # - batch['seqint'](inds) will be the target for decoder output
+        # - must use combination of rand() and round() because int32 is not
+        #   yet implemented when feeding vectors into low/high arguments
+        uniform = torch.rand(batch_size, device=nonnull.device) * nonnull
+        inds = uniform.floor().type(torch.int32)
+
+        # Fill with hidden tokens to the end
+        # - this will be the decoder's input
+        intseq_ = self.fill2c(intseq, inds, "<H>", output=False)
+
+        # Indices of chosen predict tokens
+        # - save for LossFunction
+        inds_ = [torch.arange(inds.shape[0], dtype=torch.int32), inds]
+        self.inds = inds_
+
+        # Target is the actual (intseq) identity of the chosen predict indices
+        targ = batch["intseq"][inds_].type(torch.int64)
+
+        return intseq_, targ
+
+    def eval_forward(self, parsed_batch, **kwargs):
+        outs = self.encoder(
+            parsed_batch["mz_ab"],
+            length=parsed_batch["peak_lengths"],
+            mass=parsed_batch["mass"] if self.encoder.use_mass else None,
+            charge=parsed_batch["charge"] if self.encoder.use_charge else None,
+            return_mask=True,
+            **kwargs
+        )
+        preds = self.decoder.predict_sequence(
+            outs,
+            mass=parsed_batch["mass"] if self.decoder.use_mass else None,
+            charge=parsed_batch["charge"] if self.decoder.use_charge else None,
+            causal=False,
+        )
+        return preds

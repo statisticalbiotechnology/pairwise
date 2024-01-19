@@ -9,12 +9,11 @@ from parse_args import parse_args_and_config, create_output_dirs
 import time
 
 from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
-from wrappers.downstream_wrappers import DeNovoTeacherForcing
+from wrappers.downstream_wrappers import DeNovoRandom, DeNovoTeacherForcing
 from wrappers.pretrain_wrappers import TrinaryMZPLWrapper
 
 
 import utils
-from loader_parquet import PeptideParser
 
 import models.encoder as encoders
 import models.dc_encoder as dc_encoders
@@ -37,7 +36,7 @@ PRETRAIN_TASK_DICT = {
 
 DOWNSTREAM_TASK_DICT = {
     "denovo_tf": DeNovoTeacherForcing,
-    "denovo_random": ...,
+    "denovo_random": DeNovoRandom,
 }
 
 

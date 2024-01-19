@@ -97,6 +97,32 @@ def get_num_parameters(model):
     return sum
 
 
+def partition_seq(seq, collect_mods=False):
+    Seq = []
+    if collect_mods:
+        mods = []
+    p = 0
+    while p < len(seq):
+        aa = seq[p]
+        if aa == "(":
+            let = seq[p - 1]
+            end = seq[p:].find(")")
+            mod = seq[p + 1 : p + end]
+            if collect_mods:
+                mods.append(mod)
+            p += end
+            aa = "%c_%s" % (let, mod)
+            Seq[-1] = aa
+        else:
+            Seq.append(aa)
+        p += 1
+    output = {"seq": Seq}
+    if collect_mods:
+        output["mods"] = mods
+
+    return output
+
+
 class Scale:
     masses = {
         "A": 71.037113805,
@@ -135,7 +161,7 @@ class Scale:
                     int2mass[integer] = 0
 
         self.tok2mass = {key: int2mass[amod_dict[key]] for key in amod_dict.keys()}
-        self.mp = th.tensor(int2mass, dtype=th.float32)
+        self.mp = torch.tensor(int2mass, dtype=torch.float32)
         """self.mp = tf.lookup.StaticVocabularyTable(
             tf.lookup.KeyValueTensorInitializer(
                 list(int2mass.keys()), list(int2mass.values()),
@@ -144,7 +170,7 @@ class Scale:
         )"""
 
     def intseq2mass(self, intseq):
-        return th.gather(self.mp, 0, intseq).sum(1)
+        return torch.gather(self.mp, 0, intseq).sum(1)
 
     def modseq2mass(self, modified_sequence):
         return np.sum(
