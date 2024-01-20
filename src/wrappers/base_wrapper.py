@@ -175,7 +175,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
         return {"loss": loss, "returns": returns}
 
     def validation_step(self, batch, batch_idx):
-        parsed_batch, batch_size = self._parse_batch(batch)
+        parsed_batch, batch_size = self._parse_batch(batch, Eval=True)
         returns = self.eval_forward(parsed_batch)
         val_stats = self._get_eval_stats(returns, parsed_batch)
         val_stats = {

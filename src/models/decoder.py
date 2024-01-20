@@ -33,7 +33,7 @@ class Decoder(pl.LightningModule):
         self.kv_indim = kv_indim
         self.sl = sequence_length
         self.num_inp_tokens = num_inp_tokens
-        self.num_out_tokens = num_inp_tokens - 2  # no need for start or hidden tokens
+        self.num_out_tokens = num_inp_tokens - 1 # no need for start or hidden tokens, add EOS
         self.use_charge = use_charge
         self.use_energy = use_energy
         self.use_mass = use_mass
@@ -347,7 +347,7 @@ class DenovoDecoder(pl.LightningModule):
         return output
 
 
-def decoder_greedy_base(token_dict, d_model=256, **kwargs):
+def decoder_greedy_base(token_dict, d_model=512, **kwargs):
     decoder_config = {
         "kv_indim": d_model,
         "running_units": 512,

@@ -4,12 +4,12 @@ from denovo_eval import Metrics as DeNovoMetrics
 import torch.nn.functional as F
 
 
-def NaiveAccRecPrec(target, prediction, null_token):
+def NaiveAccRecPrec(target, prediction, null_token, eos_token):
     correct_bool = (target == prediction).type(torch.int32)
     num_correct = correct_bool.sum()
-    recall_bool = target != null_token
+    recall_bool = (target != null_token) & (target != eos_token)
     recsum = correct_bool[recall_bool].sum()
-    prec_bool = prediction != null_token
+    prec_bool = (prediction != null_token) & (prediction != eos_token)
     precsum = correct_bool[prec_bool].sum()
     total = target.shape[0] * target.shape[1]
     return {
@@ -22,8 +22,10 @@ def NaiveAccRecPrec(target, prediction, null_token):
 def fill_null_after_first_EOS(prediction, null_token, EOS_token):
     pred_without_eos = prediction.clone()
     eos_mask = prediction == EOS_token
+    absent_eos = eos_mask.sum(1) == 0
     # Find the position of the first predicted EOS token
     eos_positions = torch.argmax(eos_mask.int(), dim=1)
+    eos_positions[absent_eos] = prediction.shape[-1]
 
     inds = (
         torch.arange(prediction.shape[1], device=prediction.device)
@@ -104,7 +106,7 @@ class DeNovoTeacherForcing(BasePLWrapper):
         target = self._append_EOS_tokens(intseq, lengths)
         return input, target
 
-    def _parse_batch(self, batch):
+    def _parse_batch(self, batch, Eval=False):
         input, target = self._input_target(batch)
         batch_size = input.shape[0]
         # Encoder input - mz/ab
@@ -135,7 +137,7 @@ class DeNovoTeacherForcing(BasePLWrapper):
             outs,
             mass=parsed_batch["mass"] if self.decoder.use_mass else None,
             charge=parsed_batch["charge"] if self.decoder.use_charge else None,
-            peptide_lengths=parsed_batch["peptide_lengths"],
+            #peptide_lengths=parsed_batch["peptide_lengths"],
         )
         return preds
 
@@ -189,7 +191,7 @@ class DeNovoTeacherForcing(BasePLWrapper):
         aa_confidence, _ = F.softmax(logits, dim=-1).max(dim=-1)
         loss = F.cross_entropy(logits_ce, targ)
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
-        naive_metrics = NaiveAccRecPrec(targ, preds_ffill, self.amod_dict["X"])
+        naive_metrics = NaiveAccRecPrec(targ, preds_ffill, self.null_token, self.EOS)
         deepnovo_metrics = self.deepnovo_metrics(preds_ffill, targ, aa_confidence)
         stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
         return stats
@@ -277,9 +279,24 @@ class DeNovoRandom(DeNovoTeacherForcing):
         super().__init__(
             encoder, decoder, datasets, args, collate_fn, token_dicts, conf_threshold
         )
+        self.null_token = self.output_dict['X']
         assert (
             "<H>" in token_dicts["input_dict"].keys()
         ), "Needs to include the hidden token"
+    
+    def _replace_eos_with_null(self, tensor: torch.Tensor):
+        tensor = tensor.clone()
+        tensor[tensor == self.EOS] = self.null_token
+        return tensor
+
+
+    def _get_train_stats(self, returns, parsed_batch):
+        target = parsed_batch["target_intseq"]
+        logits = returns
+        #padding_mask = (~returns["padding_mask"]).int()
+        loss = self._get_train_loss(logits, target)
+        stats = {"loss": loss}  # , **naive_metrics}
+        return loss, stats
 
     def _get_train_loss(self, preds, labels):
         targ_one_hot = F.one_hot(labels, self.predcats).type(torch.float32)
@@ -287,9 +304,9 @@ class DeNovoRandom(DeNovoTeacherForcing):
         loss = F.cross_entropy(preds, targ_one_hot)
         return loss
 
-    def _parse_batch(self, batch):
-        input, target = self._input_target(batch)
-        batch_size = input.shape[0]
+    def _parse_batch(self, batch, Eval=False):
+        input, target = self._input_target(batch, Eval=Eval)
+        batch_size = target.shape[0]
         # Encoder input - mz/ab
         mzab = self._mzab_array(batch)
 
@@ -318,19 +335,25 @@ class DeNovoRandom(DeNovoTeacherForcing):
 
         return out
 
-    def _input_target(self, batch):
+    def _input_target(self, batch, Eval=False):
         intseq = batch["intseq"]
 
         batch_size, sl = batch["mz_array"].shape
 
-        # Take the variable batch['seqint'] and add a start token to the
-        # beginning and null on the end
-        # intseq = self.decoder.prepend_startok(batch["intseq"][..., :-1])
-        intseq = self._prepend_SOS_tokens(batch["intseq"])
+        # Target first
+        target = self._append_EOS_tokens(
+            batch['intseq'], batch['peptide_lengths']
+        )
+
+        # Return alternate output if evaluation
+        # - No need for input sequence
+        # - target is full integer sequence, modified with EOS tokens
+        if Eval:
+            return None, target
 
         # Find the indices first null tokens so that when you choose random
         # token you avoid trivial trailing null tokens (beyond final null)
-        nonnull = (intseq != self.input_dict["X"]).type(torch.int32).sum(1)
+        nonnull = batch['peptide_lengths'].squeeze()+1 #(intseq != self.input_dict["X"]).type(torch.int32).sum(1)
 
         # Choose random tokens to predict
         # - the values of inds will be final non-hidden value in decoder input
@@ -339,18 +362,23 @@ class DeNovoRandom(DeNovoTeacherForcing):
         #   yet implemented when feeding vectors into low/high arguments
         uniform = torch.rand(batch_size, device=nonnull.device) * nonnull
         inds = uniform.floor().type(torch.int32)
-
-        # Fill with hidden tokens to the end
-        # - this will be the decoder's input
-        intseq_ = self.fill2c(intseq, inds, "<H>", output=False)
-
+        
         # Indices of chosen predict tokens
         # - save for LossFunction
         inds_ = [torch.arange(inds.shape[0], dtype=torch.int32), inds]
         self.inds = inds_
 
         # Target is the actual (intseq) identity of the chosen predict indices
-        targ = batch["intseq"][inds_].type(torch.int64)
+        targ = target[inds_].type(torch.int64)
+
+        # Now input tensor
+
+        # Take the variable batch['intseq'] and add a start token to the beginning
+        intseq = self._prepend_SOS_tokens(batch["intseq"])
+
+        # Fill with hidden tokens to the end
+        # - this will be the decoder's input
+        intseq_ = self.fill2c(intseq, inds, "<H>", output=False)
 
         return intseq_, targ
 

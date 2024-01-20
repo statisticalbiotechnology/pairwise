@@ -249,7 +249,7 @@ class Encoder(nn.Module):
                 th.arange(x.shape[1], dtype=th.int32, device=x.device)[None],
                 (x.shape[0], 1),
             )  # bs, seq_len
-            mask = grid >= length[:, None]
+            mask = grid >= length.squeeze()[:, None] # length must be 1d vector
             mask = (1e5 * mask).type(th.float32)
         else:
             mask = None
