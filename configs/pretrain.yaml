@@ -1,0 +1,8 @@
+trinary_mz:
+  test: 123
+
+masked:
+  predict_fourier: True
+  mask_token_fourier: True
+  learned_masked_token: True
+  mz_to_int_ratio: 0.67

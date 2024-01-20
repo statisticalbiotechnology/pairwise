@@ -5,6 +5,7 @@ import depthcharge
 from depthcharge.encoders import PeakEncoder
 import torch
 import models.model_parts as mp
+from models.peak_encoder import StaticPeakEncoder
 
 
 class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEncoder):
@@ -104,6 +105,9 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
         ce_emb = torch.cat(ce_emb, dim=1)
         return ce_emb
 
+    def encode_peaks(self, mz_int):
+        return self.peak_encoder(mz_int)
+
     def forward(
         self,
         mz_int: torch.Tensor | None = None,
@@ -111,6 +115,7 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
         charge: torch.Tensor | None = None,
         energy: torch.Tensor | None = None,
         mass: torch.Tensor | None = None,
+        key_padding_mask: torch.Tensor | None = None,
         **kwargs: dict,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Embed a batch of mass spectra.
@@ -136,13 +141,15 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
             sum(x is not None for x in [mz_int, fourier_features]) == 1
         ), "Exactly one of mz_int and fourier_features must be specified"
 
-        n_batch = mz_int.shape[0]
-        zeros = ~mz_int.sum(dim=2).bool()
+        if mz_int is not None:
+            n_batch = mz_int.shape[0]
+        elif fourier_features is not None:
+            n_batch = fourier_features.shape[0]
 
         # Encode peaks into fourier features
         if mz_int is not None:
-            peaks = self.peak_encoder(mz_int)
-        elif fourier_features:
+            peaks = self.encode_peaks(mz_int)
+        elif fourier_features is not None:
             peaks = fourier_features
 
         # Encode precursor information
@@ -156,13 +163,20 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
 
         peaks = torch.cat([precursor_latents, peaks], dim=1)
 
-        # Additional mask entries (sequence dim) due to charge/energy/mass
-        cem_mask_pos = torch.tensor(
-            [[False] * precursor_latents.shape[1]] * n_batch
-        ).type_as(zeros)
-        mask = torch.cat([cem_mask_pos, zeros], dim=1)
+        if key_padding_mask is not None:
+            # Additional mask entries (sequence dim) due to charge/energy/mass
+            cem_mask_pos = torch.tensor(
+                [[False] * precursor_latents.shape[1]] * n_batch
+            ).type_as(key_padding_mask)
+            mask = torch.cat([cem_mask_pos, key_padding_mask], dim=1)
+        else:
+            mask = None
 
         encoder_out = self.transformer_encoder(peaks, src_key_padding_mask=mask)
+
+        if torch.any(encoder_out.isnan()):
+            bp = 0
+
         return {
             "emb": encoder_out,
             "mask": mask,
@@ -170,14 +184,26 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
         }
 
 
-def dc_encoder_base(use_charge=False, use_energy=False, use_mass=False, **kwargs):
+def dc_encoder_base(
+    use_charge=False,
+    use_energy=False,
+    use_mass=False,
+    static_peak_encoder=False,
+    **kwargs,
+):
+    d_model = 512
+    if static_peak_encoder:
+        peak_encoder = StaticPeakEncoder(d_model)
+    else:
+        peak_encoder = True
     model = SpectrumTransformerEncoder(
-        d_model=512,
+        d_model=d_model,
         nhead=8,
         dim_feedforward=2048,
         n_layers=9,
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
+        peak_encoder=peak_encoder,
     )
     return model
