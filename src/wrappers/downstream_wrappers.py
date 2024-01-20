@@ -166,6 +166,9 @@ class DeNovoTeacherForcing(BasePLWrapper):
         # logits.shape = (batch_size, num_classes, sequence_len)
         loss = F.cross_entropy(logits, labels, reduction="none")
         masked_loss = loss * padding_mask
+        masked_loss = masked_loss.sum(dim=1, keepdim=True) / padding_mask.sum(
+            dim=1, keepdim=True
+        )
         return masked_loss.mean()
 
     def _get_train_stats(self, returns, parsed_batch):
