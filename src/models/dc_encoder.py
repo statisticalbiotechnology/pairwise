@@ -152,14 +152,24 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
         elif fourier_features is not None:
             peaks = fourier_features
 
-        # Encode precursor information
-        precursor_latents = self.precursor_hook(
-            mz_int,
-            charge,
-            energy,
-            mass,
-            **kwargs,
-        )
+        if mz_int is not None:
+            # Encode precursor information
+            precursor_latents = self.precursor_hook(
+                mz_int,
+                charge,
+                energy,
+                mass,
+                **kwargs,
+            )
+        elif fourier_features is not None:
+            # Encode precursor information
+            precursor_latents = self.precursor_hook(
+                fourier_features,
+                charge,
+                energy,
+                mass,
+                **kwargs,
+            )
 
         peaks = torch.cat([precursor_latents, peaks], dim=1)
 
