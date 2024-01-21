@@ -1,6 +1,7 @@
 from math import ceil
 import torch
 from depthcharge.encoders.sinusoidal import FloatEncoder
+from depthcharge.encoders.sinusoidal import PositionalEncoder as PosEncoder
 
 
 class StaticPeakEncoder(torch.nn.Module):

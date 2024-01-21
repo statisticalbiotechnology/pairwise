@@ -5,4 +5,5 @@ masked:
   predict_fourier: True
   mask_token_fourier: True
   learned_masked_token: True
+  positional_encoding: True
   mz_to_int_ratio: 0.67

@@ -3,7 +3,7 @@ from wrappers.base_wrapper import BasePLWrapper
 from models.heads import ClassifierHead
 import torch.nn.functional as F
 import torch.nn as nn
-from models.peak_encoder import StaticPeakEncoder
+from models.peak_encoder import StaticPeakEncoder, PosEncoder
 
 
 class TrinaryMZPLWrapper(BasePLWrapper):
@@ -131,6 +131,7 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
         self.mask_token_fourier = task_dict["mask_token_fourier"]
         self.learned_masked_token = task_dict["learned_masked_token"]
         self.mz_to_int_ratio = task_dict["mz_to_int_ratio"]
+        self.positional_encoding = task_dict["positional_encoding"]
 
         if self.predict_fourier:
             head = torch.torch.nn.TransformerEncoderLayer(
@@ -170,6 +171,12 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
                 torch.zeros(d_mask_token), requires_grad=False
             )
 
+        if self.positional_encoding:
+            pos_encs = PosEncoder(d_mask_token)(
+                torch.zeros((1, int(1.2 * args.max_peaks), d_mask_token))
+            )
+            self.register_buffer("pos_encodings", pos_encs)
+
         self.TASK_NAME = "masked"
 
     def random_masking(self, input, seq_lengths):
@@ -208,6 +215,11 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
         # Apply the keep mask to the input
         masked_input = input.clone()
         masked_input[~keep_mask] = self.mask_token  # Add mask token (retain grad)
+
+        if self.positional_encoding:
+            pos_encs_masked = self.pos_encodings[:, : input.shape[1], :]
+            pos_encs_masked = pos_encs_masked.repeat((N, 1, 1))
+            masked_input[~keep_mask] += pos_encs_masked[~keep_mask]
 
         loss_mask = ~keep_mask
         return masked_input, loss_mask
