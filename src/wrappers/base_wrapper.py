@@ -309,20 +309,31 @@ class BasePLWrapper(ABC, pl.LightningModule):
         )
         return all_inds >= seq_lengths
 
+    def _update_best_metrics(self, metrics, prefix="val_", suffix="_epoch"):
+        """Override this to track the best achieved value for additional metrics beyond 'loss'"""
+        # validation loss
+        self.tracker.update_metric(
+            "best_" + prefix + "loss" + suffix,
+            metrics[prefix + "loss" + suffix].detach().cpu().item(),
+            maximize=False,
+        )
+
+    def _get_metric_prefix_suffix(self, prefix="val_", suffix="_epoch"):
+        if self.TASK_NAME:
+            prefix = self.TASK_NAME + "_" + prefix
+        return prefix, suffix
+
     def on_validation_epoch_end(self):
         # Update the current best achieved value for each val metric
         # Get the per-epoch metric value from the logged metrics
+        prefix, suffix = self._get_metric_prefix_suffix()
 
         cur_epoch = self.trainer.current_epoch
         if self.global_rank == 0:  # Only log on master process
             if cur_epoch > 0:
                 metrics = self.trainer.logged_metrics
 
-                self.tracker.update_metric(
-                    "best_val_loss",
-                    metrics["val_loss"].detach().cpu().item(),
-                    maximize=False,
-                )
+                self._update_best_metrics(metrics, prefix, suffix)
 
             # TODO: verify: don't think this part is needed bc of the "on_train_end"
             # at the last epoch, log the best metrics
