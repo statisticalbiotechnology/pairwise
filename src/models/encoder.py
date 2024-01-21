@@ -246,9 +246,10 @@ class Encoder(nn.Module):
         # Create mask
         if length != None:
             grid = th.tile(
-                th.arange(x.shape[1], dtype=th.int32)[None], (x.shape[0], 1)
+                th.arange(x.shape[1], dtype=th.int32, device=x.device)[None],
+                (x.shape[0], 1),
             )  # bs, seq_len
-            mask = grid >= length[:, None]
+            mask = grid >= length.squeeze()[:, None] # length must be 1d vector
             mask = (1e5 * mask).type(th.float32)
         else:
             mask = None
@@ -367,7 +368,7 @@ def encoder_base_arch(use_charge=False, use_energy=False, use_mass=False, **kwar
 def encoder_base_pairwise(use_charge=False, use_energy=False, use_mass=False, **kwargs):
     model = Encoder(
         pairwise_bias=True,  # use pairwise mz tensor to create SA-bias
-        pairwise_units=128,
+        pairwise_units=64,
         pw_blocks=1,
         **BASE_ARCH_DICT,
         use_charge=use_charge,

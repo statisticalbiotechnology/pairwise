@@ -34,6 +34,7 @@ RESIDUES = {
     "M_ox": 147.035400,  # V1
     "N_+.98": 115.026943,
     "Q_+.98": 129.042594,
+    'X': 0
 }
 
 
@@ -130,7 +131,9 @@ class Metrics:
             pred = self._split_peptide(predictions[i])
             conf = confidence[i]  # type: ignore
 
-            if pred[0] == "":
+            if pred == []:
+                pass
+            elif pred[0] == "":
                 pred = []
 
             n_targ_aa += len(targ)
