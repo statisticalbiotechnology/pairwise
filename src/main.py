@@ -48,7 +48,11 @@ def main(args, pretrain_config=None, ds_config=None):
     print(f"Saving checkpoints in {args.output_dir}")
     print(f"Saving logs in {args.log_dir}")
 
-    config = {**vars(args), "downstream": ds_config, "pretrain": pretrain_config}
+    config = {
+        **vars(args),
+        "downstream_config": ds_config,
+        "pretrain_config": pretrain_config,
+    }
     # Wandb stuff
     run = None
     logger = None
@@ -105,7 +109,7 @@ def main(args, pretrain_config=None, ds_config=None):
             args=args,
             datasets=datasets,
             collate_fn=collate_fn,
-            task_dict=config["pretrain"][args.pretraining_task],
+            task_dict=config["pretrain_config"][args.pretraining_task],
         )
 
         if run is not None and utils.get_rank() == 0:
@@ -192,7 +196,7 @@ def main(args, pretrain_config=None, ds_config=None):
         # Load downstream dataset
         datasets_ds, collate_fn_ds, token_dicts = utils.get_ninespecies_dataset_splits(
             args.downstream_root_dir,
-            config["downstream"],
+            config["downstream_config"],
             max_peaks=args.max_peaks,
             subset=args.subset,
             include_hidden=args.downstream_task == "denovo_random",
@@ -215,7 +219,7 @@ def main(args, pretrain_config=None, ds_config=None):
             datasets=datasets_ds,
             collate_fn=collate_fn_ds,
             token_dicts=token_dicts,
-            conf_threshold=config["downstream"]["conf_threshold"],
+            conf_threshold=config["downstream_config"]["conf_threshold"],
         )
 
         print(

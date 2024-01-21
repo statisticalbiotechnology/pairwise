@@ -33,7 +33,9 @@ class Decoder(pl.LightningModule):
         self.kv_indim = kv_indim
         self.sl = sequence_length
         self.num_inp_tokens = num_inp_tokens
-        self.num_out_tokens = num_inp_tokens - 1 # no need for start or hidden tokens, add EOS
+        self.num_out_tokens = (
+            num_inp_tokens - 1
+        )  # no need for start or hidden tokens, add EOS
         self.use_charge = use_charge
         self.use_energy = use_energy
         self.use_mass = use_mass
@@ -275,11 +277,12 @@ class DenovoDecoder(pl.LightningModule):
             index = int(i)
 
             dec_out = self.forward(
-                intseq, enc_out, mass=mass, charge=charge, softmax=False, causal=causal
+                intseq, enc_out, mass=mass, charge=charge, causal=causal
             )
+            logits = dec_out["logits"]
 
-            predictions = self.greedy(dec_out[:, index])
-            probs[:, index, :] = dec_out[:, index]
+            predictions = self.greedy(logits[:, index])
+            probs[:, index, :] = logits[:, index]
 
             if index < self.seq_len - 1:
                 intseq = self.set_tokens(intseq, index + 1, predictions)
@@ -288,7 +291,7 @@ class DenovoDecoder(pl.LightningModule):
 
         return intseq, probs
 
-    def correct_sequence_(self, enc_out, batdic, softmax=False):
+    def correct_sequence_(self, enc_out, batdic):
         bs = enc_out["emb"].shape[0]
         rank = torch.zeros(bs, self.seq_len, dtype=torch.int32)
         prob = torch.zeros(bs, self.seq_len, dtype=torch.float32)
@@ -297,7 +300,7 @@ class DenovoDecoder(pl.LightningModule):
         for i in range(self.seq_len):
             index = int(i)
 
-            dec_out = self(intseq, enc_out, batdic, False, softmax)
+            dec_out = self(intseq, enc_out, batdic, False)
 
             wrank = torch.where(
                 (-dec_out[:, i]).argsort(-1) == batdic["seqint"][:, i : i + 1]
@@ -326,11 +329,20 @@ class DenovoDecoder(pl.LightningModule):
         mass=None,
         charge=None,
         energy=None,
-        softmax=False,
         causal=False,
+        peptide_lengths=None,
     ):
         if causal:
             raise NotImplementedError()
+
+        if peptide_lengths is not None:
+            raise NotImplementedError(
+                "This class needs to implement the padding mask creation based on "
+                "pep length and include a 'padding_mask' in the returned dict"
+            )
+            # padding_mask = self._get_padding_mask()
+        else:
+            padding_mask = None
 
         dec_inp = self.decinp(
             input_intseq,
@@ -340,11 +352,9 @@ class DenovoDecoder(pl.LightningModule):
             energy=energy,
         )
 
-        output = self.decoder.forward(**dec_inp)
-        if softmax:
-            output = torch.softmax(output, dim=-1)
+        logits = self.decoder.forward(**dec_inp)
 
-        return output
+        return {"logits": logits, "padding_mask": padding_mask}
 
 
 def decoder_greedy_base(token_dict, d_model=512, **kwargs):

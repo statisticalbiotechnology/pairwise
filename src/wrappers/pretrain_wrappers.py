@@ -16,7 +16,7 @@ class TrinaryMZPLWrapper(BasePLWrapper):
 
         self.TASK_NAME = "trinary_mz"
 
-    def _parse_batch(self, batch):
+    def _parse_batch(self, batch, Eval=False):
         spectra = batch
         mz_arr = spectra["mz_array"]
         int_arr = spectra["intensity_array"]
@@ -206,7 +206,7 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
         loss_mask = ~keep_mask
         return masked_input, loss_mask
 
-    def _parse_batch(self, batch):
+    def _parse_batch(self, batch, Eval=False):
         mz_arr = batch["mz_array"]
         int_arr = batch["intensity_array"]
         mzab = torch.stack([mz_arr, int_arr], dim=-1)

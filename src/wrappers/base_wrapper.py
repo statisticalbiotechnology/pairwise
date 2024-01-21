@@ -224,7 +224,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
         return {"val_stats": val_stats, "returns": returns}
 
     def test_step(self, batch, batch_idx):
-        parsed_batch, batch_size = self._parse_batch(batch)
+        parsed_batch, batch_size = self._parse_batch(batch, Eval=True)
         returns = self.eval_forward(parsed_batch)
         test_stats = self._get_eval_stats(returns, parsed_batch)
 

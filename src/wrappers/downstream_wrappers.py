@@ -139,7 +139,7 @@ class DeNovoTeacherForcing(BasePLWrapper):
             outs,
             mass=parsed_batch["mass"] if self.decoder.use_mass else None,
             charge=parsed_batch["charge"] if self.decoder.use_charge else None,
-            #peptide_lengths=parsed_batch["peptide_lengths"],
+            peptide_lengths=parsed_batch["peptide_lengths"],
         )
         return preds
 
@@ -200,9 +200,6 @@ class DeNovoTeacherForcing(BasePLWrapper):
         deepnovo_metrics = self.deepnovo_metrics(preds_ffill, targ, aa_confidence)
         stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
         return stats
-
-    def on_validation_epoch_end(self):
-        pass
 
     def configure_optimizers(self):
         return [
@@ -284,29 +281,29 @@ class DeNovoRandom(DeNovoTeacherForcing):
         super().__init__(
             encoder, decoder, datasets, args, collate_fn, token_dicts, conf_threshold
         )
-        self.null_token = self.output_dict['X']
+        self.null_token = self.output_dict["X"]
         assert (
             "<H>" in token_dicts["input_dict"].keys()
         ), "Needs to include the hidden token"
-    
+
+        self.TASK_NAME = "denovo_random"
+
     def _replace_eos_with_null(self, tensor: torch.Tensor):
         tensor = tensor.clone()
         tensor[tensor == self.EOS] = self.null_token
         return tensor
 
-
     def _get_train_stats(self, returns, parsed_batch):
         target = parsed_batch["target_intseq"]
         logits = returns
-        #padding_mask = (~returns["padding_mask"]).int()
+        # padding_mask = (~returns["padding_mask"]).int()
         loss = self._get_train_loss(logits, target)
         stats = {"loss": loss}  # , **naive_metrics}
         return loss, stats
 
-        self.TASK_NAME = "denovo_random"
-
-    def _get_train_loss(self, preds, labels):
+    def _get_train_loss(self, returns, labels):
         targ_one_hot = F.one_hot(labels, self.predcats).type(torch.float32)
+        preds = returns["logits"]
         preds = preds[self.inds]
         loss = F.cross_entropy(preds, targ_one_hot)
         return loss
@@ -348,9 +345,7 @@ class DeNovoRandom(DeNovoTeacherForcing):
         batch_size, sl = batch["mz_array"].shape
 
         # Target first
-        target = self._append_EOS_tokens(
-            batch['intseq'], batch['peptide_lengths']
-        )
+        target = self._append_EOS_tokens(batch["intseq"], batch["peptide_lengths"])
 
         # Return alternate output if evaluation
         # - No need for input sequence
@@ -360,7 +355,9 @@ class DeNovoRandom(DeNovoTeacherForcing):
 
         # Find the indices first null tokens so that when you choose random
         # token you avoid trivial trailing null tokens (beyond final null)
-        nonnull = batch['peptide_lengths'].squeeze()+1 #(intseq != self.input_dict["X"]).type(torch.int32).sum(1)
+        nonnull = (
+            batch["peptide_lengths"].squeeze() + 1
+        )  # (intseq != self.input_dict["X"]).type(torch.int32).sum(1)
 
         # Choose random tokens to predict
         # - the values of inds will be final non-hidden value in decoder input
@@ -369,7 +366,7 @@ class DeNovoRandom(DeNovoTeacherForcing):
         #   yet implemented when feeding vectors into low/high arguments
         uniform = torch.rand(batch_size, device=nonnull.device) * nonnull
         inds = uniform.floor().type(torch.int32)
-        
+
         # Indices of chosen predict tokens
         # - save for LossFunction
         inds_ = [torch.arange(inds.shape[0], dtype=torch.int32), inds]
@@ -388,6 +385,24 @@ class DeNovoRandom(DeNovoTeacherForcing):
         intseq_ = self.fill2c(intseq, inds, "<H>", output=False)
 
         return intseq_, targ
+
+    def forward(self, parsed_batch, **kwargs):
+        outs = self.encoder(
+            parsed_batch["mz_ab"],
+            length=parsed_batch["peak_lengths"],
+            mass=parsed_batch["mass"] if self.encoder.use_mass else None,
+            charge=parsed_batch["charge"] if self.encoder.use_charge else None,
+            return_mask=True,
+            **kwargs
+        )
+        preds = self.decoder(
+            parsed_batch["input_intseq"],
+            outs,
+            mass=parsed_batch["mass"] if self.decoder.use_mass else None,
+            charge=parsed_batch["charge"] if self.decoder.use_charge else None,
+            # peptide_lengths=parsed_batch["peptide_lengths"],
+        )
+        return preds
 
     def eval_forward(self, parsed_batch, **kwargs):
         outs = self.encoder(
