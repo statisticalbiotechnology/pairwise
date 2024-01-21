@@ -7,6 +7,9 @@ from pathlib import Path
 import torch
 from functools import partial
 
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
+
 from collate_functions import pad_peaks, pad_peptides
 
 from loader_parquet import PeptideDataset, PeptideParser
@@ -79,6 +82,41 @@ def get_ninespecies_dataset_splits(
         partial(pad_peptides, max_peaks=max_peaks, null_token_idx=amod_dict["X"]),
         token_dicts,
     )
+
+
+def configure_callbacks(args, val_metric_name: str = "val_loss"):
+    callbacks = []
+    filename = f"{{epoch}}-{{{val_metric_name}:.2f}}"
+    # Checkpoint callback
+    if not args.barebones:
+        callbacks += [
+            ModelCheckpoint(
+                dirpath=args.output_dir,
+                filename=filename,
+                monitor=val_metric_name,  # requires that we log something called val_metric_name
+                mode="min",
+                save_top_k=args.save_top_k,
+                save_last=args.save_last,
+                every_n_epochs=args.every_n_epochs,
+            )
+        ]
+
+    if args.anneal_lr:
+        # Cosine annealing LR with warmup callback
+        callbacks += [
+            CosineAnnealLRCallback(
+                lr=args.lr, min_lr=args.min_lr, warmup_epochs=args.warmup_epochs
+            )
+        ]
+
+    # measure FLOPs on the first train batch
+    if args.profile_flops:
+        callbacks += [FLOPProfilerCallback()]
+
+    if args.early_stop > 0:
+        callbacks += [EarlyStopping(val_metric_name, patience=args.early_stop)]
+
+    return callbacks
 
 
 def get_rank() -> int:

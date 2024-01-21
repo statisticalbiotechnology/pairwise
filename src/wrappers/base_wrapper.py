@@ -57,13 +57,22 @@ class BasePLWrapper(ABC, pl.LightningModule):
         datasets (list): A list containing the train, val, and test datasets.
     """
 
-    def __init__(self, encoder, datasets, args, head=None, collate_fn=None):
+    def __init__(
+        self,
+        encoder,
+        datasets,
+        args,
+        head=None,
+        collate_fn=None,
+        task_dict=None,
+    ):
         super().__init__()
-
+        self.TASK_NAME = ""
         self.encoder = encoder
         self.head = head
         self.datasets = datasets
         self.collate_fn = collate_fn
+        self.task_dict = task_dict
         self.batch_size = args.batch_size
         self.num_workers = args.num_workers
         self.pin_mem = args.pin_mem
@@ -143,15 +152,22 @@ class BasePLWrapper(ABC, pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         opts = self.optimizers()
-        for opt in opts:
-            opt.zero_grad()
+        if hasattr(opts, "__iter__"):
+            for opt in opts:
+                opt.zero_grad()
+        else:
+            opts.zero_grad()
+
         parsed_batch, batch_size = self._parse_batch(batch)
         returns = self.forward(parsed_batch)
         loss, train_stats = self._get_train_stats(returns, parsed_batch)
+
+        prefix = "train_"
+        if self.TASK_NAME:
+            prefix = self.TASK_NAME + "_" + prefix
+
         train_stats = {
-            "train_" + key: val.detach().item()
-            if isinstance(val, torch.Tensor)
-            else val
+            prefix + key: val.detach().item() if isinstance(val, torch.Tensor) else val
             for key, val in train_stats.items()
         }
         self.log_dict(
@@ -161,27 +177,36 @@ class BasePLWrapper(ABC, pl.LightningModule):
             batch_size=batch_size,
             sync_dist=True,
         )
-        self.running_train_loss.update(train_stats["train_loss"])
+        self.running_train_loss.update(train_stats[prefix + "loss"])
         self.log(
-            "run_train_loss:",
+            prefix + "run_loss",
             self.running_train_loss.get_running_loss(),
             prog_bar=True,
             sync_dist=True,
         )
 
         self.manual_backward(loss)
-        for opt in opts:
-            opt.step()
+        if hasattr(opts, "__iter__"):
+            for opt in opts:
+                opt.step()
+        else:
+            opts.step()
         return {"loss": loss, "returns": returns}
 
     def validation_step(self, batch, batch_idx):
         parsed_batch, batch_size = self._parse_batch(batch, Eval=True)
         returns = self.eval_forward(parsed_batch)
         val_stats = self._get_eval_stats(returns, parsed_batch)
+
+        prefix = "val_"
+        if self.TASK_NAME:
+            prefix = self.TASK_NAME + "_" + prefix
+
         val_stats = {
-            "val_" + key: val.detach().item() if isinstance(val, torch.Tensor) else val
+            prefix + key: val.detach().item() if isinstance(val, torch.Tensor) else val
             for key, val in val_stats.items()
         }
+
         self.log_dict(
             {**val_stats},
             on_epoch=True,
@@ -189,9 +214,9 @@ class BasePLWrapper(ABC, pl.LightningModule):
             batch_size=batch_size,
             sync_dist=True,
         )
-        self.running_val_loss.update(val_stats["val_loss"])
+        self.running_val_loss.update(val_stats[prefix + "loss"])
         self.log(
-            "run_val_loss:",
+            "run_val_loss",
             self.running_val_loss.get_running_loss(),
             prog_bar=True,
             sync_dist=True,
@@ -202,8 +227,13 @@ class BasePLWrapper(ABC, pl.LightningModule):
         parsed_batch, batch_size = self._parse_batch(batch)
         returns = self.eval_forward(parsed_batch)
         test_stats = self._get_eval_stats(returns, parsed_batch)
+
+        prefix = "test_"
+        if self.TASK_NAME:
+            prefix = self.TASK_NAME + "_" + prefix
+
         test_stats = {
-            "test_" + key: val.detach().item() if isinstance(val, torch.Tensor) else val
+            prefix + key: val.detach().item() if isinstance(val, torch.Tensor) else val
             for key, val in test_stats.items()
         }
         self.log_dict(
@@ -265,41 +295,62 @@ class BasePLWrapper(ABC, pl.LightningModule):
             )
         return opts
 
-    @abstractmethod
+    def _get_padding_mask(self, sequences: torch.Tensor, seq_lengths: torch.Tensor):
+        """
+        sequences.shape = (batch_size, max_sequence_len, dim)
+        seq_lengths.shape = (batch_size, 1)
+        """
+        assert len(sequences.shape) == 3
+        assert len(seq_lengths.shape) == 2
+        all_inds = (
+            torch.arange(sequences.shape[1], device=sequences.device)
+            .unsqueeze(0)
+            .repeat((sequences.shape[0], 1))
+        )
+        return all_inds >= seq_lengths
+
+    def _update_best_metrics(self, metrics, prefix="val_", suffix="_epoch"):
+        """Override this to track the best achieved value for additional metrics beyond 'loss'"""
+        # validation loss
+        self.tracker.update_metric(
+            "best_" + prefix + "loss" + suffix,
+            metrics[prefix + "loss" + suffix].detach().cpu().item(),
+            maximize=False,
+        )
+
+    def _get_metric_prefix_suffix(self, prefix="val_", suffix="_epoch"):
+        if self.TASK_NAME:
+            prefix = self.TASK_NAME + "_" + prefix
+        return prefix, suffix
+
     def on_validation_epoch_end(self):
         # Update the current best achieved value for each val metric
         # Get the per-epoch metric value from the logged metrics
+        prefix, suffix = self._get_metric_prefix_suffix()
 
         cur_epoch = self.trainer.current_epoch
         if self.global_rank == 0:  # Only log on master process
             if cur_epoch > 0:
                 metrics = self.trainer.logged_metrics
 
-                # example
-                # self.tracker.update_metric(
-                #     "best_val_loss",
-                #     metrics["val_loss"].detach().cpu().item(),
-                #     maximize=False,
-                # )
-
-                # self.tracker.update_metric(
-                #     "best_val_r2_score",
-                #     metrics["val_r2_score"].detach().cpu().item(),
-                #     maximize=True,
-                # )
+                self._update_best_metrics(metrics, prefix, suffix)
 
             # TODO: verify: don't think this part is needed bc of the "on_train_end"
-            # # at the last epoch, log the best metrics
-            # if cur_epoch == self.trainer.max_epochs - 1:
-            #     self.log_dict(self.tracker.best_metrics)
-            #     self.best_metrics_logged = True
+            # at the last epoch, log the best metrics
+            if cur_epoch == self.trainer.max_epochs - 1:
+                self.log_dict(self.tracker.best_metrics)
+                self.best_metrics_logged = True
 
     def on_train_epoch_end(self):  # log the learning rate
         opts = self.optimizers()
-        cur_lr_enc = opts[0].param_groups[0]["lr"]
-        self.log("lr_enc", cur_lr_enc, on_step=False, on_epoch=True)
-        cur_lr_head = opts[1].param_groups[0]["lr"]
-        self.log("lr_head", cur_lr_head, on_step=False, on_epoch=True)
+        if hasattr(opts, "__iter__"):
+            cur_lr_enc = opts[0].param_groups[0]["lr"]
+            self.log("lr_enc", cur_lr_enc, on_step=False, on_epoch=True)
+            cur_lr_head = opts[1].param_groups[0]["lr"]
+            self.log("lr_head", cur_lr_head, on_step=False, on_epoch=True)
+        else:
+            cur_lr_enc = opts.param_groups[0]["lr"]
+            self.log("lr_enc", cur_lr_enc, on_step=False, on_epoch=True)
 
     def on_train_end(self):
         if not self.best_metrics_logged and self.log_wandb:

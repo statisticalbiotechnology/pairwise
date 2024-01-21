@@ -35,6 +35,12 @@ def get_args_parser(conf_parser):
         help="Which pretraining strategy to use",
     )
     parser.add_argument(
+        "--pretrain_config",
+        default="configs/pretrain.yaml",
+        type=str,
+        help="Path of the pretraining config",
+    )
+    parser.add_argument(
         "--downstream_config",
         default="configs/downstream.yaml",
         type=str,
@@ -80,7 +86,7 @@ def get_args_parser(conf_parser):
     )
     parser.add_argument(
         "--mask_zero_tokens",
-        default=0,
+        default=1,
         type=int,
         help="Bool (0/1): mask the attention for 'null' tokens",
     )
@@ -123,7 +129,7 @@ def get_args_parser(conf_parser):
     )
     parser.add_argument(
         "--mask_ratio",
-        default=0.75,
+        default=0.2,
         type=float,
         help="Masking ratio (percentage of removed tokens).",
     )
@@ -353,6 +359,18 @@ def parse_args_and_config():
     args = parser.parse_args(remaining_args)
     sanity_checks(args)
 
+    if bool(args.pretrain_config):
+        try:
+            with open(args.pretrain_config, "r") as f:
+                pretrain_config = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            print(
+                f"Error occurred while loading the configuration file: {args.downstream_config}"
+            )
+            print(e)
+    else:
+        pretrain_config = None
+
     if bool(args.downstream_config):
         try:
             with open(args.downstream_config, "r") as f:
@@ -364,7 +382,8 @@ def parse_args_and_config():
             print(e)
     else:
         ds_config = None
-    return args, ds_config
+
+    return args, pretrain_config, ds_config
 
 
 def create_output_dirs(args, is_main_process=True):

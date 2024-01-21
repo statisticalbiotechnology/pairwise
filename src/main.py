@@ -1,16 +1,15 @@
+from copy import deepcopy
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.loggers.wandb import WandbLogger
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 import wandb
 import numpy as np
 import random
 from parse_args import parse_args_and_config, create_output_dirs
 import time
 
-from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
 from wrappers.downstream_wrappers import DeNovoRandom, DeNovoTeacherForcing
-from wrappers.pretrain_wrappers import TrinaryMZPLWrapper
+from wrappers.pretrain_wrappers import MaskedTrainingPLWrapper, TrinaryMZPLWrapper
 
 
 import utils
@@ -30,7 +29,7 @@ DECODER_DICT = {
 }
 
 PRETRAIN_TASK_DICT = {
-    # "masked": MaskedTrainingPLWrapper,
+    "masked": MaskedTrainingPLWrapper,
     "trinary_mz": TrinaryMZPLWrapper,
 }
 
@@ -45,11 +44,11 @@ def update_args(args, config_dict):
         setattr(args, key, val)
 
 
-def main(args, ds_config=None):
+def main(args, pretrain_config=None, ds_config=None):
     print(f"Saving checkpoints in {args.output_dir}")
     print(f"Saving logs in {args.log_dir}")
 
-    config = {**vars(args), "downstream": ds_config}
+    config = {**vars(args), "downstream": ds_config, "pretrain": pretrain_config}
     # Wandb stuff
     run = None
     logger = None
@@ -75,33 +74,6 @@ def main(args, ds_config=None):
     else:
         args.lr = args.blr
 
-    callbacks = []
-    # Checkpoint callback
-    if not args.barebones:
-        callbacks += [
-            ModelCheckpoint(
-                dirpath=args.output_dir,
-                filename="{epoch}-{val_loss:.2f}",
-                monitor="val_loss",  # requires that we log something called "val_loss"
-                mode="min",
-                save_top_k=args.save_top_k,
-                save_last=args.save_last,
-                every_n_epochs=args.every_n_epochs,
-            )
-        ]
-
-    if args.anneal_lr:
-        # Cosine annealing LR with warmup callback
-        callbacks += [
-            CosineAnnealLRCallback(
-                lr=args.lr, min_lr=args.min_lr, warmup_epochs=args.warmup_epochs
-            )
-        ]
-
-    # measure FLOPs on the first train batch
-    if args.profile_flops:
-        callbacks += [FLOPProfilerCallback()]
-
     datasets, collate_fn = utils.get_spectrum_dataset_splits(
         args.data_root_dir,
         splits=[0.7, 0.2, 0.1],
@@ -123,13 +95,18 @@ def main(args, ds_config=None):
 
     distributed = args.num_devices > 1 or args.num_nodes > 1
     if args.pretrain:
-        # Instantiate PL wrapper based on the pretraining task
-        pl_encoder = PRETRAIN_TASK_DICT[args.pretraining_task](
-            encoder, args=args, datasets=datasets, collate_fn=collate_fn
+        pretrain_callbacks = utils.configure_callbacks(
+            args, args.pretraining_task + "_val_loss_epoch"
         )
 
-        if args.early_stop > 0:
-            callbacks += [EarlyStopping("val_loss", patience=args.early_stop)]
+        # Instantiate PL wrapper based on the pretraining task
+        pl_encoder = PRETRAIN_TASK_DICT[args.pretraining_task](
+            encoder,
+            args=args,
+            datasets=datasets,
+            collate_fn=collate_fn,
+            task_dict=config["pretrain"][args.pretraining_task],
+        )
 
         if run is not None and utils.get_rank() == 0:
             run.watch(pl_encoder, "all")
@@ -157,11 +134,13 @@ def main(args, ds_config=None):
             max_epochs=args.epochs,
             gradient_clip_val=args.clip_grad,
             logger=logger,
-            callbacks=callbacks,
+            callbacks=pretrain_callbacks,
             benchmark=True,
             default_root_dir=args.log_dir,
             # profiler="simple",
             barebones=args.barebones,
+            num_sanity_val_steps=0,
+            # detect_anomaly=True,
         )
 
         if args.resume:
@@ -201,19 +180,23 @@ def main(args, ds_config=None):
         encoder_ckpt = torch.load(encoder_path)
         pl_encoder.load_state_dict(encoder_ckpt["state_dict"])
 
-    datasets_ds, collate_fn_ds, token_dicts = utils.get_ninespecies_dataset_splits(
-        args.downstream_root_dir,
-        ds_config,
-        max_peaks=args.max_peaks,
-        subset=args.subset,
-        include_hidden=args.downstream_task == "denovo_random",
-    )
-
     if args.downstream_task != "none":
         # Extract pretrained encoder nn.Module
         if args.pretrain or args.encoder_weights:
             encoder = pl_encoder.encoder
 
+        ds_callbacks = utils.configure_callbacks(
+            args, args.downstream_task + "_val_loss_epoch"
+        )
+
+        # Load downstream dataset
+        datasets_ds, collate_fn_ds, token_dicts = utils.get_ninespecies_dataset_splits(
+            args.downstream_root_dir,
+            config["downstream"],
+            max_peaks=args.max_peaks,
+            subset=args.subset,
+            include_hidden=args.downstream_task == "denovo_random",
+        )
         # Define decoder model
         assert (
             args.decoder_model
@@ -251,7 +234,7 @@ def main(args, ds_config=None):
             max_epochs=args.epochs,
             gradient_clip_val=args.clip_grad,
             logger=logger,
-            callbacks=callbacks,
+            callbacks=ds_callbacks,
             benchmark=True,
             default_root_dir=args.log_dir,
             # profiler="simple",
@@ -277,7 +260,7 @@ def main(args, ds_config=None):
 
 if __name__ == "__main__":
     # parse args
-    args, ds_config = parse_args_and_config()
+    args, pretrain_config, ds_config = parse_args_and_config()
     # create output dirs on main process
     create_output_dirs(args, is_main_process=utils.get_rank() == 0)
     # A100 specific setting
@@ -289,4 +272,4 @@ if __name__ == "__main__":
     random.seed(args.seed)
     pl.seed_everything(args.seed)
     # run
-    main(args, ds_config)
+    main(args, pretrain_config, ds_config)

@@ -69,6 +69,8 @@ class DeNovoTeacherForcing(BasePLWrapper):
             if key != self.null_token
         ), "All keys except the null token in amod_dict must be in self.denovo_metrics.residues"
 
+        self.TASK_NAME = "denovo_tf"
+
     def _mzab_array(self, batch):
         mz_arr = batch["mz_array"]
         int_arr = batch["intensity_array"]
@@ -166,6 +168,9 @@ class DeNovoTeacherForcing(BasePLWrapper):
         # logits.shape = (batch_size, num_classes, sequence_len)
         loss = F.cross_entropy(logits, labels, reduction="none")
         masked_loss = loss * padding_mask
+        masked_loss = masked_loss.sum(dim=1, keepdim=True) / padding_mask.sum(
+            dim=1, keepdim=True
+        )
         return masked_loss.mean()
 
     def _get_train_stats(self, returns, parsed_batch):
@@ -297,6 +302,8 @@ class DeNovoRandom(DeNovoTeacherForcing):
         loss = self._get_train_loss(logits, target)
         stats = {"loss": loss}  # , **naive_metrics}
         return loss, stats
+
+        self.TASK_NAME = "denovo_random"
 
     def _get_train_loss(self, preds, labels):
         targ_one_hot = F.one_hot(labels, self.predcats).type(torch.float32)
