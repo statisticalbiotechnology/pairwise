@@ -133,7 +133,13 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
         self.mz_to_int_ratio = task_dict["mz_to_int_ratio"]
 
         if self.predict_fourier:
-            head = None
+            head = torch.torch.nn.TransformerEncoderLayer(
+                d_model=encoder.running_units,
+                nhead=encoder.nhead,
+                dim_feedforward=encoder.dim_feedforward,
+                batch_first=True,
+                dropout=encoder.dropout,
+            )
         else:
             head = nn.Linear(encoder.running_units, 2)
 
@@ -260,7 +266,11 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
         num_cem_tokens = outs["num_cem_tokens"]
         preds = outs["emb"][:, num_cem_tokens:, :]
 
-        if not self.predict_fourier:
+        if self.predict_fourier:
+            mask = outs["mask"][:, num_cem_tokens:]
+            preds = self.head(preds, src_key_padding_mask=mask)
+
+        else:
             preds = self.head(preds)
         return preds
 

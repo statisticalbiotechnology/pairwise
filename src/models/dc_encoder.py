@@ -33,6 +33,7 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
             self.peak_encoder = torch.nn.Identity()
 
         self.running_units = self.d_model
+        # Already has attributes self.nhead, self.dim_feedforward, self.dropout for some reason
         self.use_charge = use_charge
         self.use_energy = use_energy
         self.use_mass = use_mass
