@@ -368,7 +368,7 @@ def encoder_base_arch(use_charge=False, use_energy=False, use_mass=False, **kwar
 def encoder_base_pairwise(use_charge=False, use_energy=False, use_mass=False, **kwargs):
     model = Encoder(
         pairwise_bias=True,  # use pairwise mz tensor to create SA-bias
-        pairwise_units=128,
+        pairwise_units=64,
         pw_blocks=1,
         **BASE_ARCH_DICT,
         use_charge=use_charge,
