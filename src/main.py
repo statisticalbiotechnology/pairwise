@@ -48,7 +48,7 @@ def main(args, pretrain_config=None, ds_config=None):
     print(f"Saving checkpoints in {args.output_dir}")
     print(f"Saving logs in {args.log_dir}")
 
-    config = {**vars(args), "downstream": ds_config}
+    config = {**vars(args), "downstream": ds_config, "pretrain": pretrain_config}
     # Wandb stuff
     run = None
     logger = None
@@ -96,7 +96,7 @@ def main(args, pretrain_config=None, ds_config=None):
     distributed = args.num_devices > 1 or args.num_nodes > 1
     if args.pretrain:
         pretrain_callbacks = utils.configure_callbacks(
-            args, args.pretraining_task + "_val_loss"
+            args, args.pretraining_task + "_val_loss_epoch"
         )
 
         # Instantiate PL wrapper based on the pretraining task
@@ -105,7 +105,7 @@ def main(args, pretrain_config=None, ds_config=None):
             args=args,
             datasets=datasets,
             collate_fn=collate_fn,
-            task_dict=pretrain_config[args.pretraining_task],
+            task_dict=config["pretrain"][args.pretraining_task],
         )
 
         if run is not None and utils.get_rank() == 0:
@@ -186,13 +186,13 @@ def main(args, pretrain_config=None, ds_config=None):
             encoder = pl_encoder.encoder
 
         ds_callbacks = utils.configure_callbacks(
-            args, args.downstream_task + "_val_loss"
+            args, args.downstream_task + "_val_loss_epoch"
         )
 
         # Load downstream dataset
         datasets_ds, collate_fn_ds, token_dicts = utils.get_ninespecies_dataset_splits(
             args.downstream_root_dir,
-            ds_config,
+            config["downstream"],
             max_peaks=args.max_peaks,
             subset=args.subset,
             include_hidden=args.downstream_task == "denovo_random",

@@ -86,13 +86,13 @@ def get_ninespecies_dataset_splits(
 
 def configure_callbacks(args, val_metric_name: str = "val_loss"):
     callbacks = []
-
+    filename = f"{{epoch}}-{{{val_metric_name}:.2f}}"
     # Checkpoint callback
     if not args.barebones:
         callbacks += [
             ModelCheckpoint(
                 dirpath=args.output_dir,
-                filename=f"{{epoch}}-{val_metric_name}:.2f",
+                filename=filename,
                 monitor=val_metric_name,  # requires that we log something called val_metric_name
                 mode="min",
                 save_top_k=args.save_top_k,
@@ -115,6 +115,8 @@ def configure_callbacks(args, val_metric_name: str = "val_loss"):
 
     if args.early_stop > 0:
         callbacks += [EarlyStopping(val_metric_name, patience=args.early_stop)]
+
+    return callbacks
 
 
 def get_rank() -> int:
