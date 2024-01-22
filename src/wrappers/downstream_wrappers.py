@@ -198,7 +198,9 @@ class DeNovoTeacherForcing(BasePLWrapper):
         aa_confidence, _ = F.softmax(logits, dim=-1).max(dim=-1)
         loss = F.cross_entropy(logits_ce, targ)
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
-        naive_metrics = NaiveAccRecPrec(targ, preds_ffill, self.null_token, self.EOS)
+        naive_metrics = NaiveAccRecPrec(
+            targ, preds_ffill, self.amod_dict[self.null_token], self.EOS
+        )
         deepnovo_metrics = self.deepnovo_metrics(preds_ffill, targ, aa_confidence)
         stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
         return stats
