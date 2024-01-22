@@ -1,11 +1,11 @@
 num_workers: 16
-blr: 4e-5
+
 task: denovo
 top_pks: 100
 pep_length: [0, 30]
 charge: [0, 10]
 add_mass: True
-conf_threshold: 0.9
+
 paths:
   train:
     - train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet
@@ -14,3 +14,23 @@ paths:
     - validation-00000-of-00001-b84568f5bf3ba95d.parquet
   test: 
     - test-00000-of-00001-15be7bb3864037e7.parquet
+
+denovo_tf:
+  # DeNovoTeacherForcing specific hparams
+  conf_threshold: 0
+  # Training hparams
+  blr: 1.0e-4
+  weight_decay: 0
+  epochs: 15
+  subset: 0
+  num_workers: 16
+
+denovo_random:
+  # DeNovoTeacherRandom specific hparams
+  conf_threshold: 0
+  # Training hparams
+  blr: 1.0e-4
+  weight_decay: 0
+  epochs: 30
+  subset: 0
+  num_workers: 16

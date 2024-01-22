@@ -46,15 +46,17 @@ class DeNovoTeacherForcing(BasePLWrapper):
         args,
         collate_fn=None,
         token_dicts=None,
-        conf_threshold=None,
+        task_dict=None,
     ):
-        super().__init__(encoder, datasets, args, collate_fn=collate_fn)
+        super().__init__(
+            encoder, datasets, args, collate_fn=collate_fn, task_dict=task_dict
+        )
         self.decoder = decoder
         self.denovo_metrics = DeNovoMetrics()
         self.amod_dict = token_dicts["amod_dict"]
         self.int_to_aa = {v: k for k, v in self.amod_dict.items()}
         self.null_token = "X"
-        self.conf_threshold = conf_threshold
+        self.conf_threshold = task_dict["conf_threshold"]
 
         self.input_dict = token_dicts["input_dict"]
         self.SOS = self.input_dict["<SOS>"]
@@ -276,10 +278,16 @@ class DeNovoRandom(DeNovoTeacherForcing):
         args,
         collate_fn=None,
         token_dicts=None,
-        conf_threshold=None,
+        task_dict=None,
     ):
         super().__init__(
-            encoder, decoder, datasets, args, collate_fn, token_dicts, conf_threshold
+            encoder,
+            decoder,
+            datasets,
+            args,
+            collate_fn=collate_fn,
+            token_dicts=token_dicts,
+            task_dict=task_dict,
         )
         self.null_token = self.output_dict["X"]
         assert (

@@ -74,13 +74,20 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.collate_fn = collate_fn
         self.task_dict = task_dict
         self.batch_size = args.batch_size
-        self.num_workers = args.num_workers
+        self.num_workers = task_dict.get("num_workers", args.num_workers)
         self.pin_mem = args.pin_mem
-        self.weight_decay = args.weight_decay
         self.datasets = datasets
-        self.lr = args.lr
-        self.use_charge = args.use_charge
-        self.use_mass = args.use_mass
+
+        self.weight_decay = task_dict["weight_decay"]
+
+        if args.scale_lr_by_batchsize:
+            self.lr = (
+                task_dict["blr"] * args.eff_batch_size / 256
+                if task_dict.get("lr", None) is None
+                else task_dict["lr"]
+            )
+        else:
+            self.lr = task_dict["blr"]
         self.mask_zero_tokens = args.mask_zero_tokens
         self.log_wandb = args.log_wandb
         self.tracker = BestMetricTracker()

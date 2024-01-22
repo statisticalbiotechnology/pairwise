@@ -53,6 +53,11 @@ def main(args, pretrain_config=None, ds_config=None):
         "downstream_config": ds_config,
         "pretrain_config": pretrain_config,
     }
+
+    if args.subset:
+        config["downstream_config"][args.downstream_task]["subset"] = args.subset
+        config["pretrain_config"][args.pretraining_task]["subset"] = args.subset
+
     # Wandb stuff
     run = None
     logger = None
@@ -70,19 +75,17 @@ def main(args, pretrain_config=None, ds_config=None):
         logger = WandbLogger()
 
     # lr scaling by batch size trick
-    eff_batch_size = (
+    args.eff_batch_size = (
         args.batch_size * args.accum_iter * args.num_devices * args.num_nodes
     )
-    if args.scale_lr_by_batchsize:
-        args.lr = args.blr * eff_batch_size / 256 if args.lr is None else args.lr
-    else:
-        args.lr = args.blr
+    if run is not None and utils.get_rank() == 0:
+        run.log({"eff_batch_size": args.eff_batch_size})
 
     datasets, collate_fn = utils.get_spectrum_dataset_splits(
         args.data_root_dir,
         splits=[0.7, 0.2, 0.1],
         max_peaks=args.max_peaks,
-        subset=args.subset,
+        subset=config["pretrain_config"][args.pretraining_task]["subset"],
     )
 
     # Define encoder model
@@ -135,7 +138,7 @@ def main(args, pretrain_config=None, ds_config=None):
             strategy=args.strategy if distributed else "auto",
             precision=args.precision,
             # Training args
-            max_epochs=args.epochs,
+            max_epochs=config["pretrain_config"][args.pretraining_task]["epochs"],
             gradient_clip_val=args.clip_grad,
             logger=logger,
             callbacks=pretrain_callbacks,
@@ -198,7 +201,7 @@ def main(args, pretrain_config=None, ds_config=None):
             args.downstream_root_dir,
             config["downstream_config"],
             max_peaks=args.max_peaks,
-            subset=args.subset,
+            subset=config["downstream_config"][args.downstream_task]["subset"],
             include_hidden=args.downstream_task == "denovo_random",
         )
         # Define decoder model
@@ -219,7 +222,7 @@ def main(args, pretrain_config=None, ds_config=None):
             datasets=datasets_ds,
             collate_fn=collate_fn_ds,
             token_dicts=token_dicts,
-            conf_threshold=config["downstream_config"]["conf_threshold"],
+            task_dict=config["downstream_config"][args.downstream_task],
         )
 
         print(
@@ -235,7 +238,7 @@ def main(args, pretrain_config=None, ds_config=None):
             strategy=args.strategy if distributed else "auto",
             precision=args.precision,
             # Training args
-            max_epochs=args.epochs,
+            max_epochs=config["downstream_config"][args.downstream_task]["epochs"],
             gradient_clip_val=args.clip_grad,
             logger=logger,
             callbacks=ds_callbacks,
