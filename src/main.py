@@ -5,6 +5,7 @@ from pytorch_lightning.loggers.wandb import WandbLogger
 import wandb
 import numpy as np
 import random
+from lance_data_module import LanceDataModule
 from parse_args import parse_args_and_config, create_output_dirs
 import time
 
@@ -81,11 +82,8 @@ def main(args, pretrain_config=None, ds_config=None):
     if run is not None and utils.get_rank() == 0:
         run.log({"eff_batch_size": args.eff_batch_size})
 
-    datasets, collate_fn = utils.get_spectrum_dataset_splits(
-        args.data_root_dir,
-        splits=[0.7, 0.2, 0.1],
-        max_peaks=args.max_peaks,
-        subset=config["pretrain_config"][args.pretraining_task]["subset"],
+    pretrain_data_module = utils.get_lance_data_module(
+        args.data_root_dir, args.batch_size, args.max_peaks
     )
 
     # Define encoder model
@@ -110,8 +108,6 @@ def main(args, pretrain_config=None, ds_config=None):
         pl_encoder = PRETRAIN_TASK_DICT[args.pretraining_task](
             encoder,
             args=args,
-            datasets=datasets,
-            collate_fn=collate_fn,
             task_dict=config["pretrain_config"][args.pretraining_task],
         )
 
@@ -156,18 +152,20 @@ def main(args, pretrain_config=None, ds_config=None):
         start_time = time.time()
         # This is the call to start training the model
         pretrainer.fit(
-            pl_encoder, ckpt_path=args.encoder_weights if args.resume else None
+            pl_encoder,
+            datamodule=pretrain_data_module,
+            ckpt_path=args.encoder_weights if args.resume else None,
         )
         end_time = time.time()  # End time measurement
         print(f"Pretraining finished in {end_time - start_time} seconds")
 
         # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
         if args.save_top_k > 0 and args.pretrain and not args.barebones:
-            pretrainer.test(ckpt_path="best")
+            pretrainer.test(datamodule=pretrain_data_module, ckpt_path="best")
 
     elif args.encoder_weights:
         pl_encoder = PRETRAIN_TASK_DICT[args.pretraining_task].load_from_checkpoint(
-            args.encoder_weights, args=args, encoder=encoder, datasets=datasets
+            args.encoder_weights, args=args, encoder=encoder
         )
         print(f"Loading encoder checkpoint: {args.encoder_weights}")
     else:

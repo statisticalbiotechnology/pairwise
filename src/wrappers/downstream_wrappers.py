@@ -1,5 +1,5 @@
 import torch
-from wrappers.base_wrapper import BasePLWrapper
+from wrappers.base_wrapper import BaseDownstreamWrapper
 from denovo_eval import Metrics as DeNovoMetrics
 import torch.nn.functional as F
 
@@ -37,7 +37,7 @@ def fill_null_after_first_EOS(prediction, null_token, EOS_token):
     return pred_without_eos
 
 
-class DeNovoTeacherForcing(BasePLWrapper):
+class DeNovoTeacherForcing(BaseDownstreamWrapper):
     def __init__(
         self,
         encoder,

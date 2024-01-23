@@ -26,7 +26,6 @@ class LanceDataModule(pl.LightningDataModule):
             "to have pre-indexed lance dirs (indexed.lance)"
         )
         self.lance_dirs = lance_dirs
-
         self.batch_size = batch_size
         self.collate_fn = collate_fn
 

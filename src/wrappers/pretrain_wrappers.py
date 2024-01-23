@@ -7,10 +7,10 @@ from models.peak_encoder import StaticPeakEncoder, PosEncoder
 
 
 class TrinaryMZPLWrapper(BasePLWrapper):
-    def __init__(self, encoder, datasets, args, collate_fn=None, task_dict=None):
+    def __init__(self, encoder, args, collate_fn=None, task_dict=None):
         self.penult_units = args.trinary_penult_units
         head = ClassifierHead(3, encoder.running_units, self.penult_units)
-        super().__init__(encoder, datasets, args, head, collate_fn, task_dict=task_dict)
+        super().__init__(encoder, args, head, collate_fn, task_dict=task_dict)
         self.corrupt_freq = args.trinary_freq
         self.corrupt_std = args.trinary_std
 
@@ -122,7 +122,6 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
     def __init__(
         self,
         encoder,
-        datasets,
         args,
         collate_fn=None,
         task_dict=None,
@@ -146,7 +145,6 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
 
         super().__init__(
             encoder,
-            datasets,
             args,
             collate_fn=collate_fn,
             head=head,
