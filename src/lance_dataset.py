@@ -108,7 +108,7 @@ class LanceDataset(_LanceDataset):
         num_rows = floor(
             raw_stream._ds.count_rows() / (self.batch_size * self.world_size)
         )
-        return num_rows
+        return num_rows - 1
 
     def __iter__(self):
         stream: Iterable[pa.RecordBatch]
