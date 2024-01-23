@@ -71,16 +71,16 @@ def index_data_folder(split_dir: Path):
 
 
 # Usage
-SOURCE_DATA_DIR = "/Users/alfred/Documents/Datasets/instanovo_data_subset"
-DEST_DATA_DIR = "/Users/alfred/Datasets/instanovo_splits_subset"
+SOURCE_DATA_DIR = "/proj/bedrock/datasets/InstaNovo_dataset/foundational_model/"
+DEST_DATA_DIR = "/proj/bedrock/datasets/InstaNovo_SPLITS_full/"
 FILE_TYPE = ".mgf"
 train_dir, val_dir, test_dir = split_dataset(
     SOURCE_DATA_DIR,
     DEST_DATA_DIR,
     FILE_TYPE,
-    # train_ratio=0.8,
-    # val_ratio=0.15,
-    # test_ratio=0.05,
+    train_ratio=0.8,
+    val_ratio=0.15,
+    test_ratio=0.05,
 )
 
 
