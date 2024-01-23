@@ -49,7 +49,7 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         task_dict=None,
     ):
         super().__init__(
-            encoder, datasets, args, collate_fn=collate_fn, task_dict=task_dict
+            encoder, args, datasets, collate_fn=collate_fn, task_dict=task_dict
         )
         self.decoder = decoder
         self.denovo_metrics = DeNovoMetrics()

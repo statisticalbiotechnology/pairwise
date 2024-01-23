@@ -82,10 +82,6 @@ def main(args, pretrain_config=None, ds_config=None):
     if run is not None and utils.get_rank() == 0:
         run.log({"eff_batch_size": args.eff_batch_size})
 
-    pretrain_data_module = utils.get_lance_data_module(
-        args.data_root_dir, args.batch_size, args.max_peaks
-    )
-
     # Define encoder model
     encoder = ENCODER_DICT[args.encoder_model](
         use_charge=args.use_charge,
@@ -100,6 +96,9 @@ def main(args, pretrain_config=None, ds_config=None):
 
     distributed = args.num_devices > 1 or args.num_nodes > 1
     if args.pretrain:
+        pretrain_data_module = utils.get_lance_data_module(
+            args.data_root_dir, args.batch_size, args.max_peaks
+        )
         pretrain_callbacks = utils.configure_callbacks(
             args, args.pretraining_task + "_val_loss_epoch"
         )
