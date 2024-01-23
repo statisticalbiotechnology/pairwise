@@ -76,7 +76,7 @@ class LanceDataset(_LanceDataset):
         with_row_id: bool = False,
         rank: Optional[int] = None,
         world_size: Optional[int] = None,
-        shard_granularity: Optional[Literal["fragment", "batch"]] = "fragment",
+        shard_granularity: Optional[Literal["fragment", "batch"]] = "batch",
         **kwargs,
     ):
         super().__init__(
@@ -105,7 +105,9 @@ class LanceDataset(_LanceDataset):
             with_row_id=self.with_row_id,
             granularity=self.shard_granularity,
         )
-        num_rows = floor(raw_stream._ds.count_rows() / self.batch_size)
+        num_rows = floor(
+            raw_stream._ds.count_rows() / (self.batch_size * self.world_size)
+        )
         return num_rows
 
     def __iter__(self):
