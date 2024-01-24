@@ -164,7 +164,10 @@ def main(args, pretrain_config=None, ds_config=None):
 
     elif args.encoder_weights:
         pl_encoder = PRETRAIN_TASK_DICT[args.pretraining_task].load_from_checkpoint(
-            args.encoder_weights, args=args, encoder=encoder
+            args.encoder_weights,
+            args=args,
+            encoder=encoder,
+            task_dict=config["pretrain_config"][args.pretraining_task],
         )
         print(f"Loading encoder checkpoint: {args.encoder_weights}")
     else:
