@@ -224,6 +224,17 @@ def main(args, pretrain_config=None, ds_config=None):
             token_dicts=token_dicts,
             task_dict=config["downstream_config"][args.downstream_task],
         )
+        if args.downstream_weights:
+            print(
+                f"Resuming downstream from previous checkpoint: {args.downstream_weights}"
+            )
+            downstream_ckpt = torch.load(
+                args.downstream_weights, map_location=pl_downstream.device
+            )
+            pl_downstream.load_state_dict(downstream_ckpt["state_dict"])
+
+        else:
+            print(f"Downstream training from scratch")
 
         print(
             f"Starting distributed downstream finetuning using {args.num_devices} devices on {args.num_nodes} node(s)"
