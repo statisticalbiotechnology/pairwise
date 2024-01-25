@@ -150,17 +150,21 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
             head=head,
             task_dict=task_dict,
         )
+        self.mask_ratio = args.mask_ratio
+        self.max_peaks = args.max_peaks
+        self._setup_masking_parameters(self)
+        self.TASK_NAME = "masked"
 
+    def _setup_masking_parameters(self):
         self.target_peak_encoder = (
             StaticPeakEncoder(
-                encoder.running_units, mz_to_int_ratio=self.mz_to_int_ratio
+                self.encoder.running_units, mz_to_int_ratio=self.mz_to_int_ratio
             )
             if self.predict_fourier
             else None
         )
-        self.mask_ratio = args.mask_ratio
 
-        d_mask_token = encoder.running_units if self.mask_token_fourier else 2
+        d_mask_token = self.encoder.running_units if self.mask_token_fourier else 2
 
         if self.learned_masked_token:
             self.mask_token = nn.Parameter(torch.randn(d_mask_token))
@@ -171,11 +175,9 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
 
         if self.positional_encoding:
             pos_encs = PosEncoder(d_mask_token)(
-                torch.zeros((1, int(1.2 * args.max_peaks), d_mask_token))
+                torch.zeros((1, int(1.2 * self.max_peaks), d_mask_token))
             )
             self.register_buffer("pos_encodings", pos_encs)
-
-        self.TASK_NAME = "masked"
 
     def random_masking(self, input, seq_lengths):
         """
@@ -315,3 +317,97 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
         loss = self._get_losses(preds, target, loss_mask)
         stats["loss"] = loss
         return stats
+
+
+class MaskedAutoencoderWrapper(MaskedTrainingPLWrapper):
+    def __init__(self, encoder, args, collate_fn=None, task_dict=None):
+        super().__init__(encoder, args, collate_fn, task_dict)
+        del self.head
+        del self.mask_token
+        del self.positional_encoding
+
+        if self.predict_fourier:
+            head = None
+        else:
+            head = nn.Linear(encoder.running_units, 2)
+
+        self.head = head
+        self.TASK_NAME = "masked_ae"
+
+        self.decoder_running_units = task_dict["decoder_running_units"]
+        self.decoder_nhead = task_dict["decoder_nhead"]
+        self.decoder_dim_feedforward = task_dict["decoder_dim_feedforward"]
+        self.decoder_dropout = task_dict["decoder_dropout"]
+
+        if self.encoder.running_units != self.decoder_running_units:
+            self.proj_before = nn.Linear(
+                self.encoder.running_units, self.decoder_running_units
+            )
+            self.proj_after = nn.Linear(
+                self.decoder_running_units, self.encoder.running_units
+            )
+        else:
+            self.proj_before = nn.Identity()
+            self.proj_after = nn.Identity()
+
+        self.decoder = torch.torch.nn.TransformerEncoderLayer(
+            d_model=self.decoder_running_units,
+            nhead=self.decoder_nhead,
+            dim_feedforward=self.decoder_dim_feedforward,
+            batch_first=True,
+            dropout=self.decoder_dropout,
+        )
+
+        self._setup_masking_parameters()
+
+    def _setup_masking_parameters(self):
+        self.target_peak_encoder = (
+            StaticPeakEncoder(
+                self.encoder.running_units, mz_to_int_ratio=self.mz_to_int_ratio
+            )
+            if self.predict_fourier
+            else None
+        )
+
+        d_mask_token = self.decoder_running_units
+
+        if self.learned_masked_token:
+            self.mask_token = nn.Parameter(torch.randn(d_mask_token))
+        else:
+            self.mask_token = nn.Parameter(
+                torch.zeros(d_mask_token), requires_grad=False
+            )
+
+        if self.positional_encoding:
+            pos_encs = PosEncoder(d_mask_token)(
+                torch.zeros((1, int(1.2 * self.max_peaks), d_mask_token))
+            )
+            self.register_buffer("pos_encodings", pos_encs)
+
+    def configure_optimizers(self):
+        opts = [
+            torch.optim.AdamW(
+                self.encoder.parameters(),
+                lr=self.lr,
+                betas=(0.9, 0.9999),
+                weight_decay=self.weight_decay,
+            ),
+        ]
+        opts.append(
+            torch.optim.AdamW(
+                self.decoder.parameters(),
+                lr=self.lr,
+                betas=(0.9, 0.9999),
+                weight_decay=self.weight_decay,
+            ),
+        )
+        if self.head:
+            opts.append(
+                torch.optim.AdamW(
+                    self.head.parameters(),
+                    lr=self.lr,
+                    betas=(0.9, 0.9999),
+                    weight_decay=self.weight_decay,
+                ),
+            )
+        return opts
