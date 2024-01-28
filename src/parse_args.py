@@ -36,7 +36,7 @@ def get_args_parser(conf_parser):
     parser.add_argument(
         "--pretraining_task",
         default="masked",
-        choices=["masked", "trinary_mz", "dummy"],
+        choices=["masked", "trinary_mz", "masked_ae"],
         type=str,
         help="Which pretraining strategy to use",
     )

@@ -10,7 +10,11 @@ from parse_args import parse_args_and_config, create_output_dirs
 import time
 
 from wrappers.downstream_wrappers import DeNovoRandom, DeNovoTeacherForcing
-from wrappers.pretrain_wrappers import MaskedTrainingPLWrapper, TrinaryMZPLWrapper
+from wrappers.pretrain_wrappers import (
+    MaskedAutoencoderWrapper,
+    MaskedTrainingPLWrapper,
+    TrinaryMZPLWrapper,
+)
 
 
 import utils
@@ -31,6 +35,7 @@ DECODER_DICT = {
 
 PRETRAIN_TASK_DICT = {
     "masked": MaskedTrainingPLWrapper,
+    "masked_ae": MaskedAutoencoderWrapper,
     "trinary_mz": TrinaryMZPLWrapper,
 }
 
