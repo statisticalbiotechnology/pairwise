@@ -8,6 +8,7 @@ import torch
 from functools import partial
 
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from lance_data_module import LanceDataModule
 from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
 
 from collate_functions import pad_peaks, pad_peptides
@@ -15,9 +16,19 @@ from collate_functions import pad_peaks, pad_peptides
 from loader_parquet import PeptideDataset, PeptideParser
 
 
+def get_lance_data_module(
+    data_root_dir,
+    batch_size,
+    max_peaks=300,
+):
+    collate_fn = partial(pad_peaks, max_peaks=max_peaks)
+    return LanceDataModule(data_root_dir, batch_size, collate_fn)
+
+
 def get_spectrum_dataset_splits(
     data_root_dir, splits=[0.6, 0.2, 0.2], max_peaks=300, random_seed=42, subset=0
 ):
+    """NOT USED ANYMORE"""
     assert abs(sum(splits) - 1) < 1e-6
     lance_dir = os.path.join(data_root_dir, "indexed.lance")
     if os.path.exists(lance_dir):

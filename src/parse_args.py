@@ -28,9 +28,15 @@ def get_args_parser(conf_parser):
         help="Path to checkpoint of previously trained encoder weights",
     )
     parser.add_argument(
+        "--downstream_weights",
+        default="",
+        type=str,
+        help="Path to checkpoint of previously trained downstream weights",
+    )
+    parser.add_argument(
         "--pretraining_task",
         default="masked",
-        choices=["masked", "trinary_mz", "dummy"],
+        choices=["masked", "trinary_mz", "masked_ae"],
         type=str,
         help="Which pretraining strategy to use",
     )

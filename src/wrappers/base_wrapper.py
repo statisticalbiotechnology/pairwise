@@ -60,7 +60,6 @@ class BasePLWrapper(ABC, pl.LightningModule):
     def __init__(
         self,
         encoder,
-        datasets,
         args,
         head=None,
         collate_fn=None,
@@ -70,13 +69,11 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.TASK_NAME = ""
         self.encoder = encoder
         self.head = head
-        self.datasets = datasets
         self.collate_fn = collate_fn
         self.task_dict = task_dict
         self.batch_size = args.batch_size
         self.num_workers = task_dict.get("num_workers", args.num_workers)
         self.pin_mem = args.pin_mem
-        self.datasets = datasets
 
         self.weight_decay = task_dict["weight_decay"]
 
@@ -248,40 +245,6 @@ class BasePLWrapper(ABC, pl.LightningModule):
         )
         return {"test_stats": test_stats, "returns": returns}
 
-    def train_dataloader(self):
-        return DataLoader(
-            self.datasets[0],
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_mem,
-            drop_last=True,
-            collate_fn=self.collate_fn,
-            persistent_workers=self.num_workers > 0,
-            shuffle=True,
-        )
-
-    def val_dataloader(self):
-        return DataLoader(
-            self.datasets[1],
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_mem,
-            drop_last=True,
-            collate_fn=self.collate_fn,
-            persistent_workers=self.num_workers > 0,
-        )
-
-    def test_dataloader(self):
-        return DataLoader(
-            self.datasets[2],
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_mem,
-            drop_last=False,
-            collate_fn=self.collate_fn,
-            persistent_workers=self.num_workers > 0,
-        )
-
     def configure_optimizers(self):
         opts = [
             torch.optim.AdamW(
@@ -362,3 +325,45 @@ class BasePLWrapper(ABC, pl.LightningModule):
     def on_train_end(self):
         if not self.best_metrics_logged and self.log_wandb:
             self.logger.experiment.log(self.tracker.best_metrics)
+
+
+class BaseDownstreamWrapper(BasePLWrapper):
+    def __init__(
+        self, encoder, args, datasets, head=None, collate_fn=None, task_dict=None
+    ):
+        super().__init__(encoder, args, head, collate_fn, task_dict)
+        self.datasets = datasets
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.datasets[0],
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_mem,
+            drop_last=True,
+            collate_fn=self.collate_fn,
+            persistent_workers=self.num_workers > 0,
+            shuffle=True,
+        )
+
+    def val_dataloader(self):
+        return DataLoader(
+            self.datasets[1],
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_mem,
+            drop_last=True,
+            collate_fn=self.collate_fn,
+            persistent_workers=self.num_workers > 0,
+        )
+
+    def test_dataloader(self):
+        return DataLoader(
+            self.datasets[2],
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_mem,
+            drop_last=False,
+            collate_fn=self.collate_fn,
+            persistent_workers=self.num_workers > 0,
+        )

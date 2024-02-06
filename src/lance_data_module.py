@@ -26,7 +26,6 @@ class LanceDataModule(pl.LightningDataModule):
             "to have pre-indexed lance dirs (indexed.lance)"
         )
         self.lance_dirs = lance_dirs
-
         self.batch_size = batch_size
         self.collate_fn = collate_fn
 
@@ -38,7 +37,6 @@ class LanceDataModule(pl.LightningDataModule):
                 collate_fn=self.collate_fn,
                 rank=self.trainer.global_rank,
                 world_size=self.trainer.world_size,
-                with_row_id=True,
             )
             # Similarly set up validation and test datasets if needed
             self.val_dataset = LanceDataset(
@@ -47,7 +45,6 @@ class LanceDataModule(pl.LightningDataModule):
                 collate_fn=self.collate_fn,
                 rank=self.trainer.global_rank,
                 world_size=self.trainer.world_size,
-                with_row_id=True,
             )
 
         if stage == "validate" or stage is None:
@@ -58,7 +55,6 @@ class LanceDataModule(pl.LightningDataModule):
                 collate_fn=self.collate_fn,
                 rank=self.trainer.global_rank,
                 world_size=self.trainer.world_size,
-                with_row_id=True,
             )
 
         if stage == "test" or stage is None:
@@ -68,7 +64,6 @@ class LanceDataModule(pl.LightningDataModule):
                 collate_fn=self.collate_fn,
                 rank=self.trainer.global_rank,
                 world_size=self.trainer.world_size,
-                with_row_id=True,
             )
 
     def train_dataloader(self):

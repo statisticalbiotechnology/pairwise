@@ -1,6 +1,7 @@
 import torch as th
 from torch import nn
-from math import log
+import numpy as np
+twopi = 2*np.pi
 
 class BatchTorch1d(nn.Module):
     def __init__(self, units):
@@ -30,7 +31,7 @@ class QKVAttention(nn.Module):
         self.is_relpos = is_relpos
         self.maxd = max_rel_dist
         
-        self.scale = dim**-0.25
+        self.scale = dim**-0.5
         if is_relpos:
             assert sl is not None
             self.maxd = sl if max_rel_dist==None else max_rel_dist
@@ -55,10 +56,10 @@ class QKVAttention(nn.Module):
         
         return relpos_tsr
     
-    def forward(self, Q, K, V, mask=None, bias=None):
+    def forward(self, Q, K, V, mask=None, bias=None, return_full=False):
         bsp, sl, dim = Q.shape
         # shape: batch/heads/etc, sequence_length, dim
-        QK = th.einsum('abc,adc->abd', self.scale*Q, self.scale*K)
+        QK = self.scale * th.einsum('abc,adc->abd', Q, K)
         if self.is_relpos:
             QK += th.einsum('abc,bec->abe', Q, self.ak)
         QK = QK.reshape(-1, self.heads, sl, K.shape[1])
@@ -73,8 +74,10 @@ class QKVAttention(nn.Module):
         att = th.einsum('abc,acd->abd', weights, V)
         if self.is_relpos:
             att += th.einsum('abc,bcd->abd', weights, self.av)
+
+        other = [QK, weights, att] if return_full else None
         
-        return att
+        return att, other
 
 class BaseAttentionLayer(nn.Module):
     def __init__(self, indim, d, h, out_units=None):
@@ -86,7 +89,7 @@ class BaseAttentionLayer(nn.Module):
         
         self.attention_layer = QKVAttention(h, d)
         shape = (d*h, self.out_units)
-        self.Wo = nn.Linear(*shape, bias=False)
+        self.Wo = nn.Linear(*shape, bias=True)
         self.Wo.weight = nn.Parameter( 
             nn.init.normal_(th.empty(self.Wo.weight.shape), 0.0, 0.3*(h*d)**-0.5)
         )
@@ -103,14 +106,20 @@ class SelfAttention(BaseAttentionLayer):
                  h, 
                  out_units=None, 
                  pairwise_bias=False, 
-                 bias_in_units=None
+                 bias_in_units=None,
+                 modulator=False
     ):
         super().__init__(indim=indim, d=d, h=h, out_units=out_units)
         self.pairwise_bias = pairwise_bias
 
-        self.qkv = nn.Linear(indim, 3*d*h, bias=False)
+        self.qkv = nn.Linear(indim, 3*d*h, bias=True)
         if pairwise_bias:
             self.pwbias = nn.Linear(bias_in_units, h)
+        self.modulator = modulator
+        if modulator:
+            self.alphaq = nn.Parameter(th.tensor(0.))
+            self.alphak = nn.Parameter(th.tensor(0.))
+            self.alphav = nn.Parameter(th.tensor(0.))
         
     def get_qkv(self, qkv):
         bs, sl, units = qkv.shape
@@ -121,10 +130,14 @@ class SelfAttention(BaseAttentionLayer):
         K = K.permute([0,3,1,2]).reshape(-1, sl, self.d)
         V = V.reshape(-1, sl, self.d, self.h)
         V = V.permute([0,3,1,2]).reshape(-1, sl, self.d)
+        if self.modulator:
+            Q *= th.sigmoid(self.alphaq)
+            K *= th.sigmoid(self.alphak)
+            V *= th.sigmoid(self.alphav)
         
         return Q, K, V # bs*h, sl, d
     
-    def forward(self, x, mask=None, pwtsr=None):
+    def forward(self, x, mask=None, pwtsr=None, return_full=False):
         bs, sl, units = x.shape
         qkv = self.qkv(x) # bs, sl, 3*d*h
         Q, K, V = self.get_qkv(qkv) # bs*h, sl, d
@@ -133,13 +146,17 @@ class SelfAttention(BaseAttentionLayer):
             bias = bias.permute([0,3,1,2]) # bs, h, sl, sl
         else:
             bias = None
-        att = self.attention_layer(Q, K, V, mask, bias=bias) # bs*h, sl, d
+        att, other = self.attention_layer(Q, K, V, mask, bias=bias, return_full=return_full) # bs*h, sl, d
         att = att.reshape(-1, self.h, sl, self.d)
         att = att.permute([0,2,3,1])
         att = att.reshape(-1, sl, self.d*self.h) # bs, sl, d*h
         resid = self.Wo(att)
         
-        return self.shortcut(x) + resid
+        output = self.shortcut(x) + resid
+        
+        other = [Q, K, V] + other + [resid] if return_full else None
+        
+        return {'out': output, 'other': other}
 
 class CrossAttention(BaseAttentionLayer):
     def __init__(self, indim, kvindim, d, h, out_units=None):
@@ -166,7 +183,7 @@ class CrossAttention(BaseAttentionLayer):
         Q = self.Wq(q_feats)
         KV = self.Wkv(kv_feats)
         Q, K, V = self.get_qkv(Q, KV)
-        att = self.attention_layer(Q, K, V, mask)
+        att, other = self.attention_layer(Q, K, V, mask)
         att = att.reshape(-1, self.h, slq, self.d)
         att = att.permute([0,2,1,3])
         att = att.reshape(-1, slq, self.h*self.d)
@@ -188,12 +205,14 @@ class FFN(nn.Module):
             nn.init.normal_(th.empty(shape), 0.0, 0.3*(indim*self.mult)**-0.5)
         )
     
-    def forward(self, x, embed=None):
-        out = self.W1(x)
-        out = th.relu(out + (0 if embed==None else embed))
-        out = self.W2(out)
+    def forward(self, x, embed=None, return_full=False):
+        out1 = self.W1(x)
+        out2 = th.relu(out1 + (0 if embed==None else embed))
+        out3 = self.W2(out2)
         
-        return x + out
+        other = [out1, out3] if return_full else None
+
+        return {'out': x + out3, 'other': other}
 
 class TransBlock(nn.Module):
     def __init__(self,
@@ -243,22 +262,27 @@ class TransBlock(nn.Module):
                 spec_mask=None, 
                 seq_mask=None,
                 pwtsr=None,
+                return_full=False
     ):
         selfmask = seq_mask if self.is_cross else spec_mask
         Emb = self.embed(embed_feats)[:,None,:] if self.is_embed else 0
         
         out = x + self.alpha*Emb if self.preembed else x
         out = self.norm1(out) if self.prenorm else out
-        out = self.selfattention(out, selfmask, pwtsr)
+        outsa = self.selfattention(out, selfmask, pwtsr, return_full=return_full)
+        out = outsa['out']
         if self.is_cross:
             out = self.crossnorm(out) if self.prenorm else out
             out = self.crossattention(out, kv_feats, spec_mask)
             out = out if self.prenorm else self.crossnorm(out)
         out = self.norm2(out) if self.prenorm else self.norm1(out)
-        out = self.ffn(out, None) if self.preembed else self.ffn(out, Emb)
+        outffn = self.ffn(out, None, return_full=return_full) if self.preembed else self.ffn(out, Emb, return_full=return_full)
+        out = outffn['out']
         out = out if self.prenorm else self.norm2(out)
         
-        return out
+        other = outsa['other'] + outffn['other'] + [out] if return_full else None
+        
+        return {'out': out, 'other': other}
 
 class ActModule(nn.Module):
     def __init__(self, activation):
@@ -267,17 +291,18 @@ class ActModule(nn.Module):
     def forward(self, x):
         return self.act(x)
 
-def FourierFeatures(t, embedsz, freq=10000.):
-    embed = ( 
+def FourierFeatures(t, min_lam, max_lam, embedsz):
+    x = th.arange(embedsz//2).type(th.float32).to(t.device)
+    x /= embedsz//2 - 1
+    """embed = ( 
         t[..., None] * 
-        th.exp(
-            -log(float(freq)) * 
-            th.arange(embedsz//2).type(th.float32).to(t.device) / 
-            (embedsz//2)
-        )[None]
-    )
-    
-    return th.cat([embed.cos(), embed.sin()], dim=-1)
+        th.exp(-x*log(max_lam / min_lam) )[None] /
+        (min_lam / 6.2831853)
+    )"""
+    denom = (min_lam / twopi) * (max_lam / min_lam) ** x
+    embed = t[...,None] / denom[None]
+
+    return th.cat([embed.sin(), embed.cos()], dim=-1)
 
 def subdivide_float(x):
     mul = -1*(x < 0).type(th.float32) + (x >= 0).type(th.float32)
