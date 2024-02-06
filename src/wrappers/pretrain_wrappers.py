@@ -22,16 +22,15 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         int_arr = spectra["intensity_array"]
         corrupt_mz_arr, target = self.inptarg(mz_arr)
 
-        key_padding_mask = self._get_padding_mask(mzab, spectra["peak_lengths"])
-
         batch_size = mz_arr.shape[0]
         mzab = torch.stack([corrupt_mz_arr, int_arr], dim=-1)
+        key_padding_mask = self._get_padding_mask(mzab, spectra["peak_lengths"])
         return (
             mzab,
             {
-                "mass": spectra["precursor_mz"] if self.use_mass else None,
-                "charge": spectra["precursor_charge"] if self.use_charge else None,
-                "key_padding_mask": key_padding_mask if self.mask_zero_tokens else None,
+                "mass": spectra["precursor_mz"] if self.encoder.use_mass else None,
+                "charge": spectra["precursor_charge"] if self.encoder.use_charge else None,
+                "key_padding_mask": key_padding_mask,# if self.mask_zero_tokens else None,
             },
             target,
         ), batch_size
@@ -116,7 +115,15 @@ class TrinaryMZPLWrapper(BasePLWrapper):
             if cur_epoch == self.trainer.max_epochs - 1:
                 self.log_dict(self.tracker.best_metrics)
                 self.best_metrics_logged = True
-
+    
+    def configure_optimizers(self):
+        opts = torch.optim.Adam(
+            self.parameters(),
+            lr=self.lr,
+            betas=(0.9, 0.999),
+            weight_decay=self.weight_decay,
+        )
+        return opts
 
 class MaskedTrainingPLWrapper(BasePLWrapper):
     def __init__(

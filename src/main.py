@@ -61,7 +61,8 @@ def main(args, pretrain_config=None, ds_config=None):
     }
 
     if args.subset:
-        config["downstream_config"][args.downstream_task]["subset"] = args.subset
+        if args.downstream_task != "none":
+            config["downstream_config"][args.downstream_task]["subset"] = args.subset
         config["pretrain_config"][args.pretraining_task]["subset"] = args.subset
 
     # Wandb stuff

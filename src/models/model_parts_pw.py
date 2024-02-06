@@ -1,6 +1,7 @@
 import torch as th
 nn = th.nn
 F = nn.functional
+from models.model_parts import FourierFeatures
 
 def weight_init(module):
     if isinstance(module, TriangleAttention):
@@ -227,6 +228,20 @@ class RelPos(nn.Module):
         pij = self.Wp(F.one_hot(RI, self.vbins).type(th.float32))
 
         return pij
+
+class AbsPosFF(nn.Module):
+    def __init__(self, units, max_seq_len=120):
+        half_dim = units//2
+        a = th.arange(max_seq_len)
+        A = FourierFeatures(a, 1, 1000, half_dim)
+        A_ = A[:,None].tile(1,max_seq_len,1)
+        A__ = A[None].tile(max_seq_len,1,1)
+        self.pos = th.cat([A_,A__],-1)
+
+        self.alpha = nn.Parameter(th.tensor(1e-2))
+
+    def forward(self):
+        return self.alpha*self.pos
 
 """
 inp = th.randn(10,100,100,256)
