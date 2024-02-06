@@ -39,7 +39,7 @@ masked_ae:
   decoder_nlayers: 6
 
   # Training hparams
-  blr: 4.0e-5
+  blr: 1.0e-5
   weight_decay: 1.0e-5
   epochs: 1
   subset: 0
