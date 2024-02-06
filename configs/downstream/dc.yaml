@@ -19,7 +19,7 @@ denovo_tf:
   # DeNovoTeacherForcing specific hparams
   conf_threshold: 0
   # Training hparams
-  blr: 1.0e-5
+  blr: 1.0e-4
   weight_decay: 0
   epochs: 15
   subset: 0
