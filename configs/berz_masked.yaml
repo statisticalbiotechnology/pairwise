@@ -1,0 +1,32 @@
+# data_root_dir: /proj/bedrock/datasets/instanovo_data_subset/
+# data_root_dir: /proj/bedrock/datasets/InstaNovo_dataset/foundational_model/
+data_root_dir: /proj/bedrock/datasets/InstaNovo_larger_subset/
+output_dir: /proj/bedrock/checkpoints/checkpoint
+log_dir: /proj/bedrock/logs/log
+wandb_project: debug
+wandb_entity: kall
+log_wandb: 1
+num_workers: 16
+matmul_precision: high
+precision: 32-true
+### Models
+
+###### TODO: FIX THESE WARMUP HPARAMS
+anneal_lr: 0
+warmup_epochs: 0
+### Training hyperparameters
+batch_size: 100
+max_peaks: 100
+
+# Tasks
+encoder_model: dc_encoder_base
+pretrain_config: configs/pretrain/dc.yaml
+pretrain: 1
+pretraining_task: masked
+mask_ratio: 0.75
+
+# De novo
+decoder_model: dc_decoder_base
+downstream_config: configs/downstream/dc.yaml
+downstream_task: denovo_tf
+downstream_root_dir: /proj/bedrock/datasets/9_species_xy
