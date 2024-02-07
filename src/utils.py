@@ -75,7 +75,7 @@ def get_ninespecies_dataset_splits(
         path_dict[split] = path_list
 
     parser = PeptideParser(ds_config)
-    dfs, token_dicts = parser.get_data()
+    dfs, token_dicts = parser.get_data(include_hidden=include_hidden)
     amod_dict = token_dicts["amod_dict"]
     dataset_train = PeptideDataset(dfs["train"], amod_dict)
     dataset_val = PeptideDataset(dfs["val"], amod_dict)

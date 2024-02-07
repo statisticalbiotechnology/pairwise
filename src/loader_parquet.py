@@ -105,7 +105,8 @@ class PeptideParser:
         print("Found %d aa-mod combinations." % (len(self.amod_dic) - 1))
 
     def get_data(self, include_hidden=False):
-        self.input_dict["<H>"] = len(self.input_dict)
+        if include_hidden:
+            self.input_dict["<H>"] = len(self.input_dict)
         token_dicts = {
             "amod_dict": self.amod_dic,
             "input_dict": self.input_dict,
