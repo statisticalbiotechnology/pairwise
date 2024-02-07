@@ -117,24 +117,31 @@ def main(args, pretrain_config=None, ds_config=None):
         )
 
         if run is not None and utils.get_rank() == 0:
-            run.watch(pl_encoder, "all")
+            if args.watch_model:
+                run.watch(pl_encoder, "all")
             run.log(
                 {
                     "num_parameters_encoder": utils.get_num_parameters(encoder),
                 }
             )
 
-        print(
-            f"Starting distributed pretraining using {args.num_devices} devices on {args.num_nodes} node(s)"
-        ) if distributed else print("Starting single-device training")
+        (
+            print(
+                f"Starting distributed pretraining using {args.num_devices} devices on {args.num_nodes} node(s)"
+            )
+            if distributed
+            else print("Starting single-device training")
+        )
 
         # Define trainer
         pretrainer = pl.Trainer(
             # Distributed kwargs
             accelerator=args.accelerator,
-            devices=[i for i in range(args.num_devices)]
-            if args.accelerator == "gpu"
-            else args.num_devices,
+            devices=(
+                [i for i in range(args.num_devices)]
+                if args.accelerator == "gpu"
+                else args.num_devices
+            ),
             num_nodes=args.num_nodes,
             strategy=args.strategy if distributed else "auto",
             precision=args.precision,
@@ -218,9 +225,6 @@ def main(args, pretrain_config=None, ds_config=None):
             token_dicts, d_model=encoder.running_units
         )
 
-        if run is not None and utils.get_rank() == 0:
-            run.log({"num_parameters_decoder": utils.get_num_parameters(decoder)})
-
         pl_downstream = DOWNSTREAM_TASK_DICT[args.downstream_task](
             encoder,
             decoder,
@@ -230,6 +234,12 @@ def main(args, pretrain_config=None, ds_config=None):
             token_dicts=token_dicts,
             task_dict=config["downstream_config"][args.downstream_task],
         )
+
+        if run is not None and utils.get_rank() == 0:
+            if args.watch_model:
+                run.watch(pl_downstream, "all")
+            run.log({"num_parameters_decoder": utils.get_num_parameters(decoder)})
+
         if args.downstream_weights:
             print(
                 f"Resuming downstream from previous checkpoint: {args.downstream_weights}"
@@ -242,15 +252,21 @@ def main(args, pretrain_config=None, ds_config=None):
         else:
             print(f"Downstream training from scratch")
 
-        print(
-            f"Starting distributed downstream finetuning using {args.num_devices} devices on {args.num_nodes} node(s)"
-        ) if distributed else print("Starting single-device training")
+        (
+            print(
+                f"Starting distributed downstream finetuning using {args.num_devices} devices on {args.num_nodes} node(s)"
+            )
+            if distributed
+            else print("Starting single-device training")
+        )
         ds_trainer = pl.Trainer(
             # Distributed kwargs
             accelerator=args.accelerator,
-            devices=[i for i in range(args.num_devices)]
-            if args.accelerator == "gpu"
-            else args.num_devices,
+            devices=(
+                [i for i in range(args.num_devices)]
+                if args.accelerator == "gpu"
+                else args.num_devices
+            ),
             num_nodes=args.num_nodes,
             strategy=args.strategy if distributed else "auto",
             precision=args.precision,

@@ -67,6 +67,12 @@ def get_args_parser(conf_parser):
         help="If pretraining, use the best/last encoder checkpoint achieved during pretraining",
     )
     parser.add_argument(
+        "--watch_model",
+        default=0,
+        type=int,
+        help="Bool (0/1): toggle logging of weights to WandB",
+    )
+    parser.add_argument(
         "--pretrain",
         default=1,
         type=int,
@@ -321,7 +327,7 @@ def sanity_checks(args):
     args.pin_mem = bool(args.pin_mem)
     # args.data_in_memory = bool(args.data_in_memory)
     args.profile_flops = bool(args.profile_flops)
-    args.pretrain = bool(args.pretrain)
+    args.watch_model = bool(args.watch_model)
 
 
 def uniquify_path(path):
