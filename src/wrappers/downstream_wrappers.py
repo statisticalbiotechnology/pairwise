@@ -1,7 +1,6 @@
 import torch
 from wrappers.base_wrapper import BaseDownstreamWrapper
 
-# from denovo_eval import Metrics as DeNovoMetrics
 from casanovo_eval import aa_match_batch, aa_match_metrics, RESIDUES
 import torch.nn.functional as F
 
@@ -249,7 +248,6 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         return aa_sequences
 
     def deepnovo_metrics(self, preds, target):
-        # mean_conf = aa_conf.mean(dim=-1)
         target_str = self.to_aa_sequence(target)
         pred_str = self.to_aa_sequence(preds)
 
@@ -259,7 +257,7 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         aa_prec, aa_recall, pep_prec = aa_match_metrics(
             aa_matches_batch, n_aa_true, n_aa_pred
         )
-        # pep_auc = self.denovo_metrics.calc_auc(target_str, pred_str, mean_conf.tolist())
+
         return {
             "aa_prec": aa_prec,
             "aa_recall": aa_recall,
