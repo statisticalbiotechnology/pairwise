@@ -206,7 +206,7 @@ def main(args, pretrain_config=None, ds_config=None):
             encoder = pl_encoder.encoder
 
         ds_callbacks = utils.configure_callbacks(
-            args, args.downstream_task + "_val_loss_epoch"
+            args, args.downstream_task + "_val_aa_prec_epoch", metric_mode="max"
         )
 
         # Load downstream dataset

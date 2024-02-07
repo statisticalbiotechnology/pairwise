@@ -95,7 +95,7 @@ def get_ninespecies_dataset_splits(
     )
 
 
-def configure_callbacks(args, val_metric_name: str = "val_loss"):
+def configure_callbacks(args, val_metric_name: str = "val_loss", metric_mode="min"):
     callbacks = []
     filename = f"{{epoch}}-{{{val_metric_name}:.2f}}"
     # Checkpoint callback
@@ -105,7 +105,7 @@ def configure_callbacks(args, val_metric_name: str = "val_loss"):
                 dirpath=args.output_dir,
                 filename=filename,
                 monitor=val_metric_name,  # requires that we log something called val_metric_name
-                mode="min",
+                mode=metric_mode,
                 save_top_k=args.save_top_k,
                 save_last=args.save_last,
                 every_n_epochs=args.every_n_epochs,
