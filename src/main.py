@@ -118,7 +118,7 @@ def main(args, pretrain_config=None, ds_config=None):
 
         if run is not None and utils.get_rank() == 0:
             if args.watch_model:
-                run.watch(pl_encoder, "all")
+                run.watch(pl_encoder, log="all")
             run.log(
                 {
                     "num_parameters_encoder": utils.get_num_parameters(encoder),
@@ -206,7 +206,7 @@ def main(args, pretrain_config=None, ds_config=None):
             encoder = pl_encoder.encoder
 
         ds_callbacks = utils.configure_callbacks(
-            args, args.downstream_task + "_val_loss_epoch"
+            args, args.downstream_task + "_val_aa_prec_epoch", metric_mode="max"
         )
 
         # Load downstream dataset
@@ -237,7 +237,7 @@ def main(args, pretrain_config=None, ds_config=None):
 
         if run is not None and utils.get_rank() == 0:
             if args.watch_model:
-                run.watch(pl_downstream, "all")
+                run.watch(pl_downstream, log="all")
             run.log({"num_parameters_decoder": utils.get_num_parameters(decoder)})
 
         if args.downstream_weights:

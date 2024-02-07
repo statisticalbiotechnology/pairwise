@@ -1,6 +1,7 @@
 import torch
 from wrappers.base_wrapper import BaseDownstreamWrapper
-from denovo_eval import Metrics as DeNovoMetrics
+
+from casanovo_eval import aa_match_batch, aa_match_metrics, RESIDUES
 import torch.nn.functional as F
 
 
@@ -52,7 +53,7 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
             encoder, args, datasets, collate_fn=collate_fn, task_dict=task_dict
         )
         self.decoder = decoder
-        self.denovo_metrics = DeNovoMetrics()
+
         self.amod_dict = token_dicts["amod_dict"]
         self.int_to_aa = {v: k for k, v in self.amod_dict.items()}
         self.null_token = "X"
@@ -66,9 +67,7 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         self.predcats = len(self.output_dict)
 
         assert all(
-            key in self.denovo_metrics.residues
-            for key in self.amod_dict
-            if key != self.null_token
+            key in RESIDUES for key in self.amod_dict if key != self.null_token
         ), "All keys except the null token in amod_dict must be in self.denovo_metrics.residues"
 
         self.TASK_NAME = "denovo_tf"
@@ -195,13 +194,13 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         )
 
         logits_ce = logits.transpose(-1, -2)
-        aa_confidence, _ = F.softmax(logits, dim=-1).max(dim=-1)
+        # aa_confidence, _ = F.softmax(logits, dim=-1).max(dim=-1)
         loss = F.cross_entropy(logits_ce, targ)
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
         naive_metrics = NaiveAccRecPrec(
             targ, preds_ffill, self.amod_dict[self.null_token], self.EOS
         )
-        deepnovo_metrics = self.deepnovo_metrics(preds_ffill, targ, aa_confidence)
+        deepnovo_metrics = self.deepnovo_metrics(preds_ffill, targ)
         stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
         return stats
 
@@ -248,26 +247,23 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
 
         return aa_sequences
 
-    def deepnovo_metrics(self, preds, target, aa_conf):
-        mean_conf = aa_conf.mean(dim=-1)
+    def deepnovo_metrics(self, preds, target):
         target_str = self.to_aa_sequence(target)
         pred_str = self.to_aa_sequence(preds)
 
-        (
-            aa_prec,
-            aa_recall,
-            pep_recall,
-            pep_precision,
-        ) = self.denovo_metrics.compute_precision_recall(
-            target_str, pred_str, mean_conf.tolist(), threshold=self.conf_threshold
+        aa_matches_batch, n_aa_true, n_aa_pred = aa_match_batch(
+            target_str, pred_str, mode="forward"
         )
-        pep_auc = self.denovo_metrics.calc_auc(target_str, pred_str, mean_conf.tolist())
+        aa_prec, aa_recall, pep_prec = aa_match_metrics(
+            aa_matches_batch, n_aa_true, n_aa_pred
+        )
+
         return {
             "aa_prec": aa_prec,
             "aa_recall": aa_recall,
-            "pep_recall": pep_recall,
-            "pep_precision": pep_precision,
-            "pep_auc": pep_auc,
+            # "pep_recall": pep_recall, #TODO: add a pep recall? is it superflous since pep_precision at cov=1 is simply the acc?
+            "pep_prec": pep_prec,
+            # "pep_auc": pep_auc, #TODO: add pr-curves after training is complete
         }
 
 
@@ -291,7 +287,9 @@ class DeNovoRandom(DeNovoTeacherForcing):
             token_dicts=token_dicts,
             task_dict=task_dict,
         )
-        self.null_token = self.output_dict["X"]
+        self.null_token = self.output_dict[
+            "X"
+        ]  # TODO: fix the discrepancy (int vs str) in the definition of self.null_token between TF and random
         assert (
             "<H>" in token_dicts["input_dict"].keys()
         ), "Needs to include the hidden token"
