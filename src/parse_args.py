@@ -327,6 +327,7 @@ def sanity_checks(args):
     args.pin_mem = bool(args.pin_mem)
     # args.data_in_memory = bool(args.data_in_memory)
     args.profile_flops = bool(args.profile_flops)
+    args.pretrain = bool(args.pretrain)
     args.watch_model = bool(args.watch_model)
 
 
