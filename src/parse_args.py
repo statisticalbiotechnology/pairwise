@@ -134,12 +134,6 @@ def get_args_parser(conf_parser):
         help="Accumulate gradient iterations (for increasing the effective batch size under memory constraints)",
     )
     parser.add_argument(
-        "--mask_ratio",
-        default=0.2,
-        type=float,
-        help="Masking ratio (percentage of removed tokens).",
-    )
-    parser.add_argument(
         "--anneal_lr",
         type=int,
         default=0,
