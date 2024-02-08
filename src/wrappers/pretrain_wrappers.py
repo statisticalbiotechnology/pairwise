@@ -157,7 +157,7 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
             head=head,
             task_dict=task_dict,
         )
-        self.mask_ratio = global_args.mask_ratio
+        self.mask_ratio = task_dict["mask_ratio"]
         self.max_peaks = global_args.max_peaks
         self._setup_masking_parameters()
         self.TASK_NAME = "masked"
