@@ -139,29 +139,6 @@ def get_args_parser(conf_parser):
         type=float,
         help="Masking ratio (percentage of removed tokens).",
     )
-    # Optimizer parameters
-    parser.add_argument(
-        "--weight_decay", type=float, default=0.05, help="weight decay (default: 0.05)"
-    )
-
-    parser.add_argument(
-        "--lr",
-        type=float,
-        default=None,
-        help="learning rate (absolute lr)",
-    )
-    parser.add_argument(
-        "--blr",
-        type=float,
-        default=1e-4,
-        help="base learning rate (max lr)",
-    )
-    parser.add_argument(
-        "--min_lr",
-        type=float,
-        default=1e-07,
-        help="lower lr bound for cyclic schedulers",
-    )
     parser.add_argument(
         "--anneal_lr",
         type=int,
