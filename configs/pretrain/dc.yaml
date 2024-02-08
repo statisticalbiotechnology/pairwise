@@ -2,6 +2,8 @@ trinary_mz:
   test: 123
 
   # Training hparams
+  batch_size: 100
+  ref_batch_size: 100
   blr: 4.0e-5
   weight_decay: 1.0e-5
   epochs: 1
@@ -17,6 +19,8 @@ masked:
   mz_to_int_ratio: 0.67
   
   # Training hparams
+  batch_size: 100
+  ref_batch_size: 100
   blr: 4.0e-5
   weight_decay: 1.0e-5
   epochs: 1
@@ -39,6 +43,8 @@ masked_ae:
   decoder_nlayers: 6
 
   # Training hparams
+  batch_size: 100
+  ref_batch_size: 100
   blr: 4.0e-5
   weight_decay: 1.0e-5
   epochs: 1

@@ -7,12 +7,12 @@ from models.peak_encoder import StaticPeakEncoder, PosEncoder
 
 
 class TrinaryMZPLWrapper(BasePLWrapper):
-    def __init__(self, encoder, args, collate_fn=None, task_dict=None):
-        self.penult_units = args.trinary_penult_units
+    def __init__(self, encoder, global_args, collate_fn=None, task_dict=None):
+        self.penult_units = global_args.trinary_penult_units
         head = ClassifierHead(3, encoder.running_units, self.penult_units)
-        super().__init__(encoder, args, head, collate_fn, task_dict=task_dict)
-        self.corrupt_freq = args.trinary_freq
-        self.corrupt_std = args.trinary_std
+        super().__init__(encoder, global_args, head, collate_fn, task_dict=task_dict)
+        self.corrupt_freq = global_args.trinary_freq
+        self.corrupt_std = global_args.trinary_std
 
         self.TASK_NAME = "trinary_mz"
 
@@ -129,7 +129,7 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
     def __init__(
         self,
         encoder,
-        args,
+        global_args,
         collate_fn=None,
         task_dict=None,
     ):
@@ -152,13 +152,13 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
 
         super().__init__(
             encoder,
-            args,
+            global_args,
             collate_fn=collate_fn,
             head=head,
             task_dict=task_dict,
         )
-        self.mask_ratio = args.mask_ratio
-        self.max_peaks = args.max_peaks
+        self.mask_ratio = global_args.mask_ratio
+        self.max_peaks = global_args.max_peaks
         self._setup_masking_parameters()
         self.TASK_NAME = "masked"
 
@@ -327,14 +327,14 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
 
 
 class MaskedAutoencoderWrapper(MaskedTrainingPLWrapper):
-    def __init__(self, encoder, args, collate_fn=None, task_dict=None):
+    def __init__(self, encoder, global_args, collate_fn=None, task_dict=None):
         self.decoder_running_units = task_dict["decoder_running_units"]
         self.decoder_nhead = task_dict["decoder_nhead"]
         self.decoder_dim_feedforward = task_dict["decoder_dim_feedforward"]
         self.decoder_dropout = task_dict["decoder_dropout"]
         self.padding_value = 0
 
-        super().__init__(encoder, args, collate_fn, task_dict)
+        super().__init__(encoder, global_args, collate_fn, task_dict)
         del self.head
         del self.mask_token
 

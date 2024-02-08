@@ -121,12 +121,6 @@ def get_args_parser(conf_parser):
         help="Hidden hunits in the Trinary MZ head",
     )
     parser.add_argument(
-        "--batch_size",
-        default=64,
-        type=int,
-        help="Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus",
-    )
-    parser.add_argument(
         "--max_peaks",
         default=300,
         type=int,

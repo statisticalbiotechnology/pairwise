@@ -15,7 +15,6 @@ precision: 32-true
 anneal_lr: 0
 warmup_epochs: 0
 ### Training hyperparameters
-batch_size: 100
 max_peaks: 100
 
 # Tasks
