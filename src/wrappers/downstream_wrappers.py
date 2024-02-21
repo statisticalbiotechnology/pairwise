@@ -167,7 +167,7 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         # logits.shape = (batch_size, sequence_len, num_classes)
         logits = logits.transpose(-2, -1)
         # logits.shape = (batch_size, num_classes, sequence_len)
-        loss = F.cross_entropy(logits, labels, reduction="none")
+        loss = F.cross_entropy(logits, labels, reduction="none", label_smoothing=0)
         masked_loss = loss * padding_mask
         masked_loss = masked_loss.sum(dim=1, keepdim=True) / padding_mask.sum(
             dim=1, keepdim=True

@@ -56,7 +56,7 @@ class QKVAttention(nn.Module):
         
         return relpos_tsr
     
-    def forward(self, Q, K, V, mask=None, bias=None, return_full=False):
+    def forward(self, Q, K, V, mask=None, bias=None, gate=None, return_full=False):
         bsp, sl, dim = Q.shape
         # shape: batch/heads/etc, sequence_length, dim
         QK = self.scale * th.einsum('abc,adc->abd', Q, K)
@@ -75,29 +75,39 @@ class QKVAttention(nn.Module):
         if self.is_relpos:
             att += th.einsum('abc,bcd->abd', weights, self.av)
 
+        if gate is not None:
+            att = att * gate
+
         other = [QK, weights, att] if return_full else None
         
         return att, other
 
 class BaseAttentionLayer(nn.Module):
-    def __init__(self, indim, d, h, out_units=None):
+    def __init__(self, indim, d, h, out_units=None, gate=False, dropout=0):
         super(BaseAttentionLayer, self).__init__()
         self.indim = indim
         self.d = d
         self.h = h
         self.out_units = indim if out_units==None else out_units
+        self.drop = nn.Identity() if dropout == 0 else nn.Dropout(dropout)
         
         self.attention_layer = QKVAttention(h, d)
+        
         shape = (d*h, self.out_units)
         self.Wo = nn.Linear(*shape, bias=True)
         self.Wo.weight = nn.Parameter( 
             nn.init.normal_(th.empty(self.Wo.weight.shape), 0.0, 0.3*(h*d)**-0.5)
         )
+
         self.shortcut = (
             nn.Identity()
             if self.out_units == indim else
             nn.Linear(indim, out_units)
         )
+        
+        self.gate = gate
+        if gate:
+            self.Wg = nn.Linear(indim, d*h)
         
 class SelfAttention(BaseAttentionLayer):
     def __init__(self, 
@@ -105,16 +115,22 @@ class SelfAttention(BaseAttentionLayer):
                  d, 
                  h, 
                  out_units=None, 
-                 pairwise_bias=False, 
+                 gate=False,
+                 bias=False,
                  bias_in_units=None,
-                 modulator=False
+                 modulator=False,
+                 dropout=0
     ):
-        super().__init__(indim=indim, d=d, h=h, out_units=out_units)
-        self.pairwise_bias = pairwise_bias
+        super().__init__(indim=indim, d=d, h=h, out_units=out_units, gate=gate, dropout=dropout)
 
         self.qkv = nn.Linear(indim, 3*d*h, bias=True)
-        if pairwise_bias:
-            self.pwbias = nn.Linear(bias_in_units, h)
+
+        self.bias = bias
+        if bias == 'pairwise':
+            self.Wpw = nn.Linear(bias_in_units, h)
+        elif bias == 'regular':
+            self.Wb = nn.Linear(indim, h)
+        
         self.modulator = modulator
         if modulator:
             self.alphaq = nn.Parameter(th.tensor(0.))
@@ -137,30 +153,42 @@ class SelfAttention(BaseAttentionLayer):
         
         return Q, K, V # bs*h, sl, d
     
-    def forward(self, x, mask=None, pwtsr=None, return_full=False):
+    def forward(self, x, mask=None, biastsr=None, return_full=False):
         bs, sl, units = x.shape
         qkv = self.qkv(x) # bs, sl, 3*d*h
         Q, K, V = self.get_qkv(qkv) # bs*h, sl, d
-        if self.pairwise_bias:
-            bias = self.pwbias(pwtsr) # bs, sl, sl, h
-            bias = bias.permute([0,3,1,2]) # bs, h, sl, sl
+        if self.bias == 'regular':
+            B = self.Wb(x)[:,None]
+            B = B.permute([0,3,1,2])
+        elif self.bias == 'pairwise':
+            B = self.Wpw(biastsr) # bs, sl, sl, h
+            B = B.permute([0,3,1,2]) # bs, h, sl, sl
         else:
-            bias = None
-        att, other = self.attention_layer(Q, K, V, mask, bias=bias, return_full=return_full) # bs*h, sl, d
+            B = None
+        if self.gate:
+            G = th.sigmoid(self.Wg(x)) # bs, sl, d*h
+            G = (
+                G.reshape(bs, sl, self.d, self.h)
+                .permute([0,3,1,2])
+                .reshape(bs*self.h, sl, self.d)
+            )
+        else:
+            G = None
+        att, other = self.attention_layer(Q, K, V, mask, bias=B, gate=G, return_full=return_full) # bs*h, sl, d
         att = att.reshape(-1, self.h, sl, self.d)
         att = att.permute([0,2,3,1])
         att = att.reshape(-1, sl, self.d*self.h) # bs, sl, d*h
         resid = self.Wo(att)
         
-        output = self.shortcut(x) + resid
+        output = self.shortcut(x) + self.drop(resid)
         
         other = [Q, K, V] + other + [resid] if return_full else None
         
         return {'out': output, 'other': other}
 
 class CrossAttention(BaseAttentionLayer):
-    def __init__(self, indim, kvindim, d, h, out_units=None):
-        super().__init__(indim=indim, d=d, h=h, out_units=out_units)
+    def __init__(self, indim, kvindim, d, h, out_units=None, dropout=0):
+        super().__init__(indim=indim, d=d, h=h, out_units=out_units, dropout=dropout)
         
         self.Wq = nn.Linear(indim, d*h, bias=False)
         self.Wkv = nn.Linear(kvindim, 2*d*h, bias=False)
@@ -189,10 +217,10 @@ class CrossAttention(BaseAttentionLayer):
         att = att.reshape(-1, slq, self.h*self.d)
         resid = self.Wo(att)
         
-        return self.shortcut(q_feats) + resid
+        return self.shortcut(q_feats) + self.drop(resid)
 
 class FFN(nn.Module):
-    def __init__(self, indim, unit_multiplier=1, out_units=None):
+    def __init__(self, indim, unit_multiplier=1, out_units=None, dropout=0):
         super(FFN, self).__init__()
         self.indim = indim
         self.mult = unit_multiplier
@@ -204,6 +232,7 @@ class FFN(nn.Module):
         self.W2.weight = nn.Parameter( 
             nn.init.normal_(th.empty(shape), 0.0, 0.3*(indim*self.mult)**-0.5)
         )
+        self.drop = nn.Identity() if dropout == 0 else nn.Dropout(dropout)
     
     def forward(self, x, embed=None, return_full=False):
         out1 = self.W1(x)
@@ -212,7 +241,7 @@ class FFN(nn.Module):
         
         other = [out1, out3] if return_full else None
 
-        return {'out': x + out3, 'other': other}
+        return {'out': x + self.drop(out3), 'other': other}
 
 class TransBlock(nn.Module):
     def __init__(self,
@@ -261,7 +290,7 @@ class TransBlock(nn.Module):
                 embed_feats=None, 
                 spec_mask=None, 
                 seq_mask=None,
-                pwtsr=None,
+                biastsr=None,
                 return_full=False
     ):
         selfmask = seq_mask if self.is_cross else spec_mask
@@ -269,7 +298,7 @@ class TransBlock(nn.Module):
         
         out = x + self.alpha*Emb if self.preembed else x
         out = self.norm1(out) if self.prenorm else out
-        outsa = self.selfattention(out, selfmask, pwtsr, return_full=return_full)
+        outsa = self.selfattention(out, selfmask, biastsr, return_full=return_full)
         out = outsa['out']
         if self.is_cross:
             out = self.crossnorm(out) if self.prenorm else out
