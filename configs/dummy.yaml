@@ -4,6 +4,5 @@ wandb_entity: kall
 ### Models
 encoder_model: encoder_base_arch
 ### Training hyperparameters
-batch_size: 100
 lr: 4e-5
 epochs: 5

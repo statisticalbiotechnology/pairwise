@@ -60,7 +60,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
     def __init__(
         self,
         encoder,
-        args,
+        global_args,
         head=None,
         collate_fn=None,
         task_dict=None,
@@ -71,22 +71,24 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.head = head
         self.collate_fn = collate_fn
         self.task_dict = task_dict
-        self.batch_size = args.batch_size
-        self.num_workers = task_dict.get("num_workers", args.num_workers)
-        self.pin_mem = args.pin_mem
+        self.batch_size = task_dict["batch_size"]
+        self.num_workers = task_dict.get("num_workers", global_args.num_workers)
+        self.pin_mem = global_args.pin_mem
 
         self.weight_decay = task_dict["weight_decay"]
 
-        if args.scale_lr_by_batchsize:
+        self.eff_batch_size = self.batch_size * global_args.accum_iter * global_args.num_devices * global_args.num_nodes
+        
+        if global_args.scale_lr_by_batchsize:
+            self.ref_batch_size = task_dict.get("ref_batch_size", 0)
+            assert self.ref_batch_size > 0, "'ref_batch_size' must be provided when 'scale_lr_by_batchsize' is True"
             self.lr = (
-                task_dict["blr"] * args.eff_batch_size / 256
-                if task_dict.get("lr", None) is None
-                else task_dict["lr"]
+                task_dict["blr"] * self.eff_batch_size / self.ref_batch_size
             )
         else:
             self.lr = task_dict["blr"]
-        self.mask_zero_tokens = args.mask_zero_tokens
-        self.log_wandb = args.log_wandb
+        self.mask_zero_tokens = global_args.mask_zero_tokens
+        self.log_wandb = global_args.log_wandb
         self.tracker = BestMetricTracker()
         self.best_metrics_logged = (
             False  # keep track of if the best achieved metrics have been logged
@@ -326,12 +328,15 @@ class BasePLWrapper(ABC, pl.LightningModule):
         if not self.best_metrics_logged and self.log_wandb:
             self.logger.experiment.log(self.tracker.best_metrics)
 
+    def on_fit_start(self):
+        if self.log_wandb:
+            self.logger.experiment.log({"eff_batch_size_"+self.TASK_NAME: self.eff_batch_size, "ref_batch_size_"+self.TASK_NAME: self.ref_batch_size})
 
 class BaseDownstreamWrapper(BasePLWrapper):
     def __init__(
-        self, encoder, args, datasets, head=None, collate_fn=None, task_dict=None
+        self, encoder, global_args, datasets, head=None, collate_fn=None, task_dict=None
     ):
-        super().__init__(encoder, args, head, collate_fn, task_dict)
+        super().__init__(encoder, global_args, head, collate_fn, task_dict)
         self.datasets = datasets
 
     def train_dataloader(self):

@@ -44,13 +44,13 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         encoder,
         decoder,
         datasets,
-        args,
+        global_args,
         collate_fn=None,
         token_dicts=None,
         task_dict=None,
     ):
         super().__init__(
-            encoder, args, datasets, collate_fn=collate_fn, task_dict=task_dict
+            encoder, global_args, datasets, collate_fn=collate_fn, task_dict=task_dict
         )
         self.decoder = decoder
 
@@ -273,7 +273,7 @@ class DeNovoRandom(DeNovoTeacherForcing):
         encoder,
         decoder,
         datasets,
-        args,
+        global_args,
         collate_fn=None,
         token_dicts=None,
         task_dict=None,
@@ -282,7 +282,7 @@ class DeNovoRandom(DeNovoTeacherForcing):
             encoder,
             decoder,
             datasets,
-            args,
+            global_args,
             collate_fn=collate_fn,
             token_dicts=token_dicts,
             task_dict=task_dict,

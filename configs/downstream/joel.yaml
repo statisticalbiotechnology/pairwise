@@ -23,6 +23,8 @@ denovo_tf:
   warmup_epochs: 3
   min_lr: 1.0e-7
   blr: 2.0e-4
+  batch_size: 100
+  ref_batch_size: 100
   weight_decay: 0
   epochs: 30
   subset: 0
@@ -32,6 +34,8 @@ denovo_random:
   # DeNovoTeacherRandom specific hparams
   conf_threshold: 0
   # Training hparams
+  batch_size: 100
+  ref_batch_size: 100
   blr: 1.0e-4
   weight_decay: 0
   epochs: 30

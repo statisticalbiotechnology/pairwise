@@ -15,6 +15,7 @@ masked:
   learned_masked_token: True
   positional_encoding: True
   mz_to_int_ratio: 0.67
+  mask_ratio: 0.75
   
   # Training hparams
   blr: 4.0e-5
@@ -30,6 +31,7 @@ masked_ae:
   learned_masked_token: True
   positional_encoding: True
   mz_to_int_ratio: 0.67
+  mask_ratio: 0.75
 
   # Decoder architecture hparams
   decoder_running_units: 256

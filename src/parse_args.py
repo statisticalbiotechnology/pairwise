@@ -121,12 +121,6 @@ def get_args_parser(conf_parser):
         help="Hidden hunits in the Trinary MZ head",
     )
     parser.add_argument(
-        "--batch_size",
-        default=64,
-        type=int,
-        help="Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus",
-    )
-    parser.add_argument(
         "--max_peaks",
         default=300,
         type=int,
@@ -138,35 +132,6 @@ def get_args_parser(conf_parser):
         default=1,
         type=int,
         help="Accumulate gradient iterations (for increasing the effective batch size under memory constraints)",
-    )
-    parser.add_argument(
-        "--mask_ratio",
-        default=0.2,
-        type=float,
-        help="Masking ratio (percentage of removed tokens).",
-    )
-    # Optimizer parameters
-    parser.add_argument(
-        "--weight_decay", type=float, default=0.05, help="weight decay (default: 0.05)"
-    )
-
-    parser.add_argument(
-        "--lr",
-        type=float,
-        default=None,
-        help="learning rate (absolute lr)",
-    )
-    parser.add_argument(
-        "--blr",
-        type=float,
-        default=1e-4,
-        help="base learning rate (max lr)",
-    )
-    parser.add_argument(
-        "--min_lr",
-        type=float,
-        default=1e-07,
-        help="lower lr bound for cyclic schedulers",
     )
     parser.add_argument(
         "--anneal_lr",
