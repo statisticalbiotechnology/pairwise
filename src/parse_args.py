@@ -204,7 +204,18 @@ def get_args_parser(conf_parser):
         "--resume", default=0, type=int, help="Bool (0/1): resume from checkpoint"
     )
     # parser.add_argument("--start_epoch", default=0, type=int, help="start epoch") # I think lightning detects the starting epoch from the checkpoint
-    parser.add_argument("--num_workers", default=10, type=int)
+    parser.add_argument(
+        "--num_workers",
+        default=-1,
+        type=int,
+        help="If >= 0, set global num_workers, else let the task dict control num_workers for each task",
+    )
+    parser.add_argument(
+        "--batch_size",
+        default=-1,
+        type=int,
+        help="If >= 0, set global batch_size, else let the task dict control batch_size for each task",
+    )
     parser.add_argument(
         "--pin_mem",
         type=int,

@@ -71,20 +71,34 @@ class BasePLWrapper(ABC, pl.LightningModule):
         self.head = head
         self.collate_fn = collate_fn
         self.task_dict = task_dict
-        self.batch_size = task_dict["batch_size"]
-        self.num_workers = task_dict.get("num_workers", global_args.num_workers)
+        self.batch_size = (
+            task_dict["batch_size"]
+            if global_args.batch_size < 0
+            else global_args.batch_size
+        )
+        self.num_workers = (
+            task_dict["num_workers"]
+            if global_args.num_workers < 0
+            else global_args.num_workers
+        )
         self.pin_mem = global_args.pin_mem
 
         self.weight_decay = task_dict["weight_decay"]
 
-        self.eff_batch_size = self.batch_size * global_args.accum_iter * global_args.num_devices * global_args.num_nodes
-        
-        if global_args.scale_lr_by_batchsize:
+        self.eff_batch_size = (
+            self.batch_size
+            * global_args.accum_iter
+            * global_args.num_devices
+            * global_args.num_nodes
+        )
+
+        self.scale_lr_by_batchsize = global_args.scale_lr_by_batchsize
+        if self.scale_lr_by_batchsize:
             self.ref_batch_size = task_dict.get("ref_batch_size", 0)
-            assert self.ref_batch_size > 0, "'ref_batch_size' must be provided when 'scale_lr_by_batchsize' is True"
-            self.lr = (
-                task_dict["blr"] * self.eff_batch_size / self.ref_batch_size
-            )
+            assert (
+                self.ref_batch_size > 0
+            ), "'ref_batch_size' must be provided when 'scale_lr_by_batchsize' is True"
+            self.lr = task_dict["blr"] * self.eff_batch_size / self.ref_batch_size
         else:
             self.lr = task_dict["blr"]
         self.mask_zero_tokens = global_args.mask_zero_tokens
@@ -330,7 +344,16 @@ class BasePLWrapper(ABC, pl.LightningModule):
 
     def on_fit_start(self):
         if self.log_wandb:
-            self.logger.experiment.log({"eff_batch_size_"+self.TASK_NAME: self.eff_batch_size, "ref_batch_size_"+self.TASK_NAME: self.ref_batch_size})
+            self.logger.experiment.log(
+                {
+                    "eff_batch_size_" + self.TASK_NAME: self.eff_batch_size,
+                    "ref_batch_size_"
+                    + self.TASK_NAME: (
+                        self.ref_batch_size if self.scale_lr_by_batchsize else None
+                    ),
+                }
+            )
+
 
 class BaseDownstreamWrapper(BasePLWrapper):
     def __init__(
