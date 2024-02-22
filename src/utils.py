@@ -9,7 +9,7 @@ from functools import partial
 
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from lance_data_module import LanceDataModule
-from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback
+from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback, LinearWarmupLRCallback
 
 from collate_functions import pad_peaks, pad_peptides
 
@@ -118,6 +118,15 @@ def configure_callbacks(args, val_metric_name: str = "val_loss", metric_mode="mi
             CosineAnnealLRCallback(
                 lr=args.lr, min_lr=args.min_lr, warmup_epochs=args.warmup_epochs
             )
+        ]
+
+    if args.warmup_lr:
+        callbacks += [
+            LinearWarmupLRCallback(
+                starting_lr=args.start_lr, 
+                ending_lr=args.end_lr, 
+                warmup_steps=args.lr_warmup_steps
+                )
         ]
 
     # measure FLOPs on the first train batch

@@ -4,7 +4,6 @@ import math
 from pytorch_lightning.utilities.rank_zero import rank_zero_only
 # from deepspeed.profiling.flops_profiler.profiler import FlopsProfiler
 
-
 class CosineAnnealLRCallback(pl.Callback):
     """Callback to adjust the learning rate using the cosine annealing schedule with warmup.
 
@@ -44,6 +43,20 @@ class CosineAnnealLRCallback(pl.Callback):
                     param_group["lr"] = lr_temp
         pl_module.lr = lr_temp
 
+class LinearWarmupLRCallback(pl.Callback):
+    def __init__(self, starting_lr, ending_lr, warmup_steps):
+        self.slr = starting_lr
+        self.elr = ending_lr
+        self.incr = (ending_lr - starting_lr) / warmup_steps
+
+    def on_train_start(self, trainer, pl_module):
+        for optimizer in trainer.optimizers:
+            optimizer.param_groups[0]['lr'] = self.slr
+
+    def on_before_optimizer_step(self, trainer, pl_module, optimizer):
+        for optimizer in trainer.optimizers:
+            if optimizer.param_groups[0]['lr'] < self.elr:
+                optimizer.param_groups[0]['lr'] += self.incr
 
 class FLOPProfilerCallback(pl.Callback):
     """ Measures the number of FLOPs during the first forward pass on the first batch

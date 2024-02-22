@@ -140,6 +140,30 @@ def get_args_parser(conf_parser):
         help="Bool (0/1): Turn on cosine annealing lr",
     )
     parser.add_argument(
+        "--warmup_lr",
+        type=int,
+        default=0,
+        help="Bool (0/1): Turn on linear warmup lr",
+    )
+    parser.add_argument(
+        "--start_lr",
+        type=float,
+        default=1e-7,
+        help="Starting learning rate",
+    )
+    parser.add_argument(
+        "--end_lr",
+        type=float,
+        default=2e-4,
+        help="Final learning rate",
+    )
+    parser.add_argument(
+        "--lr_warmup_steps",
+        type=int,
+        default=2e4,
+        help="Number of steps to increase lr for",
+    )
+    parser.add_argument(
         "--scale_lr_by_batchsize",
         type=int,
         default=0,

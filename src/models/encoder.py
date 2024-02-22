@@ -345,7 +345,7 @@ def encoder_base_arch(
     use_charge=False,
     use_mass=False,
     use_energy=False,
-    bias='pairwise',
+    bias=False, # 'pairwise' | 'regular' | False | None
 ):
     model = Encoder(
         norm_type='layer',
