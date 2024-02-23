@@ -2,10 +2,15 @@ trinary_mz:
   test: 123
 
   # Training hparams
+  batch_size: 100
+  lr_warmup: 1
+  lr_start: 1.0e-7
+  lr_end: 2.0e-4
+  lr_warmup_steps: 20000
   blr: 4.0e-5
   weight_decay: 1.0e-5
   epochs: 1
-  subset: 0.9
+  subset: 0
   num_workers: 0
 
 masked:

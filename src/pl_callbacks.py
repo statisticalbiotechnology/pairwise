@@ -53,7 +53,7 @@ class LinearWarmupLRCallback(pl.Callback):
         for optimizer in trainer.optimizers:
             optimizer.param_groups[0]['lr'] = self.slr
 
-    def on_before_optimizer_step(self, trainer, pl_module, optimizer):
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         for optimizer in trainer.optimizers:
             if optimizer.param_groups[0]['lr'] < self.elr:
                 optimizer.param_groups[0]['lr'] += self.incr

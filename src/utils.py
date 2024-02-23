@@ -95,7 +95,7 @@ def get_ninespecies_dataset_splits(
     )
 
 
-def configure_callbacks(args, val_metric_name: str = "val_loss", metric_mode="min"):
+def configure_callbacks(args, task_args, val_metric_name: str = "val_loss", metric_mode="min"):
     callbacks = []
     filename = f"{{epoch}}-{{{val_metric_name}:.2f}}"
     # Checkpoint callback
@@ -120,13 +120,13 @@ def configure_callbacks(args, val_metric_name: str = "val_loss", metric_mode="mi
             )
         ]
 
-    if args.warmup_lr:
+    if task_args['lr_warmup']:
         callbacks += [
             LinearWarmupLRCallback(
-                starting_lr=args.start_lr, 
-                ending_lr=args.end_lr, 
-                warmup_steps=args.lr_warmup_steps
-                )
+                starting_lr=task_args['lr_start'], 
+                ending_lr=task_args['lr_end'], 
+                warmup_steps=task_args['lr_warmup_steps']
+            )
         ]
 
     # measure FLOPs on the first train batch

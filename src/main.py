@@ -102,7 +102,9 @@ def main(global_args, pretrain_config=None, ds_config=None):
             global_args.max_peaks,
         )
         pretrain_callbacks = utils.configure_callbacks(
-            global_args, global_args.pretraining_task + "_val_loss_epoch"
+            global_args, 
+            config['pretrain_config'][global_args.pretraining_task],
+            global_args.pretraining_task + "_val_loss_epoch"
         )
 
         # Instantiate PL wrapper based on the pretraining task
@@ -202,7 +204,10 @@ def main(global_args, pretrain_config=None, ds_config=None):
             encoder = pl_encoder.encoder
 
         ds_callbacks = utils.configure_callbacks(
-            global_args, global_args.downstream_task + "_val_aa_prec_epoch", metric_mode="max"
+            global_args,
+            config['downstream_config'][global_args.downstream_task],
+            global_args.downstream_task + "_val_aa_prec_epoch", 
+            metric_mode="max"
         )
 
         # Load downstream dataset
