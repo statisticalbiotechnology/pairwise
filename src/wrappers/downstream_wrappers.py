@@ -6,6 +6,8 @@ import torch.nn.functional as F
 
 
 def NaiveAccRecPrec(target, prediction, null_token, eos_token):
+    assert type(null_token) == int, "null_token must be integer"
+    assert type(eos_token) == int, "eos_token must be integer"
     correct_bool = (target == prediction).type(torch.int32)
     num_correct = correct_bool.sum()
     recall_bool = (target != null_token) & (target != eos_token)
@@ -63,6 +65,7 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         self.SOS = self.input_dict["<SOS>"]
         self.output_dict = token_dicts["output_dict"]
         self.EOS = self.output_dict["<EOS>"]
+        self.NT = self.amod_dict[self.null_token]
 
         self.predcats = len(self.output_dict)
 
@@ -200,11 +203,11 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
 
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
         naive_metrics = NaiveAccRecPrec(
-            targ, preds, self.null_token, self.EOS
+            targ, preds, self.NT, self.EOS
         )
         
         preds_ffill = fill_null_after_first_EOS(
-            preds, null_token=self.amod_dict["X"], EOS_token=self.EOS
+            preds, null_token=self.NT, EOS_token=self.EOS
         )
 
         deepnovo_metrics = self.deepnovo_metrics(preds_ffill, targ)
