@@ -167,7 +167,12 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         # logits.shape = (batch_size, sequence_len, num_classes)
         logits = logits.transpose(-2, -1)
         # logits.shape = (batch_size, num_classes, sequence_len)
-        loss = F.cross_entropy(logits, labels, reduction="none", label_smoothing=0)
+        loss = F.cross_entropy(
+            logits, 
+            labels, 
+            reduction="none", 
+            label_smoothing=self.task_dict['label_smoothing']
+        )
         masked_loss = loss * padding_mask
         masked_loss = masked_loss.sum(dim=1, keepdim=True) / padding_mask.sum(
             dim=1, keepdim=True
@@ -189,17 +194,19 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         preds = preds[:, : targ.shape[1]]
         logits = logits[:, : targ.shape[1]]
 
+        logits_ce = logits.transpose(-1, -2)
+        # aa_confidence, _ = F.softmax(logits, dim=-1).max(dim=-1)
+        loss = F.cross_entropy(logits_ce, targ, reduction='none')[targ!=22].mean()
+
+        """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
+        naive_metrics = NaiveAccRecPrec(
+            targ, preds, self.null_token, self.EOS
+        )
+        
         preds_ffill = fill_null_after_first_EOS(
             preds, null_token=self.amod_dict["X"], EOS_token=self.EOS
         )
 
-        logits_ce = logits.transpose(-1, -2)
-        # aa_confidence, _ = F.softmax(logits, dim=-1).max(dim=-1)
-        loss = F.cross_entropy(logits_ce, targ)
-        """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
-        naive_metrics = NaiveAccRecPrec(
-            targ, preds_ffill, self.amod_dict[self.null_token], self.EOS
-        )
         deepnovo_metrics = self.deepnovo_metrics(preds_ffill, targ)
         stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
         return stats
@@ -390,7 +397,7 @@ class DeNovoRandom(DeNovoTeacherForcing):
 
         # Fill with hidden tokens to the end
         # - this will be the decoder's input
-        intseq_ = self.fill2c(intseq, inds, "<H>", output=False)
+        intseq_ = self.fill2c(intseq, inds, "X", output=False)
 
         return intseq_, targ
 

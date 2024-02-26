@@ -119,7 +119,7 @@ class Decoder(pl.LightningModule):
             # - if predict token is at position 5 (zero-based), mask out
             #   positions 5 to seq_len, i.e. you can only attend to positions
             #   0, 1, 2, 3, 4
-            mask = 1e5 * (seqs >= seqlen[:, None]).type(torch.float32)
+            mask = 1e7 * (seqs >= seqlen[:, None]).type(torch.float32)
 
         return mask
 
@@ -185,7 +185,7 @@ class Decoder(pl.LightningModule):
         out, ce_emb = self.EmbedInputs(intseq, charge=charge, energy=energy, mass=mass)
 
         seqmask = self.sequence_mask(seqlen, out.shape[1])  # max(seqlen))
-        seqmask = self.causal_mask(out)
+        #seqmask = self.causal_mask(out)
 
         out = self.Main(
             out, kv_feats=kv_feats, embed=ce_emb, spec_mask=specmask, seq_mask=seqmask
@@ -331,37 +331,6 @@ class DenovoDecoder(pl.LightningModule):
         intseq = torch.cat([intseq[:, 1:], predictions[:, None]], dim=1)
 
         return intseq, probs
-
-    def correct_sequence_(self, enc_out, batdic):
-        bs = enc_out["emb"].shape[0]
-        rank = torch.zeros(bs, self.seq_len, dtype=torch.int32)
-        prob = torch.zeros(bs, self.seq_len, dtype=torch.float32)
-        # starting intseq array
-        intseq = self.initial_intseq(bs, self.seq_len)
-        for i in range(self.seq_len):
-            index = int(i)
-
-            dec_out = self(intseq, enc_out, batdic, False)
-
-            wrank = torch.where(
-                (-dec_out[:, i]).argsort(-1) == batdic["seqint"][:, i : i + 1]
-            )[-1].type(torch.int32)
-
-            rank = self.set_tokens(rank, index, wrank)
-
-            inds = (torch.arange(bs, dtype=torch.int32), batdic["seqint"][:, i])
-            # updates = tf.matorch.log(tf.gather_nd(dec_out[:, i], inds))
-            updates = dec_out[:, i][inds].log()
-            prob = self.set_tokens(prob, index, updates)
-
-            predictions = batdic["seqint"][:, i]  # self.greedy(dec_out[:, index])
-
-            if index < self.seq_len - 1:
-                intseq = self.set_tokens(intseq, index + 1, predictions)
-
-        intseq = torch.cat([intseq[:, 1:], predictions[:, None]], dim=1)
-
-        return rank, prob  # UNNECESSARY
 
     def forward(
         self,
@@ -956,7 +925,7 @@ class DenovoDecoder(pl.LightningModule):
 def decoder_greedy_base(token_dict, d_model=512, **kwargs):
     decoder_config = {
         "kv_indim": d_model,
-        "running_units": 256,
+        "running_units": 512,
         "sequence_length": 30,
         "depth": 9,
         "d": 64,
