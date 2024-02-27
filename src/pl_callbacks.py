@@ -47,16 +47,36 @@ class LinearWarmupLRCallback(pl.Callback):
     def __init__(self, starting_lr, ending_lr, warmup_steps):
         self.slr = starting_lr
         self.elr = ending_lr
+        self.warmup_steps = warmup_steps
+        
         self.incr = (ending_lr - starting_lr) / warmup_steps
+        self.current_step = 0
 
     def on_train_start(self, trainer, pl_module):
+        self.num_opts = len(trainer.optimizers)
         for optimizer in trainer.optimizers:
             optimizer.param_groups[0]['lr'] = self.slr
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
-        for optimizer in trainer.optimizers:
-            if optimizer.param_groups[0]['lr'] < self.elr:
+        if self.current_step < self.warmup_steps*self.num_opts:
+            for optimizer in trainer.optimizers:
                 optimizer.param_groups[0]['lr'] += self.incr
+                self.current_step += 1
+
+class ExponentialDecayLRCallback(pl.Callback):
+    def __init__(self, starting_step, ending_step, decay):
+        assert ending_step > starting_step
+        self.ss = starting_step
+        self.es = ending_step
+        self.decay = decay
+
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        num_opts = len(trainer.optimizers)
+        current_step = trainer.global_step // num_opts
+        if current_step >= self.ss:
+            factor = self.decay if current_step <= self.es else 1
+            for optimizer in trainer.optimizers:
+                    optimizer.param_groups[0]['lr'] *= factor
 
 class FLOPProfilerCallback(pl.Callback):
     """ Measures the number of FLOPs during the first forward pass on the first batch

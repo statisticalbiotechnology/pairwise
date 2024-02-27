@@ -66,8 +66,14 @@ class QKVAttention(nn.Module):
         if bias is not None:
             QK += bias
         
-        # mask.shape: bs, 1, 1, sl
-        mask = th.zeros_like(QK) if mask==None else mask[:, None, None, :]
+        # Make mask fit 4 dimensional QK matrix
+        if mask==None:
+            mask = th.zeros_like(QK) 
+        elif len(mask.shape) == 2:
+            mask = mask[:, None, None, :] # for every head and query
+        elif len(mask.shape) == 3:
+            mask = mask[:,None] # for every head
+
         weights = th.softmax(QK-mask, dim=-1)
         weights = weights.reshape(-1, sl, V.shape[1])
         

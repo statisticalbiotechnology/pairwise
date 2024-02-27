@@ -164,6 +164,30 @@ def get_args_parser(conf_parser):
         help="Number of steps to increase lr for",
     )
     parser.add_argument(
+        "--lr_decay",
+        type=int,
+        default=0,
+        help="Bool (0/1): Turn on lr decay",
+    )
+    parser.add_argument(
+        "--lr_decay_start_step",
+        type=int,
+        default=100000,
+        help="Starting step for lr decay",
+    )
+    parser.add_argument(
+        "--lr_decay_end_step",
+        type=int,
+        default=120000,
+        help="Final step for lr decay",
+    )
+    parser.add_argument(
+        "--lr_decay_rate",
+        type=float,
+        default=0.999,
+        help="Number multiplied to learning rate each step",
+    )
+    parser.add_argument(
         "--scale_lr_by_batchsize",
         type=int,
         default=0,

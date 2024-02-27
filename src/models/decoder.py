@@ -41,7 +41,7 @@ class Decoder(pl.LightningModule):
         self.sl = sequence_length
         self.num_inp_tokens = num_inp_tokens
         self.num_out_tokens = (
-            num_inp_tokens - 1
+            num_inp_tokens - 0 # 1 if denovo_random
         )  # no need for start or hidden tokens, add EOS
         self.use_charge = use_charge
         self.use_energy = use_energy
@@ -125,8 +125,8 @@ class Decoder(pl.LightningModule):
 
     def causal_mask(self, x):
         bs, sl, c = x.shape
-        ones = th.ones(bs, sl, sl)
-        mask =  1e7*self.triu(ones, diagonal=1)
+        ones = torch.ones(bs, sl, sl, device=x.device)
+        mask =  1e7*torch.triu(ones, diagonal=1)
 
         return mask
 
@@ -184,8 +184,8 @@ class Decoder(pl.LightningModule):
     ):
         out, ce_emb = self.EmbedInputs(intseq, charge=charge, energy=energy, mass=mass)
 
-        seqmask = self.sequence_mask(seqlen, out.shape[1])  # max(seqlen))
-        #seqmask = self.causal_mask(out)
+        #seqmask = self.sequence_mask(seqlen, out.shape[1])  # max(seqlen))
+        seqmask = self.causal_mask(out)
 
         out = self.Main(
             out, kv_feats=kv_feats, embed=ce_emb, spec_mask=specmask, seq_mask=seqmask
@@ -244,6 +244,8 @@ class DenovoDecoder(pl.LightningModule):
         self.use_mass = dec_config["use_mass"]
         self.use_charge = dec_config["use_charge"]
 
+        self.causal = True
+        
         self.initialize_variables()
 
     def initial_intseq(self, batch_size, seqlen=None):
@@ -318,7 +320,7 @@ class DenovoDecoder(pl.LightningModule):
             index = int(i)
 
             dec_out = self.forward(
-                intseq, enc_out, mass=mass, charge=charge, causal=causal
+                intseq, enc_out, mass=mass, charge=charge, causal=self.causal # change for denovo random
             )
             logits = dec_out["logits"]
 
@@ -342,15 +344,14 @@ class DenovoDecoder(pl.LightningModule):
         causal=False,
         peptide_lengths=None,
     ):
-        if causal:
-            raise NotImplementedError()
 
         if peptide_lengths is not None:
-            raise NotImplementedError(
-                "This class needs to implement the padding mask creation based on "
-                "pep length and include a 'padding_mask' in the returned dict"
+            sequence_length = input_intseq.shape[1]
+            padding_mask = self.decoder.sequence_mask( 
+                peptide_lengths.squeeze(),
+                sequence_length,
             )
-            # padding_mask = self._get_padding_mask()
+            padding_mask = padding_mask != 0
         else:
             padding_mask = None
 
@@ -930,7 +931,7 @@ def decoder_greedy_base(token_dict, d_model=512, **kwargs):
         "depth": 9,
         "d": 64,
         "h": 8,
-        "ffn_multiplier": 2,
+        "ffn_multiplier": 1,
         "ce_units": 256,
         "use_charge": True,
         "use_energy": False,
@@ -938,7 +939,7 @@ def decoder_greedy_base(token_dict, d_model=512, **kwargs):
         "norm_type": "layer",
         "prenorm": True,
         "preembed": True,
-        "dropout": 0.1,
+        "dropout": 0,
         "pool": False,
     }
     model = DenovoDecoder(token_dict, decoder_config, **kwargs)

@@ -20,13 +20,17 @@ denovo_tf:
   conf_threshold: 0
   # Training hparams
   blr: 1.0e-4
-  lr_warmup: 0
+  lr_warmup: 1
   lr_start: 1.0e-7
   lr_end: 2.0e-4
   lr_warmup_steps: 20000
+  lr_decay: 0
+  lr_decay_start_step: 5000
+  lr_decay_end_step: 25000
+  lr_decay_rate: 0.9999
   batch_size: 100
   ref_batch_size: 100
-  label_smoothing: 0.1
+  label_smoothing: 0
   weight_decay: 0
   epochs: 30
   subset: 0

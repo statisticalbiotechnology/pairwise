@@ -9,7 +9,7 @@ from functools import partial
 
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from lance_data_module import LanceDataModule
-from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback, LinearWarmupLRCallback
+from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback, LinearWarmupLRCallback, ExponentialDecayLRCallback
 
 from collate_functions import pad_peaks, pad_peptides
 
@@ -126,6 +126,15 @@ def configure_callbacks(args, task_args, val_metric_name: str = "val_loss", metr
                 starting_lr=task_args['lr_start'], 
                 ending_lr=task_args['lr_end'], 
                 warmup_steps=task_args['lr_warmup_steps']
+            )
+        ]
+
+    if task_args['lr_decay']:
+        callbacks += [
+            ExponentialDecayLRCallback(
+                starting_step=task_args['lr_decay_start_step'],
+                ending_step=task_args['lr_decay_end_step'],
+                decay=task_args['lr_decay_rate']
             )
         ]
 
