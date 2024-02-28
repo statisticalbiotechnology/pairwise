@@ -361,7 +361,7 @@ def encoder_base_arch(
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
-        dropout=0.1,
+        dropout=0,
         bias=bias,
         gate=False,
 

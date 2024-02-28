@@ -3,6 +3,7 @@ import numpy as np
 import models.model_parts as mp
 import torch
 from torch import nn
+I = nn.init
 import pytorch_lightning as pl
 from utils import Scale
 # beam search dependencies
@@ -11,7 +12,34 @@ import einops
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import heapq
 
-
+def init_decoder_weights(module):
+    if hasattr(module, 'first'):
+        module.first.weight = I.xavier_uniform_(module.first.weight)
+        if module.first.bias is not None: 
+            module.first.bias = I.zeros_(module.first.bias)
+    if isinstance(module, (mp.SelfAttention, mp.CrossAttention)):
+        module.Wo.weight = I.normal_(module.Wo.weight, 0.0, (1/3)*(module.h*module.d)**-0.5)
+        if hasattr(module, 'qkv'):
+            module.qkv.weight = I.normal_(module.qkv.weight, 0.0, (2/3)*module.indim**-0.5)
+        if hasattr(module, 'Wb'):
+            module.Wb.weight = I.zeros_(module.Wb.weight)
+            module.Wb.bias = I.zeros_(module.Wb.bias)
+        elif hasattr(module, 'Wpw'):
+            module.Wpw.weight = I.zeros_(module.Wpw.weight)
+            module.Wpw.bias = I.zeros_(module.Wpw.bias)
+        if hasattr(module, 'Wg'):
+            module.Wg.weight = I.zeros_(module.Wg.weight)
+            module.Wg.bias = I.constant_(module.Wg.bias, 1.) # gate mostly open ~ 0.73
+    elif isinstance(module, mp.FFN):
+        module.W1.weight = I.xavier_uniform_(module.W1.weight)
+        module.W1.bias = I.zeros_(module.W1.bias)
+        module.W2.weight = I.normal_(module.W2.weight, 0.0, (1/3)*(module.indim*module.mult)**-0.5)
+        #module.W2.weight = I.xavier_uniform_(module.W2.weight)
+    elif isinstance(module, nn.Linear):
+        module.weight = I.xavier_uniform_(module.weight)
+        if module.bias is not None:
+            module.bias = I.zeros_(module.bias)
+ 
 
 class Decoder(pl.LightningModule):
     def __init__(
@@ -23,6 +51,7 @@ class Decoder(pl.LightningModule):
         depth=9,
         d=64,
         h=4,
+        gate=False,
         ffn_multiplier=1,
         ce_units=256,
         use_charge=True,
@@ -34,6 +63,7 @@ class Decoder(pl.LightningModule):
         penultimate_units=None,
         dropout=0,
         pool=False,
+        bias=False, # Att. bias: 'regular' | False/None
     ):
         super(Decoder, self).__init__()
         self.run_units = running_units
@@ -46,7 +76,7 @@ class Decoder(pl.LightningModule):
         self.use_charge = use_charge
         self.use_energy = use_energy
         self.use_mass = use_mass
-
+        self.bias = bias
         self.ce_units = ce_units
 
         # Normalization type
@@ -65,7 +95,16 @@ class Decoder(pl.LightningModule):
             )
 
         # Main blocks
-        attention_dict = {'indim': running_units, 'd': d, 'h': h, 'dropout': dropout}
+        assert bias in ['pairwise', 'regular', False, None]
+        if bias == None: bias = False
+        attention_dict = {
+            'indim': running_units, 
+            'd': d, 
+            'h': h,
+            'dropout': dropout,
+            #'bias': bias,
+            #'gate': gate,
+        }
         ffn_dict = {'indim': running_units, 'unit_multiplier': ffn_multiplier, 'dropout': dropout}
         is_embed = True if self.atleast1 else False
         self.main = nn.ModuleList([
@@ -101,6 +140,8 @@ class Decoder(pl.LightningModule):
         )
         self.pos = nn.Parameter(pos, requires_grad=False)
 
+        self.apply(init_decoder_weights)
+
     def total_params(self):
         return sum([m.numel() for m in self.parameters()])
 
@@ -119,7 +160,7 @@ class Decoder(pl.LightningModule):
             # - if predict token is at position 5 (zero-based), mask out
             #   positions 5 to seq_len, i.e. you can only attend to positions
             #   0, 1, 2, 3, 4
-            mask = 1e7 * (seqs >= seqlen[:, None]).type(torch.float32)
+            mask = 1e7 * (seqs > seqlen[:, None]).type(torch.float32) # >= excludes eos token, > includes it
 
         return mask
 
@@ -941,6 +982,8 @@ def decoder_greedy_base(token_dict, d_model=512, **kwargs):
         "preembed": True,
         "dropout": 0,
         "pool": False,
+        "gate": False,
+        "bias": False,
     }
     model = DenovoDecoder(token_dict, decoder_config, **kwargs)
     return model

@@ -200,14 +200,14 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         logits_ce = logits.transpose(-1, -2)
         # aa_confidence, _ = F.softmax(logits, dim=-1).max(dim=-1)
         loss = F.cross_entropy(logits_ce, targ, reduction='none')[targ!=22].mean()
+        
+        preds_ffill = fill_null_after_first_EOS(
+            preds, null_token=self.NT, EOS_token=self.EOS
+        )
 
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
         naive_metrics = NaiveAccRecPrec(
             targ, preds, self.NT, self.EOS
-        )
-        
-        preds_ffill = fill_null_after_first_EOS(
-            preds, null_token=self.NT, EOS_token=self.EOS
         )
 
         deepnovo_metrics = self.deepnovo_metrics(preds_ffill, targ)
