@@ -57,6 +57,7 @@ class Decoder(pl.LightningModule):
         use_charge=True,
         use_energy=False,
         use_mass=True,
+        prec_type='inject', # inject | pretoken | posttoken
         norm_type="layer",
         prenorm=True,
         preembed=True,
@@ -78,6 +79,7 @@ class Decoder(pl.LightningModule):
         self.use_mass = use_mass
         self.bias = bias
         self.ce_units = ce_units
+        self.prec_type = prec_type
 
         # Normalization type
         self.norm = mp.get_norm_type(norm_type)
@@ -89,10 +91,16 @@ class Decoder(pl.LightningModule):
         # charge/energy embedding transformation
         self.atleast1 = use_charge or use_energy or use_mass
         if self.atleast1:
+            assert prec_type in ['inject', 'pretoken', 'posttoken']
             num = sum([use_charge, use_energy, use_mass])
-            self.ce_emb = nn.Sequential(
-                nn.Linear(ce_units*num, ce_units), nn.SiLU()
-            )
+            if prec_type == 'inject':
+                self.ce_emb = nn.Sequential(
+                    nn.Linear(ce_units*num, self.ce_units), nn.SiLU()
+                )
+            else:
+                self.ce_emb = nn.Sequential(
+                    nn.Linear(ce_units*num, self.run_units),
+                )
 
         # Main blocks
         assert bias in ['pairwise', 'regular', False, None]
@@ -106,7 +114,7 @@ class Decoder(pl.LightningModule):
             #'gate': gate,
         }
         ffn_dict = {'indim': running_units, 'unit_multiplier': ffn_multiplier, 'dropout': dropout}
-        is_embed = True if self.atleast1 else False
+        is_embed = True if (self.atleast1 and (prec_type=='inject')) else False
         self.main = nn.ModuleList([
             mp.TransBlock(
                 attention_dict,
@@ -224,6 +232,12 @@ class Decoder(pl.LightningModule):
         specmask=None,
     ):
         out, ce_emb = self.EmbedInputs(intseq, charge=charge, energy=energy, mass=mass)
+        if self.prec_type == 'pretoken':
+            out = torch.cat([ce_emb[:,None], out], dim=1)
+            ce_emb=None
+        elif self.prec_type == 'posttoken':
+            out = torch.cat([out, ce_emb[:,None]], dim=1)
+            ce_emb=None
 
         #seqmask = self.sequence_mask(seqlen, out.shape[1])  # max(seqlen))
         seqmask = self.causal_mask(out)
@@ -231,7 +245,9 @@ class Decoder(pl.LightningModule):
         out = self.Main(
             out, kv_feats=kv_feats, embed=ce_emb, spec_mask=specmask, seq_mask=seqmask
         )
-
+        
+        if self.atleast1:
+            out = out if self.prec_type=='inject' else (out[:,1:] if self.prec_type=='pretoken' else out[:,:-1])
         out = self.final(out)
         if self.pool:
             out = out.mean(dim=1)
@@ -977,10 +993,11 @@ def decoder_greedy_base(token_dict, d_model=512, **kwargs):
         "use_charge": True,
         "use_energy": False,
         "use_mass": True,
+        "prec_type": 'inject',
         "norm_type": "layer",
         "prenorm": True,
         "preembed": True,
-        "dropout": 0,
+        "dropout": 0.25,
         "pool": False,
         "gate": False,
         "bias": False,
