@@ -1,0 +1,99 @@
+PXD004732 -- ProteomeTools -- 104608
+PXD000561 -- A draft map of the human proteome -- 97948
+PXD002815 -- A human interactome in three quantitative dimensions organized by stoichiometries and abundances -- 50187
+PXD005336 -- Target Landscape of Clinical Kinase Inhibitors -- 46021
+PXD004452 -- HeLa proteome of 12,250 protein-coding genes -- 38148
+PXD010154 -- A deep proteome and transcriptome abundance atlas of 29 healthy human tissues -- 37040
+PXD000865 -- Mass spectrometry based draft of the human proteome -- 29908
+PXD010595 -- ProteomeTools – Part II -- 26210
+PXD008840 -- A proteomic landscape of diffuse-type gastric cancer -- 24881
+PXD005130 -- Extracellular Matrix Proteomics Identifies Molecular Signature of Atherosclerotic Plaques from Symptomatic Patients -- 19620
+PXD004242 -- Plasma Proteome Profiling Reveals the Effects of Weight Loss on the Apolipoprotein Family and Systemic Inflammation Status -- 19439
+PXD005354 -- Pharmacoproteomic characterisation of human colon and rectal cancer - CRC65 Full Proteomes -- 19111
+PXD005946 -- Global Proteome Analysis of the NCI-60 Cell Line Panel, part 3 -- 17832
+PXD001406 -- Impact of Regulatory Variation from RNA to Protein -- 17559
+PXD008750 -- Proteogenomic Analysis of Medulloblastoma -- 15225
+PXD006512 -- Proteome Landscape of Early Stage Hepatocellular Carcinoma Identifies Proteomic Subtypes and New Therapeutic Targets -- 15018
+PXD009602 -- Mapping the HLA ligandome of Colorectal Cancer Reveals an Imprint of Malignant Cell Transformation -- 14829
+PXD000065 -- HiRIEF deep proteomics of A431 human vulvar cancer cell line and N2A mouse neuroblastoma cell line -- 13169
+PXD006537 -- Large Cohort Proteomics Profiling of Human Brain Cortex -- 13636
+PXD001796 -- Integration of transcriptome and proteome annotation in the naive Ixodes ricinus midgut with genome sequencing -- 11520
+PXD000138 -- Synthetic (Phospho)Peptide Library -- 11505
+PXD000612 -- Ultra-deep human phosphoproteome reveals different regulatory nature of Tyr and Ser/Thr-based signaling -- 11116
+PXD000953 -- The Pan-Human Library: A repository of assays to quantify 10 000 proteins by SWATH-MS -- 11028
+PXD013231 -- Analysis of 1,508 plasma samples of the DiOGenes study - Robust, single shot capillary flow data-independent acquisition to decipher proteomic profiles of weight loss and maintenance -- 10606
+PXD007048 -- Cell-specific proteome analyses of human bone marrow upon aging. -- 10065
+PXD002952 -- LFQbench enables a multi-centered benchmark study demonstrating robust proteomic label-free quantification -- 9952
+PXD006675 -- Region and cell-type resolved quantitative proteomic map of the human heart and its application to atrial fibrillation -- 9856
+PXD002322 -- Panorama of ancient metazoan macromolecular complexes: Homo sapiens -- 9504
+PXD007635 -- The immunopeptidomic landscape of ovarian carcinoma -- 9450
+PXD006607 -- Proteomic analysis of human Medulloblastoma reveals distinct activated pathways between subgroups -- 10561
+PRD000721 -- Phosphoproteomics of leaf growth in maize -- 8913
+PXD006895 -- SubCellBarcode: Scalable proteome-wide mapping of protein localization and relocalization -- 8749
+PXD002319 -- Panorama of ancient metazoan macromolecular complexes: Caenorhabditis elegans -- 8601
+PXD004397 -- Normal human mitral valve proteome: a preliminary investigation by gel-based and gel-free proteomic approaches -- 8462
+PRD000066 -- Quantitative Proteomics Analysis of the Secretory Pathway -- 8459
+PXD001250 -- Cell-type and brain-region resolved mouse brain proteome -- 8411
+PXD002255 -- Enrichment strategy for searching missing protein -- 8411
+PXD005353 -- Pharmacoproteomic characterisation of human colon and rectal cancer - CPTAC Full Proteomes -- 8164
+PXD008675 -- Gut Microbial Ecosystem Multiomics in Inflammatory Bowel Disease -- 8158
+PXD005520 -- Human Plasma Gel Filtration Fractions MS Data -- 7697
+PXD006003 -- Proteomics of melanoma response to immunotherapy reveals dependence on mitochondrial function -- 8011
+PXD004894 -- Direct identification of clinically relevant neoepitopes presented on native human melanoma tissue by mass spectrometry -- 7013
+PXD000279 -- MaxLFQ label-free quantification algorithm benchmark datasets -- 6856
+PXD006291 -- HiRIEFII proteomics and proteogenomics of A431 cells and five histologically normal tissues -- 6815
+PXD002870 -- Protein Turnover Rates in Normal and Hypertrophy Mouse Hearts -- 6635
+PXD000117 -- Human exosome proteome -- 6455
+PXD000815 -- Breast cancer tumors -- 6452
+PRD000004 -- GPMDB Submission: Plasma Proteome -- 6418
+PXD010271 -- Individual variability of protein expression in human tissues -- 6381
+PXD005940 -- Global Proteome Analysis of the NCI-60 Cell Line Panel -- 6141
+PXD009348 -- Plasma proteome profiling reveals global and specific changes of inflammatory and lipid homeostasis markers after bariatric surgery -- 6043
+PXD003903 -- HipSci project pilot submission for 18 IPS cell lines -- 6025
+PXD002486 -- Target identification for 11q13 amplicon -- 6018
+PXD004785 -- Proteogenomics reanalysis of human testis data -- 5912
+PXD006201 -- Characterisation of protein ubiquitination using UbiSite technology -- 5903
+PXD005235 -- Genomic determinants of protein abundance variation in colorectal cancer cell lines -- 5852
+PXD004023 -- The immunopeptidome presents a selected portion of the human genome with distinct features to CD8 T cells -- 5769
+PXD010429 -- Proteogenomic Landscape of Squamous Cell Lung Cancer 2: Tandem Mass Tag Datasets -- 5579
+PXD004682 -- Comparison of Lung Cancer Proteome Profiles 1: Label Free Quantification -- 5573
+PXD005445 -- CEGS Proteomics -- 5517
+PXD003469 -- Functional Proteogenomics Reveals Biomarkers and Therapeutic Targets in Lymphomas -- 5282
+PXD003271 -- Proteomic analysis of clear cell renal cell carcinoma tissue versus matched normal kidney tissue -- 5168
+PXD004352 -- Social Network Architecture of Human Immune Cells Unveiled by Quantitative Proteomics -- 5152
+PXD002619 -- Proteomic maps of breast cancer subtypes -- 5061
+PXD007160 -- Global quantitative analysis of the human brain proteome in Alzheimer’s and Parkinson’s Disease -- 4949
+PXD006833 -- Human bladder,colon,kidney,liver cancer LC MS/MS -- 4932
+PXD006122 -- Proteomics on post-mortem human brain tissue of patients with Alzheimer`s, Parkinson`s and Lewy body dementias. -- 4909
+PXD001471 -- Proteomic analysis of cellular soluble proteins from human bronchial smooth muscle cells by combining nondenaturing micro 2DE and quantitative LC-MS/MS: Preparation of more than 4000 native protein maps -- 4870
+PXD001212 -- A mammalian transcription factor-specific peptide repository for targeted proteomics -- 4827
+PXD002854 -- Plasma proteome profiling to assess human health and disease -- 4734
+PXD003907 -- Human Fecal Gut Microbiome proteomics -- 4694
+PXD000197 -- AKT2 interacting proteins_ MBP- and MAP-TAPs -- 4669
+PXD008222 -- The Proteomic Landscape of Triple-Negative Breast Cancer -- 4547
+PXD002081 -- CPTAC, TCGA Cancer Proteome Study of Colorectal Tissue: Proteome, VU, part 2 -- 4456
+PXD000948 -- Macro-porous Reversed Phase Separation of Proteins Combined with Reversed Phase Separation of Phosphopeptides and Tandem Mass Spectrometry for Profiling the Phosphoproteome of MDA-MB-231 cells -- 4433
+PXD002080 -- CPTAC, TCGA Cancer Proteome Study of Colorectal Tissue: Proteome, VU, part 1 -- 4377
+PXD002395 -- 11 human cell lines -- 4357
+PXD010899 -- Plasma Hirief -- 4330
+PXD001064 -- Quantitative variability of 342 plasma proteins in a human twin population -- 4257
+PXD002082 -- CPTAC, TCGA Cancer Proteome Study of Colorectal Tissue: Proteome, VU, part 3 -- 4240
+PXD001020 -- Redox-state of pentraxin 3 as a novel biomarker for  resolution of inflammation and survival in sepsis -- 4204
+PXD002801 -- Defining the effects of genetic variation on a proteome-wide scale -- 4177
+PXD006932 -- Performance evaluation of the Q Exactive HF-X for shotgun proteomics -- 4164
+PXD002086 -- CPTAC, TCGA Cancer Proteome Study of Colorectal Tissue: Proteome, VU, part 7 -- 3991
+PXD009270 -- Comprehensive analysis of proteomic landscape remodeling during carcinogenesis -- 3975
+PXD004193 -- A compendium of RNA-binding proteins that regulate microRNA biogenesis -- 3914
+PXD000321 -- Signatures for Mass Spectrometry Data Quality, part 2 of 5 -- 3908
+PRD000073 -- HUPO Plasma Proteome Project 2 (ProteomExchange) -- 3907
+PXD002087 -- CPTAC, TCGA Cancer Proteome Study of Colorectal Tissue: Proteome, VU, part 8 -- 3841
+PXD002088 -- CPTAC, TCGA Cancer Proteome Study of Colorectal Tissue: Proteome, VU, part 9 -- 3813
+PXD003133 -- HEK293 Quality Control example dataset -- 3727
+PRD000644 -- Protemic analysis of human hippocampus shows differential protein expression in the different hippocampal subfields -- 3712
+PXD005573 -- Optimization of Experimental Parameters in Data-Independent Mass Spectrometry Significantly Increases Depth and Reproducibility of Results -- 3676
+PXD002412 -- A method to characterize antibody selectivity immunoprecipitation -- 3671
+PXD005554 -- Analysis of ECM-enriched samples using different methods -- 3665
+PXD002084 -- CPTAC, TCGA Cancer Proteome Study of Colorectal Tissue: Proteome, VU, part 5 -- 3639
+PXD010557 -- HipSci: the  iPSC proteomic compendium -- 3643
+PXD002049 -- CPTAC proteomic analysis of TCGA colon and rectal carcinomas using standard and customized databases, part 9 -- 3567
+PXD004896 -- N-terminomics Proteogenomics -- 3560
