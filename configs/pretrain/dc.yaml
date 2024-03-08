@@ -10,6 +10,10 @@ trinary_mz:
   subset: 0
   num_workers: 0
 
+  # Annealing
+  lr_warmup: 0
+  lr_decay: 0
+
 masked:
   # Masked trainer specific hparams
   predict_fourier: True
@@ -27,6 +31,10 @@ masked:
   epochs: 1
   subset: 0
   num_workers: 0
+
+  # Annealing
+  lr_warmup: 0
+  lr_decay: 0
 
 masked_ae:
   # Masked Autoencoder trainer specific hparams
@@ -52,3 +60,7 @@ masked_ae:
   epochs: 1
   subset: 0
   num_workers: 0
+
+  # Annealing
+  lr_warmup: 0
+  lr_decay: 0
