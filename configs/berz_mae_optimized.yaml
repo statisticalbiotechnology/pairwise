@@ -4,15 +4,12 @@
 data_root_dir: /proj/bedrock/datasets/InstaNovo_SPLITS_full
 output_dir: /proj/bedrock/checkpoints/checkpoint
 log_dir: /proj/bedrock/logs/log
-wandb_project: debug
+wandb_project: mae
 wandb_entity: kall
 log_wandb: 1
 num_workers: 16
 matmul_precision: high
 precision: 32-true
-### Models
-
-
 
 ###### TODO: FIX THESE WARMUP HPARAMS
 anneal_lr: 0
