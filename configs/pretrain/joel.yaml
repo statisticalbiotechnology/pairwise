@@ -23,11 +23,19 @@ masked:
   mask_ratio: 0.75
   
   # Training hparams
+  batch_size: 100
   blr: 4.0e-5
   weight_decay: 1.0e-5
   epochs: 1
   subset: 0
   num_workers: 0
+
+  # Annealing
+  lr_warmup: 1
+  lr_start: 1.0e-7
+  lr_end: 2.0e-4
+  lr_warmup_steps: 20000
+  lr_decay: 0
 
 masked_ae:
   # Masked Autoencoder trainer specific hparams
@@ -46,8 +54,16 @@ masked_ae:
   decoder_nlayers: 6
 
   # Training hparams
-  blr: 1.0e-5
+  batch_size: 100
+  blr: 4.0e-5
   weight_decay: 1.0e-5
   epochs: 1
   subset: 0
   num_workers: 0
+
+  # Annealing
+  lr_warmup: 1
+  lr_start: 1.0e-7
+  lr_end: 2.0e-4
+  lr_warmup_steps: 20000
+  lr_decay: 0
