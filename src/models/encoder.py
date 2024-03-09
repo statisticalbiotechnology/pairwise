@@ -364,10 +364,10 @@ def encoder_base_arch(
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
-        dropout=0.5,
+        dropout=0.25,
         bias=bias,
         gate=False,
-        alphabet=True,
+        alphabet=False,
 
         pw_mz_units=512,
         pw_run_units=64,
