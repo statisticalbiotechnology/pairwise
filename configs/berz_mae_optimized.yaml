@@ -18,7 +18,7 @@ warmup_epochs: 0
 max_peaks: 100
 
 # Tasks
-encoder_model: dc_encoder_base
+encoder_model: dc_encoder_larger
 pretrain_config: configs/pretrain/dc.yaml
 pretrain: 1
 pretraining_task: masked_ae
