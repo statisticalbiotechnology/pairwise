@@ -52,6 +52,7 @@ class Decoder(pl.LightningModule):
         d=64,
         h=4,
         gate=False,
+        alphabet=False,
         ffn_multiplier=1,
         ce_units=256,
         use_charge=True,
@@ -112,8 +113,14 @@ class Decoder(pl.LightningModule):
             'dropout': dropout,
             #'bias': bias,
             #'gate': gate,
+            'alphabet': alphabet,
         }
-        ffn_dict = {'indim': running_units, 'unit_multiplier': ffn_multiplier, 'dropout': dropout}
+        ffn_dict = {
+            'indim': running_units, 
+            'unit_multiplier': ffn_multiplier, 
+            'dropout': dropout,
+            'alphabet': alphabet,
+        }
         is_embed = True if (self.atleast1 and (prec_type=='inject')) else False
         self.main = nn.ModuleList([
             mp.TransBlock(
@@ -993,14 +1000,15 @@ def decoder_greedy_base(token_dict, d_model=512, **kwargs):
         "use_charge": True,
         "use_energy": False,
         "use_mass": True,
-        "prec_type": 'inject',
+        "prec_type": 'pretoken',
         "norm_type": "layer",
         "prenorm": True,
         "preembed": True,
-        "dropout": 0.25,
+        "dropout": 0.5,
         "pool": False,
         "gate": False,
         "bias": False,
+        'alphabet': True,
     }
     model = DenovoDecoder(token_dict, decoder_config, **kwargs)
     return model

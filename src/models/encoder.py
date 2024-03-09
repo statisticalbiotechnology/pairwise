@@ -49,6 +49,7 @@ class Encoder(nn.Module):
                  att_d=64, # attention qkv dimension units
                  att_h=4,  # attention qkv heads
                  gate=False, # input dependent gate following weights
+                 alphabet=False, # single parameters on residual and skip connections
                  ffn_multiplier=4, # multiply inp units for 1st FFN transform
                  prenorm=True, # normalization before attention/ffn layers
                  norm_type='layer', # normalization type
@@ -140,11 +141,13 @@ class Encoder(nn.Module):
             'modulator': False,
             'gate': gate,
             'dropout': dropout,
+            'alphabet': alphabet,
         }
         ffn_dict = {
             'indim': running_units, 
             'unit_multiplier': ffn_multiplier, 
-            'dropout': dropout
+            'dropout': dropout,
+            'alphabet': alphabet,
         }
         is_embed = True if self.atleast1 else False
         self.main = nn.ModuleList([
@@ -270,7 +273,7 @@ class Encoder(nn.Module):
             ce_emb = []
             if self.use_charge:
                 charge = charge.type(th.float32)
-                ce_emb.append(mp.FourierFeatures(charge, 1, 50, self.ce_units))
+                ce_emb.append(mp.FourierFeatures(charge, 1, 10, self.ce_units))
             if self.use_energy:
                 ce_emb.append(mp.FourierFeatures(energy, self.ce_units, 150.))
             if self.use_mass:
@@ -361,9 +364,10 @@ def encoder_base_arch(
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
-        dropout=0.25,
+        dropout=0.5,
         bias=bias,
         gate=False,
+        alphabet=True,
 
         pw_mz_units=512,
         pw_run_units=64,

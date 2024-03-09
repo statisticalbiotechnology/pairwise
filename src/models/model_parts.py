@@ -89,14 +89,15 @@ class QKVAttention(nn.Module):
         return att, other
 
 class BaseAttentionLayer(nn.Module):
-    def __init__(self, indim, d, h, out_units=None, gate=False, dropout=0):
+    def __init__(self, indim, d, h, out_units=None, gate=False, dropout=0, alphabet=False):
         super(BaseAttentionLayer, self).__init__()
         self.indim = indim
         self.d = d
         self.h = h
         self.out_units = indim if out_units==None else out_units
         self.drop = nn.Identity() if dropout == 0 else nn.Dropout(dropout)
-        
+        self.alphabet = alphabet
+
         self.attention_layer = QKVAttention(h, d)
         
         shape = (d*h, self.out_units)
@@ -115,6 +116,10 @@ class BaseAttentionLayer(nn.Module):
         if gate:
             self.Wg = nn.Linear(indim, d*h)
         
+        if alphabet:
+            self.alpha = nn.Parameter(th.tensor(1.0), requires_grad=True)
+            self.beta = nn.Parameter(th.tensor(1.0), requires_grad=True)
+        
 class SelfAttention(BaseAttentionLayer):
     def __init__(self, 
                  indim, 
@@ -125,9 +130,13 @@ class SelfAttention(BaseAttentionLayer):
                  bias=False,
                  bias_in_units=None,
                  modulator=False,
-                 dropout=0
+                 dropout=0,
+                 alphabet=False,
     ):
-        super().__init__(indim=indim, d=d, h=h, out_units=out_units, gate=gate, dropout=dropout)
+        super().__init__(
+            indim=indim, d=d, h=h, out_units=out_units, 
+            gate=gate, dropout=dropout, alphabet=alphabet
+        )
 
         self.qkv = nn.Linear(indim, 3*d*h, bias=True)
 
@@ -180,21 +189,38 @@ class SelfAttention(BaseAttentionLayer):
             )
         else:
             G = None
-        att, other = self.attention_layer(Q, K, V, mask, bias=B, gate=G, return_full=return_full) # bs*h, sl, d
+        att, other = self.attention_layer(
+            Q, K, V, mask, bias=B, gate=G, return_full=return_full
+        ) # bs*h, sl, d
         att = att.reshape(-1, self.h, sl, self.d)
         att = att.permute([0,2,3,1])
         att = att.reshape(-1, sl, self.d*self.h) # bs, sl, d*h
         resid = self.Wo(att)
-        
-        output = self.shortcut(x) + self.drop(resid)
+       
+        if self.alphabet:
+            output = self.alpha*self.shortcut(x) + self.beta*self.drop(resid)
+        else:
+            output = self.shortcut(x) + self.drop(resid)
         
         other = [Q, K, V] + other + [resid] if return_full else None
         
         return {'out': output, 'other': other}
 
 class CrossAttention(BaseAttentionLayer):
-    def __init__(self, indim, kvindim, d, h, out_units=None, dropout=0):
-        super().__init__(indim=indim, d=d, h=h, out_units=out_units, dropout=dropout)
+    def __init__(
+        self, 
+        indim, 
+        kvindim, 
+        d, 
+        h, 
+        out_units=None, 
+        dropout=0,
+        alphabet=False,
+    ):
+        super().__init__(
+            indim=indim, d=d, h=h, out_units=out_units, 
+            dropout=dropout, alphabet=alphabet
+        )
         
         self.Wq = nn.Linear(indim, d*h, bias=False)
         self.Wkv = nn.Linear(kvindim, 2*d*h, bias=False)
@@ -222,32 +248,49 @@ class CrossAttention(BaseAttentionLayer):
         att = att.permute([0,2,1,3])
         att = att.reshape(-1, slq, self.h*self.d)
         resid = self.Wo(att)
+
+        if self.alphabet:
+            out = self.alpha*self.shortcut(q_feats) + self.beta*self.drop(resid)
+        else:
+            out = self.shortcut(q_feats) + self.drop(resid)
         
-        return self.shortcut(q_feats) + self.drop(resid)
+        return out
 
 class FFN(nn.Module):
-    def __init__(self, indim, unit_multiplier=1, out_units=None, dropout=0):
+    def __init__(self, indim, unit_multiplier=1, out_units=None, dropout=0, alphabet=False):
         super(FFN, self).__init__()
         self.indim = indim
         self.mult = unit_multiplier
         self.out_units = indim if out_units==None else out_units
-        
+        self.alphabet = alphabet
+
         self.W1 = nn.Linear(indim, indim*self.mult)
         self.W2 = nn.Linear(indim*self.mult, self.out_units, bias=False)
+        
         shape = self.W2.weight.shape
         self.W2.weight = nn.Parameter( 
             nn.init.normal_(th.empty(shape), 0.0, 0.3*(indim*self.mult)**-0.5)
         )
+        
         self.drop = nn.Identity() if dropout == 0 else nn.Dropout(dropout)
+        
+        if alphabet:
+            self.alpha = nn.Parameter(th.tensor(1.0), requires_grad=True)
+            self.beta = nn.Parameter(th.tensor(1.0), requires_grad=True)
     
     def forward(self, x, embed=None, return_full=False):
         out1 = self.W1(x)
         out2 = th.relu(out1 + (0 if embed==None else embed))
         out3 = self.W2(out2)
         
+        if self.alphabet:
+            out = self.alpha*x + self.beta*self.drop(out3)
+        else:
+            out = x + self.drop(out3)
+
         other = [out1, out3] if return_full else None
 
-        return {'out': x + self.drop(out3), 'other': other}
+        return {'out': out, 'other': other}
 
 class TransBlock(nn.Module):
     def __init__(self,
