@@ -378,6 +378,40 @@ def encoder_base_arch(
     
     return model
 
+def encoder_pairwise(
+    use_charge=False,
+    use_mass=False,
+    use_energy=False,
+    bias="pairwise", # 'pairwise' | 'regular' | False | None
+):
+    model = Encoder(
+        norm_type='layer',
+        mz_units=1024,
+        ab_units=256,
+        subdivide=True,
+        running_units=512,
+        att_d=64,
+        att_h=8,
+        depth=9,
+        ffn_multiplier=4,
+        prenorm=True,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
+        dropout=0.25,
+        bias=bias,
+        gate=False,
+        alphabet=False,
+
+        pw_mz_units=512,
+        pw_run_units=64,
+        pw_attention_ch=32,
+        pw_attention_h=4,
+        pw_blocks=1
+    )
+    
+    return model
+
 def encoder_deeper(
     use_charge=False,
     use_mass=False,
