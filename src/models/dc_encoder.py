@@ -242,7 +242,6 @@ def dc_encoder_larger(
         use_mass=use_mass,
         use_energy=use_energy,
         peak_encoder=peak_encoder,
-        dropout=0.1
     )
     return model
 

@@ -352,11 +352,11 @@ def encoder_base_arch(
 ):
     model = Encoder(
         norm_type='layer',
-        mz_units=1024,
-        ab_units=256,
-        subdivide=True,
+        mz_units=512,
+        ab_units=512,
+        subdivide=False,
         running_units=512,
-        att_d=128,
+        att_d=64,
         att_h=8,
         depth=9,
         ffn_multiplier=4,
@@ -367,7 +367,7 @@ def encoder_base_arch(
         dropout=0.1,
         bias=bias,
         gate=False,
-        alphabet=true,
+        alphabet=False,
 
         pw_mz_units=512,
         pw_run_units=64,
