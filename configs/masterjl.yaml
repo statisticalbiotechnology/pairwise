@@ -26,4 +26,4 @@ downstream_config: configs/downstream/joel.yaml
 downstream_task: denovo_tf # denovo_tf
 decoder_model: dc_decoder_base # decoder_greedy_base | dc_decoder_base
 downstream_root_dir: /proj/bedrock/datasets/9_species_xy
-limit_train_batches: 0.9
+limit_train_batches: 1.0
