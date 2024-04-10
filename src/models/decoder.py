@@ -1004,7 +1004,7 @@ def decoder_greedy_base(token_dict, d_model=512, **kwargs):
         "norm_type": "layer",
         "prenorm": True,
         "preembed": True,
-        "dropout": 0.5,
+        "dropout": 0.25,
         "pool": False,
         "gate": False,
         "bias": False,

@@ -236,6 +236,7 @@ def dc_encoder_larger(
         nhead=8,
         dim_feedforward=2048,
         n_layers=9,
+        dropout=0.1,
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
