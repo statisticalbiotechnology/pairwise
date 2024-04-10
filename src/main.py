@@ -282,6 +282,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
             # profiler="advanced",
             barebones=global_args.barebones,
             # num_sanity_val_steps=0,
+            limit_train_batches=config['limit_train_batches'],
         )
 
         start_time = time.time()

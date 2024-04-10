@@ -354,7 +354,6 @@ class BasePLWrapper(ABC, pl.LightningModule):
                 }
             )
 
-
 class BaseDownstreamWrapper(BasePLWrapper):
     def __init__(
         self, encoder, global_args, datasets, head=None, collate_fn=None, task_dict=None
@@ -395,3 +394,4 @@ class BaseDownstreamWrapper(BasePLWrapper):
             collate_fn=self.collate_fn,
             persistent_workers=self.num_workers > 0,
         )
+

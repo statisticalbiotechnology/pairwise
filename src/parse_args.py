@@ -193,13 +193,18 @@ def get_args_parser(conf_parser):
         default=0,
         help="Bool (0/1): Turns on MAE-style lr scaling which multiplies lr by (eff_batch_size / 256)",
     )
-
     parser.add_argument(
         "--warmup_epochs", 
         type=int, 
         default=40, 
         metavar="N", 
         help="epochs to warmup LR"
+    )
+    parser.add_argument(
+        "--limit_train_batches",
+        type=float,
+        default=1.0,
+        help="Percentage of training set to use in downstream",
     )
 
     # Dataset parameters
