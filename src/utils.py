@@ -129,14 +129,14 @@ def configure_callbacks(args, task_args, val_metric_name: str = "val_loss", metr
             )
         ]
 
-    if task_args['lr_decay']:
-        callbacks += [
-            ExponentialDecayLRCallback(
-                starting_step=task_args['lr_decay_start_step'],
-                ending_step=task_args['lr_decay_end_step'],
-                decay=task_args['lr_decay_rate']
-            )
-        ]
+    # if task_args['lr_decay']:
+    #     callbacks += [
+    #         ExponentialDecayLRCallback(
+    #             starting_step=task_args['lr_decay_start_step'],
+    #             ending_step=task_args['lr_decay_end_step'],
+    #             decay=task_args['lr_decay_rate']
+    #         )
+    #     ]
 
     # measure FLOPs on the first train batch
     if args.profile_flops:
