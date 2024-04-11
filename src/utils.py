@@ -25,9 +25,10 @@ def get_lance_data_module(
     data_root_dir,
     batch_size,
     max_peaks=300,
+    seed=0,
 ):
     collate_fn = partial(pad_peaks, max_peaks=max_peaks)
-    return LanceDataModule(data_root_dir, batch_size, collate_fn)
+    return LanceDataModule(data_root_dir, batch_size, collate_fn, seed=seed)
 
 
 def get_spectrum_dataset_splits(

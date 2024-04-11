@@ -103,6 +103,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
             global_args.data_root_dir,
             config["pretrain_config"][global_args.pretraining_task]["batch_size"],
             global_args.max_peaks,
+            seed=global_args.seed,
         )
         pretrain_callbacks = utils.configure_callbacks(
             global_args,
