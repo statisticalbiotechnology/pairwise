@@ -38,7 +38,7 @@ model = TestModel()
 
 # Create a PyTorch Lightning Trainer
 trainer = pl.Trainer(
-    max_epochs=1, accelerator="cpu", devices=3, num_nodes=1, logger=None
+    max_epochs=1, accelerator="cpu", devices=3, num_nodes=1, logger=False
 )  # Adjust the trainer parameters as needed
 
 # Run training
