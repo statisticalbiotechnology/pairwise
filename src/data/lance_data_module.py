@@ -6,7 +6,7 @@ from pathlib import Path
 import os.path as path
 from lance.torch.data import LanceDataset
 from lance.sampler import ShardedBatchSampler
-from lance_helper_fns import _to_batch_dict
+from data.lance_helper_fns import _to_batch_dict
 
 
 class LanceDataModule(pl.LightningDataModule):

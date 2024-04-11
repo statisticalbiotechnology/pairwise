@@ -1,7 +1,7 @@
 from functools import partial
 import pytorch_lightning as pl
 from pathlib import Path
-from lance_data_module import LanceDataModule
+from data.lance_data_module import LanceDataModule
 import torch
 from collate_functions import pad_peaks
 

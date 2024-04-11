@@ -25,7 +25,7 @@ import torch
 # torch = pytest.importorskip("torch")
 # from lance.torch.data import LanceDataset
 
-from lance_dataset import LanceDataset as MyLanceDataset
+from data.lance_helper_fns import LanceDataset as MyLanceDataset
 
 from tqdm import tqdm  # noqa: E402
 
