@@ -1,10 +1,19 @@
+from math import floor
 from typing import Callable, Union
 
-# from lance.torch.data import LanceDataset as _LanceDataset
+from lance.torch.data import LanceDataset as _LanceDataset
 from lance.torch.data import pa
 import torch
 
 Any = object()
+
+
+class LanceDataset(_LanceDataset):
+    def __len__(self):
+        num_rows = floor(
+            self.dataset.count_rows() / (self.batch_size * self.sampler._world_size)
+        )
+        return num_rows - 1
 
 
 def _tensorize(obj: Any, dtype: torch.dtype = torch.float32) -> Any:  # noqa: ANN401

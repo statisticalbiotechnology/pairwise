@@ -8,8 +8,13 @@ import torch
 from functools import partial
 
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
-from lance_data_module import LanceDataModule
-from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback, LinearWarmupLRCallback, ExponentialDecayLRCallback
+from data.lance_data_module import LanceDataModule
+from pl_callbacks import (
+    FLOPProfilerCallback,
+    CosineAnnealLRCallback,
+    LinearWarmupLRCallback,
+    ExponentialDecayLRCallback,
+)
 
 from collate_functions import pad_peaks, pad_peptides
 
@@ -95,7 +100,9 @@ def get_ninespecies_dataset_splits(
     )
 
 
-def configure_callbacks(args, task_args, val_metric_name: str = "val_loss", metric_mode="min"):
+def configure_callbacks(
+    args, task_args, val_metric_name: str = "val_loss", metric_mode="min"
+):
     callbacks = []
     filename = f"{{epoch}}-{{{val_metric_name}:.2f}}"
     # Checkpoint callback
@@ -120,12 +127,12 @@ def configure_callbacks(args, task_args, val_metric_name: str = "val_loss", metr
             )
         ]
 
-    if task_args['lr_warmup']:
+    if task_args["lr_warmup"]:
         callbacks += [
             LinearWarmupLRCallback(
-                starting_lr=task_args['lr_start'], 
-                ending_lr=task_args['lr_end'], 
-                warmup_steps=task_args['lr_warmup_steps']
+                starting_lr=task_args["lr_start"],
+                ending_lr=task_args["lr_end"],
+                warmup_steps=task_args["lr_warmup_steps"],
             )
         ]
 

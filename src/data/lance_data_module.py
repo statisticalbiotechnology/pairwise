@@ -4,9 +4,8 @@ import pytorch_lightning as pl
 from pathlib import Path
 
 import os.path as path
-from lance.torch.data import LanceDataset
 from lance.sampler import ShardedBatchSampler
-from data.lance_helper_fns import _to_batch_dict
+from data.lance_helper_fns import LanceDataset, _to_batch_dict
 
 
 class LanceDataModule(pl.LightningDataModule):
