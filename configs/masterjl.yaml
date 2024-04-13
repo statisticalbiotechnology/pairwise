@@ -8,7 +8,7 @@ num_workers: 16
 matmul_precision: high
 precision: 32-true
 # Models
-encoder_model: dc_encoder_base #encoder_base_arch # dc_encoder_base
+encoder_model: dc_encoder_base # encoder_base_arch | dc_encoder_base | encoder_pairwise
 
 #### Training hyperparameters
 batch_size: 100
@@ -16,14 +16,15 @@ max_peaks: 100
 seed: 0
 
 # Tasks
-pretrain: 0
+pretrain: 1
+encoder_weights:
 pretrain_config: configs/pretrain/joel.yaml
 pretraining_task: trinary_mz
 trinary_type: 'mz'
 mask_ratio: 0.75
 # De novo
 downstream_config: configs/downstream/joel.yaml
-downstream_task: denovo_tf # denovo_tf
+downstream_task: denovo_tf # none | denovo_tf
 decoder_model: dc_decoder_base # decoder_greedy_base | dc_decoder_base
 downstream_root_dir: /proj/bedrock/datasets/9_species_xy
 limit_train_batches: 1.0

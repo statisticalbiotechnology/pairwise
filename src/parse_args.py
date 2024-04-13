@@ -23,7 +23,7 @@ def get_args_parser(conf_parser):
     )
     parser.add_argument(
         "--encoder_weights",
-        default="",
+        default=None,
         type=str,
         help="Path to checkpoint of previously trained encoder weights",
     )

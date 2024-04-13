@@ -108,11 +108,20 @@ def main(global_args, pretrain_config=None, ds_config=None):
         )
 
         # Instantiate PL wrapper based on the pretraining task
-        pl_encoder = PRETRAIN_TASK_DICT[global_args.pretraining_task](
-            encoder,
-            global_args=global_args,
-            task_dict=config["pretrain_config"][global_args.pretraining_task],
-        )
+        if global_args.encoder_weights:
+            pl_encoder = PRETRAIN_TASK_DICT[global_args.pretraining_task].load_from_checkpoint(
+                global_args.encoder_weights,
+                global_args=global_args,
+                encoder=encoder,
+                task_dict=config["pretrain_config"][global_args.pretraining_task],
+            )
+            print(f"Loading encoder checkpoint: {global_args.encoder_weights}")
+        else:
+            pl_encoder = PRETRAIN_TASK_DICT[global_args.pretraining_task](
+                encoder,
+                global_args=global_args,
+                task_dict=config["pretrain_config"][global_args.pretraining_task],
+            )
 
         if run is not None and utils.get_rank() == 0:
             if global_args.watch_model:

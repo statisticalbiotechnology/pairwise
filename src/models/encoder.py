@@ -394,7 +394,7 @@ def encoder_pairwise(
         att_h=8,
         depth=9,
         ffn_multiplier=4,
-        prenorm=True,
+        prenorm=False,
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
@@ -403,7 +403,7 @@ def encoder_pairwise(
         gate=False,
         alphabet=False,
 
-        pw_mz_units=512,
+        pw_mz_units=64,
         pw_run_units=64,
         pw_attention_ch=32,
         pw_attention_h=4,
