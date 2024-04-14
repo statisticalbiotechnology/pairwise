@@ -16,8 +16,8 @@ max_peaks: 100
 seed: 0
 
 # Tasks
-pretrain: 1
-encoder_weights:
+pretrain: 0
+encoder_weights: /proj/bedrock/checkpoints/checkpoint_17_48_33_203969__13_04_24/epoch=0-trinary_mz_val_loss_epoch=0.39.ckpt
 pretrain_config: configs/pretrain/joel.yaml
 pretraining_task: trinary_mz
 trinary_type: 'mz'

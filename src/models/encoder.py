@@ -403,7 +403,7 @@ def encoder_pairwise(
         gate=False,
         alphabet=False,
 
-        pw_mz_units=64,
+        pw_mz_units=512,
         pw_run_units=64,
         pw_attention_ch=32,
         pw_attention_h=4,

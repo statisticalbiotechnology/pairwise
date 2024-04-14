@@ -83,10 +83,11 @@ def get_ninespecies_dataset_splits(
 
     if subset:
         assert subset >= 0 and subset <= 1
-        dataset_train, dataset_val, dataset_test = [
-            Subset(dataset, np.arange(int(len(dataset) * subset)))
-            for dataset in [dataset_train, dataset_val, dataset_test]
-        ]
+        #dataset_train, dataset_val, dataset_test = [
+        #    Subset(dataset, np.arange(int(len(dataset) * subset)))
+        #    for dataset in [dataset_train, dataset_val, dataset_test]
+        #]
+        dataset_train = Subset(dataset_train, np.arange(int(len(dataset_train) * subset)))
 
     return (
         (dataset_train, dataset_val, dataset_test),
