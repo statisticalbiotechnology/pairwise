@@ -148,9 +148,11 @@ def main(global_args, pretrain_config=None, ds_config=None):
             strategy=global_args.strategy if distributed else "auto",
             precision=global_args.precision,
             # Training args
-            max_epochs=config["pretrain_config"][global_args.pretraining_task][
-                "epochs"
-            ],
+            max_epochs=(
+                config["pretrain_config"][global_args.pretraining_task]["epochs"]
+                if global_args.epochs < 1
+                else global_args.epochs
+            ),
             gradient_clip_val=global_args.clip_grad,
             logger=logger,
             callbacks=pretrain_callbacks,
@@ -285,9 +287,11 @@ def main(global_args, pretrain_config=None, ds_config=None):
             strategy=global_args.strategy if distributed else "auto",
             precision=global_args.precision,
             # Training args
-            max_epochs=config["downstream_config"][global_args.downstream_task][
-                "epochs"
-            ],
+            max_epochs=(
+                config["downstream_config"][global_args.downstream_task]["epochs"]
+                if global_args.epochs < 1
+                else global_args.epochs
+            ),
             gradient_clip_val=global_args.clip_grad,
             logger=logger,
             callbacks=ds_callbacks,
