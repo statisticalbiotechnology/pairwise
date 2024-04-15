@@ -45,14 +45,13 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         self,
         encoder,
         decoder,
-        datasets,
         global_args,
         collate_fn=None,
         token_dicts=None,
         task_dict=None,
     ):
         super().__init__(
-            encoder, global_args, datasets, collate_fn=collate_fn, task_dict=task_dict
+            encoder, global_args, collate_fn=collate_fn, task_dict=task_dict
         )
         self.decoder = decoder
 
@@ -171,10 +170,10 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         logits = logits.transpose(-2, -1)
         # logits.shape = (batch_size, num_classes, sequence_len)
         loss = F.cross_entropy(
-            logits, 
-            labels, 
-            reduction="none", 
-            label_smoothing=self.task_dict['label_smoothing']
+            logits,
+            labels,
+            reduction="none",
+            label_smoothing=self.task_dict["label_smoothing"],
         )
         masked_loss = loss * padding_mask
         masked_loss = masked_loss.sum(dim=1, keepdim=True) / padding_mask.sum(
@@ -199,16 +198,14 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
 
         logits_ce = logits.transpose(-1, -2)
         # aa_confidence, _ = F.softmax(logits, dim=-1).max(dim=-1)
-        loss = F.cross_entropy(logits_ce, targ, reduction='none')[targ!=22].mean()
-        
+        loss = F.cross_entropy(logits_ce, targ, reduction="none")[targ != 22].mean()
+
         preds_ffill = fill_null_after_first_EOS(
             preds, null_token=self.NT, EOS_token=self.EOS
         )
 
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
-        naive_metrics = NaiveAccRecPrec(
-            targ, preds, self.NT, self.EOS
-        )
+        naive_metrics = NaiveAccRecPrec(targ, preds, self.NT, self.EOS)
 
         deepnovo_metrics = self.deepnovo_metrics(preds_ffill, targ)
         stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
@@ -282,7 +279,6 @@ class DeNovoRandom(DeNovoTeacherForcing):
         self,
         encoder,
         decoder,
-        datasets,
         global_args,
         collate_fn=None,
         token_dicts=None,
@@ -291,7 +287,6 @@ class DeNovoRandom(DeNovoTeacherForcing):
         super().__init__(
             encoder,
             decoder,
-            datasets,
             global_args,
             collate_fn=collate_fn,
             token_dicts=token_dicts,

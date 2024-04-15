@@ -1,5 +1,6 @@
 from typing import Any, Dict, Iterable, List, Tuple, Union
 import torch
+from data.mskb_tokenizer import MSKBTokenizer
 
 
 def subsample_max_peaks(mz_tensor, int_tensor, max_peaks=300):
@@ -136,6 +137,8 @@ def pad_peptides(
     precision: torch.dtype = torch.float32,
     max_peaks: int = 300,
     null_token_idx=22,
+    tokenizer: MSKBTokenizer = None,
+    label_name="sequence",
 ) -> Dict[str, Union[torch.Tensor, list[Any]]]:
     """
     Transform compatible data types into PyTorch tensors and
@@ -162,6 +165,9 @@ def pad_peptides(
     peptide_lengths = torch.zeros((len(batch), 1), dtype=torch.int32)
 
     for i, b in enumerate(batch):
+        if tokenizer is not None:
+            seq = b.pop(label_name)
+            b["intseq"] = tokenizer.tokenize(seq)
         intseq_b = b.pop("intseq")
         peptide_lengths[i] = len(intseq_b)
         intseqs.append(intseq_b)
