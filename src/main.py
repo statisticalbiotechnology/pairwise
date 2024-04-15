@@ -225,9 +225,10 @@ def main(global_args, pretrain_config=None, ds_config=None):
         )
 
         # Load downstream dataset
-        datasets_ds, collate_fn_ds, token_dicts = utils.get_ninespecies_dataset_splits(
+        ds_data_module, token_dicts = utils.get_ninespecies_data_module(
             global_args.downstream_root_dir,
             config["downstream_config"],
+            global_args,
             max_peaks=global_args.max_peaks,
             subset=config["downstream_config"][global_args.downstream_task]["subset"],
             include_hidden=global_args.downstream_task == "denovo_random",
@@ -244,8 +245,6 @@ def main(global_args, pretrain_config=None, ds_config=None):
             encoder,
             decoder,
             global_args=global_args,
-            datasets=datasets_ds,
-            collate_fn=collate_fn_ds,
             token_dicts=token_dicts,
             task_dict=config["downstream_config"][global_args.downstream_task],
         )
@@ -302,13 +301,16 @@ def main(global_args, pretrain_config=None, ds_config=None):
 
         start_time = time.time()
         # This is the call to start training the model
-        ds_trainer.fit(pl_downstream)
+        ds_trainer.fit(
+            pl_downstream,
+            datamodule=ds_data_module,
+        )
         end_time = time.time()  # End time measurement
         print(f"Downstream finetuning finished in {end_time - start_time} seconds")
 
         # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
         if global_args.save_top_k > 0 and not global_args.barebones:
-            ds_trainer.test(ckpt_path="best")
+            ds_trainer.test(datamodule=ds_data_module, ckpt_path="best")
 
     # Flag the run as finished to the wandb server
     if run is not None and utils.get_rank() == 0:
