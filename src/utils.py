@@ -191,7 +191,11 @@ def get_ninespecies_data_module(
 
     data_module = NinespeciesDataModule(
         (dataset_train, dataset_val, dataset_test),
-        batch_size=global_args.batch_size,
+        batch_size=
+            (ds_config["batch_size"]
+            if global_args.num_workers < 0
+            else global_args.num_workers
+        ),
         num_workers=(
             ds_config["num_workers"]
             if global_args.num_workers < 0
