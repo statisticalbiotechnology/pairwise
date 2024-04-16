@@ -227,14 +227,27 @@ def main(global_args, pretrain_config=None, ds_config=None):
         )
 
         # Load downstream dataset
-        ds_data_module, token_dicts = utils.get_ninespecies_data_module(
-            global_args.downstream_root_dir,
-            config["downstream_config"],
-            global_args,
-            max_peaks=global_args.max_peaks,
-            subset=config["downstream_config"][global_args.downstream_task]["subset"],
-            include_hidden=global_args.downstream_task == "denovo_random",
-        )
+        if config["downstream_config"]["dataset_name"] == "ninespecies":
+            ds_data_module, token_dicts = utils.get_ninespecies_data_module(
+                global_args.downstream_root_dir,
+                config["downstream_config"],
+                global_args,
+                max_peaks=global_args.max_peaks,
+                max_length=global_args.max_length,
+                subset=config["downstream_config"][global_args.downstream_task][
+                    "subset"
+                ],
+                include_hidden=global_args.downstream_task == "denovo_random",
+            )
+        elif config["downstream_config"]["dataset_name"] == "massivekb":
+            ds_data_module, token_dicts = utils.get_mskb_data_module(
+                global_args.downstream_root_dir,
+                config["downstream_config"][global_args.downstream_task]["batch_size"],
+                max_peaks=global_args.max_peaks,
+                max_length=global_args.max_length,
+                seed=global_args.seed,
+                include_hidden=global_args.downstream_task == "denovo_random",
+            )
         # Define decoder model
         assert (
             global_args.decoder_model

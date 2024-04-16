@@ -1,7 +1,7 @@
 import torch
 from wrappers.base_wrapper import BaseDownstreamWrapper
 
-from casanovo_eval import aa_match_batch, aa_match_metrics, RESIDUES
+from casanovo_eval import aa_match_batch, aa_match_metrics
 import torch.nn.functional as F
 
 
@@ -60,6 +60,7 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         self.null_token = "X"
         self.conf_threshold = task_dict["conf_threshold"]
 
+        self.residues = token_dicts["residues"]
         self.input_dict = token_dicts["input_dict"]
         self.SOS = self.input_dict["<SOS>"]
         self.output_dict = token_dicts["output_dict"]
@@ -67,10 +68,6 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         self.NT = self.amod_dict[self.null_token]
 
         self.predcats = len(self.output_dict)
-
-        assert all(
-            key in RESIDUES for key in self.amod_dict if key != self.null_token
-        ), "All keys except the null token in amod_dict must be in self.denovo_metrics.residues"
 
         self.TASK_NAME = "denovo_tf"
 
@@ -259,7 +256,7 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         pred_str = self.to_aa_sequence(preds)
 
         aa_matches_batch, n_aa_true, n_aa_pred = aa_match_batch(
-            target_str, pred_str, mode="forward"
+            target_str, pred_str, aa_dict=self.residues, mode="best"
         )
         aa_prec, aa_recall, pep_prec = aa_match_metrics(
             aa_matches_batch, n_aa_true, n_aa_pred

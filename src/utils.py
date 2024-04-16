@@ -61,9 +61,48 @@ N_TERMINAL_MSKB = [
     "+43.006-17.027",  # Carbamylation and NH3 loss
 ]
 
+RESIDUES_NINESPECIES = {
+    "G": 57.021464,
+    "A": 71.037114,
+    "S": 87.032028,
+    "P": 97.052764,
+    "V": 99.068414,
+    "T": 101.047670,
+    "C_+57.02": 160.030649,  # 103.009185 + 57.021464
+    "L": 113.084064,
+    "I": 113.084064,
+    "N": 114.042927,
+    "D": 115.026943,
+    "Q": 128.058578,
+    "K": 128.094963,
+    "E": 129.042593,
+    "M": 131.040485,
+    "H": 137.058912,
+    "F": 147.068414,
+    "R": 156.101111,
+    "Y": 163.063329,
+    "W": 186.079313,
+    # Amino acid modifications.
+    "M_+15.99": 147.035400,  # Met oxidation:   131.040485 + 15.994915
+    "N_+.98": 115.026943,  # Asn deamidation: 114.042927 +  0.984016
+    "Q_+.98": 129.042594,  # Gln deamidation: 128.058578 +  0.984016
+    # N-terminal modifications.
+    "_+42.011": 42.010565,  # Acetylation
+    "_+43.006": 43.005814,  # Carbamylation
+    "_-17.027": -17.026549,  # NH3 loss
+    "_+43.006-17.027": 25.980265,  # Carbamylation and NH3 loss
+}
 
-def get_token_dicts_mskb(include_hidden=False):
-    amod_dict = deepcopy(RESIDUES_MSKB)
+N_TERMINAL_NINESPECIES = [
+    "_+42.011",  # Acetylation
+    "_+43.006",  # Carbamylation
+    "_-17.027",  # NH3 loss
+    "_+43.006-17.027",  # Carbamylation and NH3 loss
+]
+
+
+def get_token_dicts_mskb(amod_dict, include_hidden=False):
+    amod_dict = deepcopy(amod_dict)
     amod_dict["X"] = len(amod_dict)  # Pad token
 
     input_dict = deepcopy(amod_dict)
@@ -95,14 +134,18 @@ def get_mskb_data_module(
     data_root_dir,
     batch_size,
     max_peaks=300,
+    max_length=30,
     seed=0,
     include_hidden=False,
 ):
-    token_dicts = get_token_dicts_mskb(include_hidden=include_hidden)
-    tokenizer = MSKBTokenizer(token_dicts["residues"], n_terminal=N_TERMINAL_MSKB)
+
+    tokenizer = MSKBTokenizer(RESIDUES_MSKB, n_terminal=N_TERMINAL_MSKB)
+    token_dicts = get_token_dicts_mskb(tokenizer.index, include_hidden=include_hidden)
+
     collate_fn = partial(
         pad_peptides,
         max_peaks=max_peaks,
+        max_length=max_length,
         null_token_idx=token_dicts["amod_dict"]["X"],
         tokenizer=tokenizer,
         label_name="sequence",
@@ -115,7 +158,13 @@ def get_mskb_data_module(
 
 
 def get_ninespecies_data_module(
-    data_root_dir, ds_config, global_args, max_peaks=300, subset=0, include_hidden=False
+    data_root_dir,
+    ds_config,
+    global_args,
+    max_peaks=300,
+    max_length=30,
+    subset=0,
+    include_hidden=False,
 ):
     path_dict = ds_config["paths"]
 
@@ -127,6 +176,7 @@ def get_ninespecies_data_module(
 
     parser = PeptideParser(ds_config)
     dfs, token_dicts = parser.get_data(include_hidden=include_hidden)
+    token_dicts["residues"] = RESIDUES_NINESPECIES
     amod_dict = token_dicts["amod_dict"]
     dataset_train = PeptideDataset(dfs["train"], amod_dict)
     dataset_val = PeptideDataset(dfs["val"], amod_dict)
@@ -148,7 +198,10 @@ def get_ninespecies_data_module(
             else global_args.num_workers
         ),
         collate_fn=partial(
-            pad_peptides, max_peaks=max_peaks, null_token_idx=amod_dict["X"]
+            pad_peptides,
+            max_peaks=max_peaks,
+            max_length=max_length,
+            null_token_idx=amod_dict["X"],
         ),
         pin_mem=global_args.pin_mem,
     )

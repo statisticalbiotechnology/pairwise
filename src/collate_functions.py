@@ -136,6 +136,7 @@ def pad_peptides(
     batch: Iterable[Dict[Any, Union[List, torch.Tensor]]],
     precision: torch.dtype = torch.float32,
     max_peaks: int = 300,
+    max_length: int = 30,
     null_token_idx=22,
     tokenizer: MSKBTokenizer = None,
     label_name="sequence",
@@ -169,6 +170,7 @@ def pad_peptides(
             seq = b.pop(label_name)
             b["intseq"] = tokenizer.tokenize(seq)
         intseq_b = b.pop("intseq")
+        intseq_b = intseq_b[:max_length]
         peptide_lengths[i] = len(intseq_b)
         intseqs.append(intseq_b)
 
@@ -182,5 +184,12 @@ def pad_peptides(
     for key, val in batch.items():
         if isinstance(val, torch.Tensor) and torch.is_floating_point(val):
             batch[key] = val.type(precision)
+
+    if "precursor_mz" in batch.keys():
+        batch["mass"] = batch["precursor_mz"]
+        del batch["precursor_mz"]
+    if "precursor_charge" in batch.keys():
+        batch["charge"] = batch["precursor_charge"]
+        del batch["precursor_charge"]
 
     return batch

@@ -32,7 +32,7 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
         max_charge: int = 5,
         use_mass: bool = True,
         use_charge: bool = True,
-        max_seq_len: int = 30,
+        max_seq_len: int = 31,
     ) -> None:
         self.amod_dict = token_dicts["amod_dict"]
         self.input_dict = token_dicts["input_dict"]
@@ -258,6 +258,7 @@ def dc_decoder_base(amod_dict, d_model=256, **kwargs):
         use_charge=True,
     )
     return model
+
 
 def casanovo_decoder(amod_dict, d_model=256, **kwargs):
     model = PeptideTransformerDecoder(
