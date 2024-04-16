@@ -126,7 +126,13 @@ def get_args_parser(conf_parser):
         type=int,
         help="The maximally allowed number of peaks. Spectra that have more peaks are subsampled by the maximum intensities.",
     )
-    parser.add_argument("--epochs", default=400, type=int)
+    parser.add_argument(
+        "--max_length",
+        default=30,
+        type=int,
+        help="The maximally allowed length of peptides. Longer peptides will be truncated to this. ",
+    )
+    parser.add_argument("--epochs", default=-1, type=int)
     parser.add_argument(
         "--accum_iter",
         default=1,
@@ -195,11 +201,7 @@ def get_args_parser(conf_parser):
     )
 
     parser.add_argument(
-        "--warmup_epochs", 
-        type=int, 
-        default=40, 
-        metavar="N", 
-        help="epochs to warmup LR"
+        "--warmup_epochs", type=int, default=40, metavar="N", help="epochs to warmup LR"
     )
 
     # Dataset parameters

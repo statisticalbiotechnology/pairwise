@@ -3,50 +3,59 @@ import numpy as np
 import models.model_parts as mp
 import torch
 from torch import nn
+
 I = nn.init
 import pytorch_lightning as pl
 from utils import Scale
+
 # beam search dependencies
 import collections
 import einops
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import heapq
 
+
 def init_decoder_weights(module):
-    if hasattr(module, 'first'):
+    if hasattr(module, "first"):
         module.first.weight = I.xavier_uniform_(module.first.weight)
-        if module.first.bias is not None: 
+        if module.first.bias is not None:
             module.first.bias = I.zeros_(module.first.bias)
     if isinstance(module, (mp.SelfAttention, mp.CrossAttention)):
-        module.Wo.weight = I.normal_(module.Wo.weight, 0.0, (1/3)*(module.h*module.d)**-0.5)
-        if hasattr(module, 'qkv'):
-            module.qkv.weight = I.normal_(module.qkv.weight, 0.0, (2/3)*module.indim**-0.5)
-        if hasattr(module, 'Wb'):
+        module.Wo.weight = I.normal_(
+            module.Wo.weight, 0.0, (1 / 3) * (module.h * module.d) ** -0.5
+        )
+        if hasattr(module, "qkv"):
+            module.qkv.weight = I.normal_(
+                module.qkv.weight, 0.0, (2 / 3) * module.indim**-0.5
+            )
+        if hasattr(module, "Wb"):
             module.Wb.weight = I.zeros_(module.Wb.weight)
             module.Wb.bias = I.zeros_(module.Wb.bias)
-        elif hasattr(module, 'Wpw'):
+        elif hasattr(module, "Wpw"):
             module.Wpw.weight = I.zeros_(module.Wpw.weight)
             module.Wpw.bias = I.zeros_(module.Wpw.bias)
-        if hasattr(module, 'Wg'):
+        if hasattr(module, "Wg"):
             module.Wg.weight = I.zeros_(module.Wg.weight)
-            module.Wg.bias = I.constant_(module.Wg.bias, 1.) # gate mostly open ~ 0.73
+            module.Wg.bias = I.constant_(module.Wg.bias, 1.0)  # gate mostly open ~ 0.73
     elif isinstance(module, mp.FFN):
         module.W1.weight = I.xavier_uniform_(module.W1.weight)
         module.W1.bias = I.zeros_(module.W1.bias)
-        module.W2.weight = I.normal_(module.W2.weight, 0.0, (1/3)*(module.indim*module.mult)**-0.5)
-        #module.W2.weight = I.xavier_uniform_(module.W2.weight)
+        module.W2.weight = I.normal_(
+            module.W2.weight, 0.0, (1 / 3) * (module.indim * module.mult) ** -0.5
+        )
+        # module.W2.weight = I.xavier_uniform_(module.W2.weight)
     elif isinstance(module, nn.Linear):
         module.weight = I.xavier_uniform_(module.weight)
         if module.bias is not None:
             module.bias = I.zeros_(module.bias)
- 
+
 
 class Decoder(pl.LightningModule):
     def __init__(
         self,
         running_units=512,
         kv_indim=256,
-        sequence_length=30,  # maximum number of amino acids
+        sequence_length=31,  # maximum number of amino acids
         num_inp_tokens=21,
         depth=9,
         d=64,
@@ -58,14 +67,14 @@ class Decoder(pl.LightningModule):
         use_charge=True,
         use_energy=False,
         use_mass=True,
-        prec_type='inject', # inject | pretoken | posttoken
+        prec_type="inject",  # inject | pretoken | posttoken
         norm_type="layer",
         prenorm=True,
         preembed=True,
         penultimate_units=None,
         dropout=0,
         pool=False,
-        bias=False, # Att. bias: 'regular' | False/None
+        bias=False,  # Att. bias: 'regular' | False/None
     ):
         super(Decoder, self).__init__()
         self.run_units = running_units
@@ -73,7 +82,7 @@ class Decoder(pl.LightningModule):
         self.sl = sequence_length
         self.num_inp_tokens = num_inp_tokens
         self.num_out_tokens = (
-            num_inp_tokens - 0 # 1 if denovo_random
+            num_inp_tokens - 0  # 1 if denovo_random
         )  # no need for start or hidden tokens, add EOS
         self.use_charge = use_charge
         self.use_energy = use_energy
@@ -92,50 +101,53 @@ class Decoder(pl.LightningModule):
         # charge/energy embedding transformation
         self.atleast1 = use_charge or use_energy or use_mass
         if self.atleast1:
-            assert prec_type in ['inject', 'pretoken', 'posttoken']
+            assert prec_type in ["inject", "pretoken", "posttoken"]
             num = sum([use_charge, use_energy, use_mass])
-            if prec_type == 'inject':
+            if prec_type == "inject":
                 self.ce_emb = nn.Sequential(
-                    nn.Linear(ce_units*num, self.ce_units), nn.SiLU()
+                    nn.Linear(ce_units * num, self.ce_units), nn.SiLU()
                 )
             else:
                 self.ce_emb = nn.Sequential(
-                    nn.Linear(ce_units*num, self.run_units),
+                    nn.Linear(ce_units * num, self.run_units),
                 )
 
         # Main blocks
-        assert bias in ['pairwise', 'regular', False, None]
-        if bias == None: bias = False
+        assert bias in ["pairwise", "regular", False, None]
+        if bias == None:
+            bias = False
         attention_dict = {
-            'indim': running_units, 
-            'd': d, 
-            'h': h,
-            'dropout': dropout,
+            "indim": running_units,
+            "d": d,
+            "h": h,
+            "dropout": dropout,
             #'bias': bias,
             #'gate': gate,
-            'alphabet': alphabet,
+            "alphabet": alphabet,
         }
         ffn_dict = {
-            'indim': running_units, 
-            'unit_multiplier': ffn_multiplier, 
-            'dropout': dropout,
-            'alphabet': alphabet,
+            "indim": running_units,
+            "unit_multiplier": ffn_multiplier,
+            "dropout": dropout,
+            "alphabet": alphabet,
         }
-        is_embed = True if (self.atleast1 and (prec_type=='inject')) else False
-        self.main = nn.ModuleList([
-            mp.TransBlock(
-                attention_dict,
-                ffn_dict,
-                norm_type,
-                prenorm,
-                is_embed,
-                ce_units,
-                preembed,
-                is_cross=True,
-                kvindim=kv_indim
-            )
-            for _ in range(depth)
-        ])
+        is_embed = True if (self.atleast1 and (prec_type == "inject")) else False
+        self.main = nn.ModuleList(
+            [
+                mp.TransBlock(
+                    attention_dict,
+                    ffn_dict,
+                    norm_type,
+                    prenorm,
+                    is_embed,
+                    ce_units,
+                    preembed,
+                    is_cross=True,
+                    kvindim=kv_indim,
+                )
+                for _ in range(depth)
+            ]
+        )
 
         # Final block
         units = running_units if penultimate_units == None else penultimate_units
@@ -175,14 +187,16 @@ class Decoder(pl.LightningModule):
             # - if predict token is at position 5 (zero-based), mask out
             #   positions 5 to seq_len, i.e. you can only attend to positions
             #   0, 1, 2, 3, 4
-            mask = 1e7 * (seqs > seqlen[:, None]).type(torch.float32) # >= excludes eos token, > includes it
+            mask = 1e7 * (seqs > seqlen[:, None]).type(
+                torch.float32
+            )  # >= excludes eos token, > includes it
 
         return mask
 
     def causal_mask(self, x):
         bs, sl, c = x.shape
         ones = torch.ones(bs, sl, sl, device=x.device)
-        mask =  1e7*torch.triu(ones, diagonal=1)
+        mask = 1e7 * torch.triu(ones, diagonal=1)
 
         return mask
 
@@ -196,7 +210,7 @@ class Decoder(pl.LightningModule):
                 spec_mask=spec_mask,
                 seq_mask=seq_mask,
             )
-            out = out['out']
+            out = out["out"]
 
         return out
 
@@ -239,27 +253,32 @@ class Decoder(pl.LightningModule):
         specmask=None,
     ):
         out, ce_emb = self.EmbedInputs(intseq, charge=charge, energy=energy, mass=mass)
-        if self.prec_type == 'pretoken':
-            out = torch.cat([ce_emb[:,None], out], dim=1)
-            ce_emb=None
-        elif self.prec_type == 'posttoken':
-            out = torch.cat([out, ce_emb[:,None]], dim=1)
-            ce_emb=None
+        if self.prec_type == "pretoken":
+            out = torch.cat([ce_emb[:, None], out], dim=1)
+            ce_emb = None
+        elif self.prec_type == "posttoken":
+            out = torch.cat([out, ce_emb[:, None]], dim=1)
+            ce_emb = None
 
-        #seqmask = self.sequence_mask(seqlen, out.shape[1])  # max(seqlen))
+        # seqmask = self.sequence_mask(seqlen, out.shape[1])  # max(seqlen))
         seqmask = self.causal_mask(out)
 
         out = self.Main(
             out, kv_feats=kv_feats, embed=ce_emb, spec_mask=specmask, seq_mask=seqmask
         )
-        
+
         if self.atleast1:
-            out = out if self.prec_type=='inject' else (out[:,1:] if self.prec_type=='pretoken' else out[:,:-1])
+            out = (
+                out
+                if self.prec_type == "inject"
+                else (out[:, 1:] if self.prec_type == "pretoken" else out[:, :-1])
+            )
         out = self.final(out)
         if self.pool:
             out = out.mean(dim=1)
 
         return out
+
 
 def _calc_mass_error(
     calc_mz: float, obs_mz: float, charge: int, isotope: int = 0
@@ -309,7 +328,7 @@ class DenovoDecoder(pl.LightningModule):
         self.use_charge = dec_config["use_charge"]
 
         self.causal = True
-        
+
         self.initialize_variables()
 
     def initial_intseq(self, batch_size, seqlen=None):
@@ -360,9 +379,11 @@ class DenovoDecoder(pl.LightningModule):
             "energy": energy.to(self.device) if self.decoder.use_energy else None,
             "mass": mass.to(self.device) if self.decoder.use_mass else None,
             "seqlen": self.num_reg_tokens(intseq.to(self.device)),  # for the seq. mask
-            "specmask": enc_out["mask"].to(self.device)
-            if enc_out["mask"] is not None
-            else enc_out["mask"],
+            "specmask": (
+                enc_out["mask"].to(self.device)
+                if enc_out["mask"] is not None
+                else enc_out["mask"]
+            ),
         }
 
         return dec_inp
@@ -384,7 +405,11 @@ class DenovoDecoder(pl.LightningModule):
             index = int(i)
 
             dec_out = self.forward(
-                intseq, enc_out, mass=mass, charge=charge, causal=self.causal # change for denovo random
+                intseq,
+                enc_out,
+                mass=mass,
+                charge=charge,
+                causal=self.causal,  # change for denovo random
             )
             logits = dec_out["logits"]
 
@@ -411,7 +436,7 @@ class DenovoDecoder(pl.LightningModule):
 
         if peptide_lengths is not None:
             sequence_length = input_intseq.shape[1]
-            padding_mask = self.decoder.sequence_mask( 
+            padding_mask = self.decoder.sequence_mask(
                 peptide_lengths.squeeze(),
                 sequence_length,
             )
@@ -460,42 +485,68 @@ class DenovoDecoder(pl.LightningModule):
 
         # Sizes.
         batch = spectra.shape[0]  # B
-        length =  self.seq_len # + 1  # L
-        vocab = self.predcats #+ 1 #self.decoder.vocab_size + 1  # V
+        length = self.seq_len  # + 1  # L
+        vocab = self.predcats  # + 1 #self.decoder.vocab_size + 1  # V
         beam = self.n_beams  # S
 
         # Initialize scores and tokens.
-        scores = torch.full(
-            size=(batch, length, vocab, beam), fill_value=torch.nan
-        )
+        scores = torch.full(size=(batch, length, vocab, beam), fill_value=torch.nan)
         scores = scores.type_as(spectra)
-        tokens = self.NT*torch.ones(batch, length, beam, dtype=torch.int64)
+        tokens = self.NT * torch.ones(batch, length, beam, dtype=torch.int64)
         tokens = tokens.to(self.encoder.device)
 
         # Create cache for decoded beams.
         pred_cache = collections.OrderedDict((i, []) for i in range(batch))
 
         # Get the first prediction.
-        intseq = self.initial_intseq(batch, self.seq_len).to(
-            enc_out['emb'].device
-        )
-        pred = self(intseq, enc_out, precursors) #mem_masks)
+        intseq = self.initial_intseq(batch, self.seq_len).to(enc_out["emb"].device)
+        pred = self(intseq, enc_out, precursors)  # mem_masks)
         tokens[:, 0, :] = torch.topk(pred[:, 0, :], beam, dim=1)[1]
-        scores[:, 0, :, :] = pred[:,0,:,None].tile(1, 1, beam) #einops.repeat(pred, "B L V -> B L V S", S=beam)
+        scores[:, 0, :, :] = pred[:, 0, :, None].tile(
+            1, 1, beam
+        )  # einops.repeat(pred, "B L V -> B L V S", S=beam)
 
         # Make all tensors the right shape for decoding.
-        precursors['charge'] = precursors['charge'][:,None].tile(1, beam).reshape(-1,)
-        precursors['mass'] = precursors['mass'][:,None].tile(1, beam).reshape(-1,)
-        precursors['length'] = precursors['length'][:,None].tile(1, beam).reshape(-1,)
-        precursors['mz'] = (precursors['mass'] - 18.010565) / precursors['charge']  - 1.00727646688
-        enc_out['emb'] = enc_out['emb'][:,None].tile(1, beam, 1, 1).reshape(batch*beam, self.encoder.sl, self.encoder.run_units)
-        enc_out['mask'] = enc_out['mask'][:,None].tile(1, beam, 1).reshape(batch*beam, self.encoder.sl)
+        precursors["charge"] = (
+            precursors["charge"][:, None]
+            .tile(1, beam)
+            .reshape(
+                -1,
+            )
+        )
+        precursors["mass"] = (
+            precursors["mass"][:, None]
+            .tile(1, beam)
+            .reshape(
+                -1,
+            )
+        )
+        precursors["length"] = (
+            precursors["length"][:, None]
+            .tile(1, beam)
+            .reshape(
+                -1,
+            )
+        )
+        precursors["mz"] = (precursors["mass"] - 18.010565) / precursors[
+            "charge"
+        ] - 1.00727646688
+        enc_out["emb"] = (
+            enc_out["emb"][:, None]
+            .tile(1, beam, 1, 1)
+            .reshape(batch * beam, self.encoder.sl, self.encoder.run_units)
+        )
+        enc_out["mask"] = (
+            enc_out["mask"][:, None]
+            .tile(1, beam, 1)
+            .reshape(batch * beam, self.encoder.sl)
+        )
         tokens = einops.rearrange(tokens, "B L S -> (B S) L")
         scores = einops.rearrange(scores, "B L V S -> (B S) L V")
-        intseq = intseq[:,None].tile(1, beam, 1).reshape(batch*beam, length)
+        intseq = intseq[:, None].tile(1, beam, 1).reshape(batch * beam, length)
 
         # The main decoding loop.
-        for step in range(0, self.seq_len-1):
+        for step in range(0, self.seq_len - 1):
             # Terminate beams exceeding the precursor m/z tolerance and track
             # all finished beams (either terminated or stop token predicted).
             (
@@ -503,7 +554,7 @@ class DenovoDecoder(pl.LightningModule):
                 beam_fits_precursor,
                 discarded_beams,
             ) = self._finish_beams(tokens, precursors, step)
-            
+
             # Cache peptide predictions from the finished beams (but not the
             # discarded beams).
             self._cache_finished_beams(
@@ -520,15 +571,15 @@ class DenovoDecoder(pl.LightningModule):
             finished_beams |= discarded_beams
             if finished_beams.all():
                 break
-            
+
             # Update the scores.
-            intseq[~finished_beams, step+1] = tokens[~finished_beams, step].int()
+            intseq[~finished_beams, step + 1] = tokens[~finished_beams, step].int()
             intseq_ = intseq[~finished_beams]
             precursors_ = self.subsample_precursors(precursors, ~finished_beams)
             enc_out_ = self.subsample_enc_out(enc_out, ~finished_beams)
             pred = self(intseq_, enc_out_, precursors_)
-            scores[~finished_beams, step+1] = pred[:, step+1]
-            
+            scores[~finished_beams, step + 1] = pred[:, step + 1]
+
             # Find the top-k beams with the highest scores and continue decoding
             # those.
             tokens, scores = self._get_topk_beams(
@@ -579,7 +630,7 @@ class DenovoDecoder(pl.LightningModule):
         for aa, mass in self.scale.tok2mass.items():
             if mass < 0:
                 aa_neg_mass.append(aa)
-        
+
         # Find N-terminal residues.
         n_term = torch.Tensor(
             [
@@ -589,24 +640,24 @@ class DenovoDecoder(pl.LightningModule):
             ]
         ).to(self.device)
 
-        beam_fits_precursor = torch.zeros(
-            tokens.shape[0], dtype=torch.bool
-        ).to(self.encoder.device)
-        
+        beam_fits_precursor = torch.zeros(tokens.shape[0], dtype=torch.bool).to(
+            self.encoder.device
+        )
+
         # Beams with a stop token predicted in the current step can be finished.
         finished_beams = torch.zeros(tokens.shape[0], dtype=torch.bool).to(
             self.encoder.device
         )
-        ends_stop_token = tokens[:, step] == self.outdict['X']
+        ends_stop_token = tokens[:, step] == self.outdict["X"]
         finished_beams[ends_stop_token] = True
-        
+
         # Beams with a dummy token predicted in the current step can be
         # discarded.
         discarded_beams = torch.zeros(tokens.shape[0], dtype=torch.bool).to(
             self.encoder.device
         )
-        #discarded_beams[tokens[:, step] == 0] = True # JL - I have no dummy token
-        
+        # discarded_beams[tokens[:, step] == 0] = True # JL - I have no dummy token
+
         # Discard beams with invalid modification combinations (i.e. N-terminal
         # modifications occur multiple times or in internal positions).
         if step > 1:  # Only relevant for longer predictions.
@@ -614,9 +665,9 @@ class DenovoDecoder(pl.LightningModule):
             final_pos = torch.full((ends_stop_token.shape[0],), step)
             final_pos[ends_stop_token] = step - 1
             # Multiple N-terminal modifications.
-            multiple_mods = torch.isin(
-                tokens[dim0, final_pos], n_term
-            ) & torch.isin(tokens[dim0, final_pos - 1], n_term)
+            multiple_mods = torch.isin(tokens[dim0, final_pos], n_term) & torch.isin(
+                tokens[dim0, final_pos - 1], n_term
+            )
             # N-terminal modifications occur at an internal position.
             # Broadcasting trick to create a two-dimensional mask.
             mask = (final_pos - 1)[:, None] >= torch.arange(tokens.shape[1])
@@ -628,14 +679,14 @@ class DenovoDecoder(pl.LightningModule):
         # Check which beams should be terminated or discarded based on the
         # predicted peptide.
         for i in range(len(finished_beams)):
-            
+
             # Skip already discarded beams.
             if discarded_beams[i]:
                 continue
             pred_tokens = tokens[i][: step + 1]
             peptide_len = len(pred_tokens)
-            peptide = pred_tokens #self.decoder.detokenize(pred_tokens)
-            
+            peptide = pred_tokens  # self.decoder.detokenize(pred_tokens)
+
             # Omit stop token.
             if self.reverse and peptide[0] == self.NT:
                 peptide = peptide[1:]
@@ -643,19 +694,19 @@ class DenovoDecoder(pl.LightningModule):
             elif not self.reverse and peptide[-1] == self.NT:
                 peptide = peptide[:-1]
                 peptide_len -= 1
-            
+
             # Discard beams that were predicted to end but don't fit the minimum
             # peptide length.
             if finished_beams[i] and peptide_len < self.min_peptide_len:
                 discarded_beams[i] = True
                 continue
-            
+
             # Terminate the beam if it has not been finished by the model but
             # the peptide mass exceeds the precursor m/z to an extent that it
             # cannot be corrected anymore by a subsequently predicted AA with
             # negative mass.
-            precursor_charge = precursors['charge'][i]
-            precursor_mz = precursors['mz'][i]
+            precursor_charge = precursors["charge"][i]
+            precursor_mz = precursors["mz"][i]
             matches_precursor_mz = exceeds_precursor_mz = False
             for aa in [None] if finished_beams[i] else aa_neg_mass:
                 if aa is None:
@@ -664,7 +715,9 @@ class DenovoDecoder(pl.LightningModule):
                     calc_peptide = peptide.copy()
                     calc_peptide.append(aa)
                 try:
-                    calc_mz = float(self.scale.intseq2mass(calc_peptide) / precursor_charge)
+                    calc_mz = float(
+                        self.scale.intseq2mass(calc_peptide) / precursor_charge
+                    )
                     delta_mass_ppm = [
                         _calc_mass_error(
                             calc_mz,
@@ -681,8 +734,7 @@ class DenovoDecoder(pl.LightningModule):
                     # peptide (without potential additional AAs with negative
                     # mass) is within the precursor m/z tolerance.
                     matches_precursor_mz = aa is None and any(
-                        abs(d) < self.precursor_mass_tol
-                        for d in delta_mass_ppm
+                        abs(d) < self.precursor_mass_tol for d in delta_mass_ppm
                     )
                     # Terminate the beam if the calculated m/z exceeds the
                     # precursor m/z + tolerance and hasn't been corrected by a
@@ -700,7 +752,7 @@ class DenovoDecoder(pl.LightningModule):
                         break
                 except KeyError:
                     matches_precursor_mz = exceeds_precursor_mz = False
-            
+
             # Finish beams that fit or exceed the precursor m/z.
             # Don't finish beams that don't include a stop token if they don't
             # exceed the precursor m/z tolerance yet.
@@ -709,7 +761,7 @@ class DenovoDecoder(pl.LightningModule):
             elif exceeds_precursor_mz:
                 finished_beams[i] = True
                 beam_fits_precursor[i] = matches_precursor_mz
-        
+
         return finished_beams, beam_fits_precursor, discarded_beams
 
     def _cache_finished_beams(
@@ -754,12 +806,12 @@ class DenovoDecoder(pl.LightningModule):
             # FIXME: The next 3 lines are very similar as what's done in
             #  _finish_beams. Avoid code duplication?
             # JL - keep max_length prediction vector -> easier to batch
-            pred_tokens = tokens[i]# [: step + 1]
-            
+            pred_tokens = tokens[i]  # [: step + 1]
+
             # Omit the stop token from the peptide sequence (if predicted).
             has_stop_token = pred_tokens[step] == self.NT
-            pred_peptide = pred_tokens#[:-1] if has_stop_token else pred_tokens
-            
+            pred_peptide = pred_tokens  # [:-1] if has_stop_token else pred_tokens
+
             # Don't cache this peptide if it was already predicted previously.
             if any(
                 torch.equal(pred_cached[-1], pred_peptide)
@@ -767,24 +819,24 @@ class DenovoDecoder(pl.LightningModule):
             ):
                 # TODO: Add duplicate predictions with their highest score.
                 continue
-            smx = torch.softmax(scores[i : i + 1, : step+1, :], -1)
-            aa_scores = smx[0, range(step+1), pred_tokens[:step+1]].tolist()
+            smx = torch.softmax(scores[i : i + 1, : step + 1, :], -1)
+            aa_scores = smx[0, range(step + 1), pred_tokens[: step + 1]].tolist()
             aa_scores_ = torch.nan_to_num(scores[i])
-            
+
             # Add an explicit score 0 for the missing stop token in case this
             # was not predicted (i.e. early stopping).
-            #if not has_stop_token:
+            # if not has_stop_token:
             #    aa_scores.append(0)
             aa_scores = np.asarray(aa_scores)
-            
+
             # Calculate the updated amino acid-level and the peptide scores.
             aa_scores, peptide_score = self._aa_pep_score(
                 aa_scores, beam_fits_precursor[i]
             )
-            
+
             # Omit the stop token from the amino acid-level scores.
             aa_scores = aa_scores[:-1]
-            
+
             # Add the prediction to the cache (minimum priority queue, maximum
             # the number of beams elements).
             if len(pred_cache[spec_idx]) < self.n_beams:
@@ -796,9 +848,8 @@ class DenovoDecoder(pl.LightningModule):
                 (peptide_score, aa_scores_, torch.clone(pred_peptide)),
             )
 
-
-    def _aa_pep_score(self,
-        aa_scores: np.ndarray, fits_precursor_mz: bool
+    def _aa_pep_score(
+        self, aa_scores: np.ndarray, fits_precursor_mz: bool
     ) -> Tuple[np.ndarray, float]:
         """
         Calculate amino acid and peptide-level confidence score from the raw amino
@@ -822,7 +873,7 @@ class DenovoDecoder(pl.LightningModule):
             The peptide score.
         """
         peptide_score = np.mean(aa_scores)
-        #aa_scores = (aa_scores + peptide_score) / 2 # JL - commented out, I don't understand it
+        # aa_scores = (aa_scores + peptide_score) / 2 # JL - commented out, I don't understand it
         if not fits_precursor_mz:
             peptide_score -= 1
         return aa_scores, peptide_score
@@ -867,27 +918,25 @@ class DenovoDecoder(pl.LightningModule):
             spectra.
         """
         beam = self.n_beams  # S
-        vocab = self.predcats # vocab_size + 1  # V
+        vocab = self.predcats  # vocab_size + 1  # V
 
         # Reshape to group by spectrum (B for "batch").
         tokens = einops.rearrange(tokens, "(B S) L -> B L S", S=beam)
         scores = einops.rearrange(scores, "(B S) L V -> B L V S", S=beam)
 
         # Get the previous tokens and scores.
-        prev_tokens = einops.repeat(
-            tokens[:, :step, :], "B L S -> B L V S", V=vocab
-        )
+        prev_tokens = einops.repeat(tokens[:, :step, :], "B L S -> B L V S", V=vocab)
         prev_scores = torch.gather(
-            scores.softmax(2)[:, :step, :, :], dim=2, index=prev_tokens # added softmax, instead of logits
+            scores.softmax(2)[:, :step, :, :],
+            dim=2,
+            index=prev_tokens,  # added softmax, instead of logits
         )
         prev_scores = einops.repeat(
             prev_scores[:, :, 0, :], "B L S -> B L (V S)", V=vocab
         )
 
         # Get the scores for all possible beams at this step.
-        step_scores = torch.zeros(batch, step + 1, beam * vocab).type_as(
-            scores
-        )
+        step_scores = torch.zeros(batch, step + 1, beam * vocab).type_as(scores)
         step_scores[:, :step, :] = prev_scores
         step_scores[:, step, :] = einops.rearrange(
             scores.softmax(2)[:, step, :, :], "B V S -> B (V S)"
@@ -903,7 +952,7 @@ class DenovoDecoder(pl.LightningModule):
         ).clone()
         # Mask out the index '0', i.e. padding token, by default.
         # JL - I don't have a padding token
-        #finished_mask[:, :beam] = True
+        # finished_mask[:, :beam] = True
 
         # Figure out the top K decodings.
         _, top_idx = torch.topk(
@@ -919,14 +968,16 @@ class DenovoDecoder(pl.LightningModule):
         #     beam's respecitve top score.
         tokens[:, :step, :] = einops.rearrange(
             prev_tokens[b_idx, :, 0, s_idx], "(B S) L -> B L S", S=beam
-            ) # JL: This puts the top beams' 1-step tokens in place
-        tokens[:, step, :] = torch.tensor(v_idx) # JL: This puts the top beams' step tokens in place
+        )  # JL: This puts the top beams' 1-step tokens in place
+        tokens[:, step, :] = torch.tensor(
+            v_idx
+        )  # JL: This puts the top beams' step tokens in place
         scores[:, : step + 1, :, :] = einops.rearrange(
             scores[b_idx, : step + 1, :, s_idx], "(B S) L V -> B L V S", S=beam
         )
         scores = einops.rearrange(scores, "B L V S -> (B S) L V")
         tokens = einops.rearrange(tokens, "B L S -> (B S) L")
-        
+
         return tokens, scores
 
     def _get_top_peptide(
@@ -951,38 +1002,40 @@ class DenovoDecoder(pl.LightningModule):
             the amino acid scores, and the predicted peptide sequence.
         """
         output = []
-        probs  = []
+        probs = []
         for peptides in pred_cache.values():
             if len(peptides) > 0:
-                
+
                 for pep_score, aa_scores, pred_tokens in heapq.nlargest(
                     self.top_match, peptides
                 ):
                     output.append(pred_tokens)
                     probs.append(aa_scores)
-                
+
             else:
                 output.append(
-                    self.NT*torch.ones((self.seq_len,)).to(self.encoder.device)
+                    self.NT * torch.ones((self.seq_len,)).to(self.encoder.device)
                 )
                 probs.append(
-                    torch.zeros((self.max_length, self.predcats)).to(self.encoder.device)
+                    torch.zeros((self.max_length, self.predcats)).to(
+                        self.encoder.device
+                    )
                 )
 
         return torch.stack(output), torch.stack(probs)
 
     def subsample_precursors(self, dic, boolean):
         dic2 = dic.copy()
-        dic2['charge'] = dic2['charge'][boolean]
-        dic2['mass'] = dic2['mass'][boolean]
-        dic2['mz'] = dic2['mz'][boolean]
+        dic2["charge"] = dic2["charge"][boolean]
+        dic2["mass"] = dic2["mass"][boolean]
+        dic2["mz"] = dic2["mz"][boolean]
 
         return dic2
 
     def subsample_enc_out(self, dic, boolean):
         dic2 = dic.copy()
-        dic2['emb'] = dic2['emb'][boolean]
-        dic2['mask'] = dic2['mask'][boolean]
+        dic2["emb"] = dic2["emb"][boolean]
+        dic2["mask"] = dic2["mask"][boolean]
 
         return dic2
 
@@ -991,7 +1044,7 @@ def decoder_greedy_base(token_dict, d_model=512, **kwargs):
     decoder_config = {
         "kv_indim": d_model,
         "running_units": 512,
-        "sequence_length": 30,
+        "sequence_length": 31,
         "depth": 9,
         "d": 64,
         "h": 8,
@@ -1000,7 +1053,7 @@ def decoder_greedy_base(token_dict, d_model=512, **kwargs):
         "use_charge": True,
         "use_energy": False,
         "use_mass": True,
-        "prec_type": 'pretoken',
+        "prec_type": "pretoken",
         "norm_type": "layer",
         "prenorm": True,
         "preembed": True,
@@ -1008,7 +1061,7 @@ def decoder_greedy_base(token_dict, d_model=512, **kwargs):
         "pool": False,
         "gate": False,
         "bias": False,
-        'alphabet': True,
+        "alphabet": True,
     }
     model = DenovoDecoder(token_dict, decoder_config, **kwargs)
     return model
@@ -1018,7 +1071,7 @@ def decoder_greedy_small(token_dict, d_model=256, **kwargs):
     decoder_config = {
         "kv_indim": d_model,
         "running_units": 128,
-        "sequence_length": 30,
+        "sequence_length": 31,
         "depth": 9,
         "d": 64,
         "h": 4,
@@ -1041,7 +1094,7 @@ def decoder_greedy_tiny(token_dict, d_model=256, **kwargs):
     decoder_config = {
         "kv_indim": d_model,
         "running_units": 32,
-        "sequence_length": 30,
+        "sequence_length": 31,
         "depth": 2,
         "d": 64,
         "h": 4,

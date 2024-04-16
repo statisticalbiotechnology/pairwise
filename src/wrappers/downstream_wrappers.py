@@ -1,7 +1,7 @@
 import torch
 from wrappers.base_wrapper import BaseDownstreamWrapper
 
-from casanovo_eval import aa_match_batch, aa_match_metrics, RESIDUES
+from casanovo_eval import aa_match_batch, aa_match_metrics
 import torch.nn.functional as F
 
 
@@ -45,14 +45,13 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         self,
         encoder,
         decoder,
-        datasets,
         global_args,
         collate_fn=None,
         token_dicts=None,
         task_dict=None,
     ):
         super().__init__(
-            encoder, global_args, datasets, collate_fn=collate_fn, task_dict=task_dict
+            encoder, global_args, collate_fn=collate_fn, task_dict=task_dict
         )
         self.decoder = decoder
 
@@ -61,6 +60,7 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         self.null_token = "X"
         self.conf_threshold = task_dict["conf_threshold"]
 
+        self.residues = token_dicts["residues"]
         self.input_dict = token_dicts["input_dict"]
         self.SOS = self.input_dict["<SOS>"]
         self.output_dict = token_dicts["output_dict"]
@@ -68,10 +68,6 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         self.NT = self.amod_dict[self.null_token]
 
         self.predcats = len(self.output_dict)
-
-        assert all(
-            key in RESIDUES for key in self.amod_dict if key != self.null_token
-        ), "All keys except the null token in amod_dict must be in self.denovo_metrics.residues"
 
         self.TASK_NAME = "denovo_tf"
 
@@ -171,10 +167,10 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         logits = logits.transpose(-2, -1)
         # logits.shape = (batch_size, num_classes, sequence_len)
         loss = F.cross_entropy(
-            logits, 
-            labels, 
-            reduction="none", 
-            label_smoothing=self.task_dict['label_smoothing']
+            logits,
+            labels,
+            reduction="none",
+            label_smoothing=self.task_dict["label_smoothing"],
         )
         masked_loss = loss * padding_mask
         masked_loss = masked_loss.sum(dim=1, keepdim=True) / padding_mask.sum(
@@ -199,16 +195,14 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
 
         logits_ce = logits.transpose(-1, -2)
         # aa_confidence, _ = F.softmax(logits, dim=-1).max(dim=-1)
-        loss = F.cross_entropy(logits_ce, targ, reduction='none')[targ!=22].mean()
-        
+        loss = F.cross_entropy(logits_ce, targ, reduction="none")[targ != 22].mean()
+
         preds_ffill = fill_null_after_first_EOS(
             preds, null_token=self.NT, EOS_token=self.EOS
         )
 
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
-        naive_metrics = NaiveAccRecPrec(
-            targ, preds, self.NT, self.EOS
-        )
+        naive_metrics = NaiveAccRecPrec(targ, preds, self.NT, self.EOS)
 
         deepnovo_metrics = self.deepnovo_metrics(preds_ffill, targ)
         stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
@@ -262,7 +256,7 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         pred_str = self.to_aa_sequence(preds)
 
         aa_matches_batch, n_aa_true, n_aa_pred = aa_match_batch(
-            target_str, pred_str, mode="forward"
+            target_str, pred_str, aa_dict=self.residues, mode="best"
         )
         aa_prec, aa_recall, pep_prec = aa_match_metrics(
             aa_matches_batch, n_aa_true, n_aa_pred
@@ -282,7 +276,6 @@ class DeNovoRandom(DeNovoTeacherForcing):
         self,
         encoder,
         decoder,
-        datasets,
         global_args,
         collate_fn=None,
         token_dicts=None,
@@ -291,7 +284,6 @@ class DeNovoRandom(DeNovoTeacherForcing):
         super().__init__(
             encoder,
             decoder,
-            datasets,
             global_args,
             collate_fn=collate_fn,
             token_dicts=token_dicts,

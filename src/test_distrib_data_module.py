@@ -1,7 +1,9 @@
 from functools import partial
 import pytorch_lightning as pl
 from pathlib import Path
-from lance_data_module import LanceDataModule
+from data.lance_data_module import LanceDataModule
+
+# from data.lance_data_module import LanceDataModule
 import torch
 from collate_functions import pad_peaks
 
@@ -36,7 +38,7 @@ model = TestModel()
 
 # Create a PyTorch Lightning Trainer
 trainer = pl.Trainer(
-    max_epochs=1, accelerator="cpu", devices=3, num_nodes=1, logger=None
+    max_epochs=1, accelerator="cpu", devices=3, num_nodes=1, logger=False
 )  # Adjust the trainer parameters as needed
 
 # Run training

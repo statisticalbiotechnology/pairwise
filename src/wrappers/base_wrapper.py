@@ -1,6 +1,5 @@
 import torch
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader
 from abc import ABC, abstractmethod
 from collections import deque
 
@@ -357,41 +356,6 @@ class BasePLWrapper(ABC, pl.LightningModule):
 
 class BaseDownstreamWrapper(BasePLWrapper):
     def __init__(
-        self, encoder, global_args, datasets, head=None, collate_fn=None, task_dict=None
+        self, encoder, global_args, head=None, collate_fn=None, task_dict=None
     ):
         super().__init__(encoder, global_args, head, collate_fn, task_dict)
-        self.datasets = datasets
-
-    def train_dataloader(self):
-        return DataLoader(
-            self.datasets[0],
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_mem,
-            drop_last=True,
-            collate_fn=self.collate_fn,
-            persistent_workers=self.num_workers > 0,
-            shuffle=True,
-        )
-
-    def val_dataloader(self):
-        return DataLoader(
-            self.datasets[1],
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_mem,
-            drop_last=True,
-            collate_fn=self.collate_fn,
-            persistent_workers=self.num_workers > 0,
-        )
-
-    def test_dataloader(self):
-        return DataLoader(
-            self.datasets[2],
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_mem,
-            drop_last=False,
-            collate_fn=self.collate_fn,
-            persistent_workers=self.num_workers > 0,
-        )

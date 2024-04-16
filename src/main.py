@@ -5,7 +5,7 @@ from pytorch_lightning.loggers.wandb import WandbLogger
 import wandb
 import numpy as np
 import random
-from lance_data_module import LanceDataModule
+from data.lance_data_module import LanceDataModule
 from parse_args import parse_args_and_config, create_output_dirs
 import time
 
@@ -62,8 +62,12 @@ def main(global_args, pretrain_config=None, ds_config=None):
 
     if global_args.subset:
         if global_args.downstream_task != "none":
-            config["downstream_config"][global_args.downstream_task]["subset"] = global_args.subset
-        config["pretrain_config"][global_args.pretraining_task]["subset"] = global_args.subset
+            config["downstream_config"][global_args.downstream_task][
+                "subset"
+            ] = global_args.subset
+        config["pretrain_config"][global_args.pretraining_task][
+            "subset"
+        ] = global_args.subset
 
     # Wandb stuff
     run = None
@@ -81,7 +85,6 @@ def main(global_args, pretrain_config=None, ds_config=None):
         config = dict(run.config)
         logger = WandbLogger()
 
-
     # Define encoder model
     encoder = ENCODER_DICT[global_args.encoder_model](
         use_charge=global_args.use_charge,
@@ -97,14 +100,15 @@ def main(global_args, pretrain_config=None, ds_config=None):
     distributed = global_args.num_devices > 1 or global_args.num_nodes > 1
     if global_args.pretrain:
         pretrain_data_module = utils.get_lance_data_module(
-            global_args.data_root_dir, 
-            config["pretrain_config"][global_args.pretraining_task]["batch_size"], 
+            global_args.data_root_dir,
+            config["pretrain_config"][global_args.pretraining_task]["batch_size"],
             global_args.max_peaks,
+            seed=global_args.seed,
         )
         pretrain_callbacks = utils.configure_callbacks(
-            global_args, 
-            config['pretrain_config'][global_args.pretraining_task],
-            global_args.pretraining_task + "_val_loss_epoch"
+            global_args,
+            config["pretrain_config"][global_args.pretraining_task],
+            global_args.pretraining_task + "_val_loss_epoch",
         )
 
         # Instantiate PL wrapper based on the pretraining task
@@ -144,7 +148,11 @@ def main(global_args, pretrain_config=None, ds_config=None):
             strategy=global_args.strategy if distributed else "auto",
             precision=global_args.precision,
             # Training args
-            max_epochs=config["pretrain_config"][global_args.pretraining_task]["epochs"],
+            max_epochs=(
+                config["pretrain_config"][global_args.pretraining_task]["epochs"]
+                if global_args.epochs < 1
+                else global_args.epochs
+            ),
             gradient_clip_val=global_args.clip_grad,
             logger=logger,
             callbacks=pretrain_callbacks,
@@ -157,7 +165,9 @@ def main(global_args, pretrain_config=None, ds_config=None):
         )
 
         if global_args.resume:
-            print(f"Resuming training from trainer state: {global_args.encoder_weights}")
+            print(
+                f"Resuming training from trainer state: {global_args.encoder_weights}"
+            )
 
         start_time = time.time()
         # This is the call to start training the model
@@ -170,11 +180,17 @@ def main(global_args, pretrain_config=None, ds_config=None):
         print(f"Pretraining finished in {end_time - start_time} seconds")
 
         # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
-        if global_args.save_top_k > 0 and global_args.pretrain and not global_args.barebones:
+        if (
+            global_args.save_top_k > 0
+            and global_args.pretrain
+            and not global_args.barebones
+        ):
             pretrainer.test(datamodule=pretrain_data_module, ckpt_path="best")
 
     elif global_args.encoder_weights:
-        pl_encoder = PRETRAIN_TASK_DICT[global_args.pretraining_task].load_from_checkpoint(
+        pl_encoder = PRETRAIN_TASK_DICT[
+            global_args.pretraining_task
+        ].load_from_checkpoint(
             global_args.encoder_weights,
             global_args=global_args,
             encoder=encoder,
@@ -205,19 +221,33 @@ def main(global_args, pretrain_config=None, ds_config=None):
 
         ds_callbacks = utils.configure_callbacks(
             global_args,
-            config['downstream_config'][global_args.downstream_task],
-            global_args.downstream_task + "_val_aa_prec_epoch", 
-            metric_mode="max"
+            config["downstream_config"][global_args.downstream_task],
+            global_args.downstream_task + "_val_aa_prec_epoch",
+            metric_mode="max",
         )
 
         # Load downstream dataset
-        datasets_ds, collate_fn_ds, token_dicts = utils.get_ninespecies_dataset_splits(
-            global_args.downstream_root_dir,
-            config["downstream_config"],
-            max_peaks=global_args.max_peaks,
-            subset=config["downstream_config"][global_args.downstream_task]["subset"],
-            include_hidden=global_args.downstream_task == "denovo_random",
-        )
+        if config["downstream_config"]["dataset_name"] == "ninespecies":
+            ds_data_module, token_dicts = utils.get_ninespecies_data_module(
+                global_args.downstream_root_dir,
+                config["downstream_config"],
+                global_args,
+                max_peaks=global_args.max_peaks,
+                max_length=global_args.max_length,
+                subset=config["downstream_config"][global_args.downstream_task][
+                    "subset"
+                ],
+                include_hidden=global_args.downstream_task == "denovo_random",
+            )
+        elif config["downstream_config"]["dataset_name"] == "massivekb":
+            ds_data_module, token_dicts = utils.get_mskb_data_module(
+                global_args.downstream_root_dir,
+                config["downstream_config"][global_args.downstream_task]["batch_size"],
+                max_peaks=global_args.max_peaks,
+                max_length=global_args.max_length,
+                seed=global_args.seed,
+                include_hidden=global_args.downstream_task == "denovo_random",
+            )
         # Define decoder model
         assert (
             global_args.decoder_model
@@ -230,8 +260,6 @@ def main(global_args, pretrain_config=None, ds_config=None):
             encoder,
             decoder,
             global_args=global_args,
-            datasets=datasets_ds,
-            collate_fn=collate_fn_ds,
             token_dicts=token_dicts,
             task_dict=config["downstream_config"][global_args.downstream_task],
         )
@@ -272,7 +300,11 @@ def main(global_args, pretrain_config=None, ds_config=None):
             strategy=global_args.strategy if distributed else "auto",
             precision=global_args.precision,
             # Training args
-            max_epochs=config["downstream_config"][global_args.downstream_task]["epochs"],
+            max_epochs=(
+                config["downstream_config"][global_args.downstream_task]["epochs"]
+                if global_args.epochs < 1
+                else global_args.epochs
+            ),
             gradient_clip_val=global_args.clip_grad,
             logger=logger,
             callbacks=ds_callbacks,
@@ -286,13 +318,16 @@ def main(global_args, pretrain_config=None, ds_config=None):
 
         start_time = time.time()
         # This is the call to start training the model
-        ds_trainer.fit(pl_downstream)
+        ds_trainer.fit(
+            pl_downstream,
+            datamodule=ds_data_module,
+        )
         end_time = time.time()  # End time measurement
         print(f"Downstream finetuning finished in {end_time - start_time} seconds")
 
         # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
         if global_args.save_top_k > 0 and not global_args.barebones:
-            ds_trainer.test(ckpt_path="best")
+            ds_trainer.test(datamodule=ds_data_module, ckpt_path="best")
 
     # Flag the run as finished to the wandb server
     if run is not None and utils.get_rank() == 0:
