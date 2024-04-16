@@ -1,20 +1,12 @@
 num_workers: 16
 
-dataset_name: ninespecies
+dataset_name: massivekb
 task: denovo
-top_pks: 100
+max_peaks: 100
 pep_length: [0, 30]
 charge: [0, 10]
 add_mass: True
 
-paths:
-  train:
-    - train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet
-    - train-00000-of-00002-ca1fbc3de7c99259.parquet
-  val: 
-    - validation-00000-of-00001-b84568f5bf3ba95d.parquet
-  test: 
-    - test-00000-of-00001-15be7bb3864037e7.parquet
 
 denovo_tf:
   # DeNovoTeacherForcing specific hparams
@@ -41,13 +33,9 @@ denovo_random:
   # DeNovoTeacherRandom specific hparams
   conf_threshold: 0
   # Training hparams
-  blr: 5.0e-5
-  lr_warmup: 0
-  lr_start: 1.0e-7
-  lr_end: 2.0e-4
-  lr_warmup_steps: 20000
   batch_size: 100
   ref_batch_size: 100
+  blr: 1.0e-4
   weight_decay: 0
   epochs: 30
   subset: 0
