@@ -18,7 +18,7 @@ warmup_epochs: 0
 max_peaks: 100
 
 # Tasks
-encoder_model: dc_encoder_larger
+encoder_model: dc_encoder_base
 pretrain_config: configs/pretrain/dc.yaml
 pretrain: 1
 pretraining_task: masked_ae
@@ -28,4 +28,4 @@ mask_ratio: 0.75
 decoder_model: dc_decoder_base
 downstream_config: configs/downstream/mskb_dc.yaml
 downstream_task: denovo_tf
-downstream_root_dir: /Users/alfred/Datasets/MassIVE_KB
+downstream_root_dir: /proj/bedrock/datasets/MassIVE_KB/
