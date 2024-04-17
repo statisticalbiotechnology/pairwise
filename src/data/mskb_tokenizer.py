@@ -78,10 +78,13 @@ class MSKBTokenizer:
         # before splitting it into a list with self._parse_peptide for the regex
         # pattern (in self._parse_peptide) to work
         # unfortunately, this is a bit inefficient
-        if self.n_terminal_mods is not None:
-            for n_mod in self.n_terminal_mods:
-                if n_mod in sequence:
-                    sequence = n_mod + sequence.replace(n_mod, "")
+        # FIXME: doesn't work because of "+43.006-17.027" and "-17.027"
+        # BUT massive already seems to have the N-term mod placed first in the sequence,
+        # so probably not needed
+        # if self.n_terminal_mods is not None:
+        #     for n_mod in self.n_terminal_mods:
+        #         if n_mod in sequence:
+        #             sequence = n_mod + sequence.replace(n_mod, "")
 
         seq_list = self._parse_peptide(sequence)
 
@@ -112,7 +115,8 @@ class MSKBTokenizer:
             intseq = torch.tensor([self.index[t] for t in tokens], dtype=torch.long)
 
         except KeyError as err:
-            raise ValueError("Unrecognized token") from err
+            unrecognized_token = str(err).strip("'")
+            raise ValueError(f"Unrecognized token '{unrecognized_token}' in sequence:\n{sequence}.") from err
 
         return intseq
 
