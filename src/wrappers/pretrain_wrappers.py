@@ -94,7 +94,8 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         # target = F.one_hot(target, 3) # Not needed, CE loss expects class inds for the target
 
         return mz_batch, target
-
+    
+    """
     def on_validation_epoch_end(self):
         # Update the current best achieved value for each val metric
         # Get the per-epoch metric value from the logged metrics
@@ -115,7 +116,7 @@ class TrinaryMZPLWrapper(BasePLWrapper):
             if cur_epoch == self.trainer.max_epochs - 1:
                 self.log_dict(self.tracker.best_metrics)
                 self.best_metrics_logged = True
-    
+    """
     def configure_optimizers(self):
         opts = torch.optim.Adam(
             self.parameters(),

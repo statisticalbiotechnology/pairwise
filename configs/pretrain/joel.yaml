@@ -10,7 +10,7 @@ trinary_mz:
   blr: 4.0e-5
   lr_decay: False
   weight_decay: 1.0e-5
-  epochs: 1
+  epochs: 3
   subset: 0
 
 masked:

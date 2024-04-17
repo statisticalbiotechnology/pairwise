@@ -318,9 +318,12 @@ if __name__ == "__main__":
     if global_args.matmul_precision:
         torch.set_float32_matmul_precision(global_args.matmul_precision)
     # set seed
-    torch.manual_seed(global_args.seed)
-    np.random.seed(global_args.seed)
-    random.seed(global_args.seed)
-    pl.seed_everything(global_args.seed)
+    if global_args.seed is not None:
+        torch.manual_seed(global_args.seed)
+        np.random.seed(global_args.seed)
+        random.seed(global_args.seed)
+        pl.seed_everything(global_args.seed)
+    else:
+        print("JL - Using a random seed")
     # run
     main(global_args, pretrain_config, ds_config)

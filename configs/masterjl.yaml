@@ -13,11 +13,14 @@ encoder_model: dc_encoder_base # encoder_base_arch | dc_encoder_base | encoder_p
 #### Training hyperparameters
 batch_size: 100
 max_peaks: 100
-seed: 0
+seed:
+
+# Checkpointing
+every_n_epochs: 1
 
 # Tasks
 pretrain: 0
-encoder_weights: /proj/bedrock/checkpoints/checkpoint_17_48_33_203969__13_04_24/epoch=0-trinary_mz_val_loss_epoch=0.39.ckpt
+encoder_weights: /proj/bedrock/checkpoints/checkpoint_10_57_15_189716__14_04_24/epoch=0-trinary_mz_val_loss_epoch=0.39.ckpt
 pretrain_config: configs/pretrain/joel.yaml
 pretraining_task: trinary_mz
 trinary_type: 'mz'
