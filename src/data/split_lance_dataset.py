@@ -4,8 +4,9 @@ import lance
 from tqdm import tqdm
 
 # Define your Lance dataset directory
-ROOT_DIR = "/Users/alfred/Datasets/MassIVE_KB/"
+ROOT_DIR = "/proj/bedrock/datasets/MassIVE_KB/"
 LANCE_DIR = os.path.join(ROOT_DIR, "indexed.lance")
+CHUNK_SIZE=1000
 ds = lance.dataset(LANCE_DIR)
 
 # Calculate the sizes for each dataset split
@@ -37,7 +38,6 @@ def generate_record_batches(dataset, indices, chunk_size=1000):
         desc="Processing batches",
     ):
         chunk_indices = indices[i : i + chunk_size]
-        print(len(chunk_indices))
         # Ensure the last chunk is processed even if it's smaller than chunk_size
         batches = dataset.take(chunk_indices, batch_readahead=0).to_batches()
         for batch in batches:
@@ -51,13 +51,13 @@ test_dataset_path = os.path.join(ROOT_DIR, "test.lance")
 
 # Writing the datasets with progress bars
 lance.write_dataset(
-    generate_record_batches(ds, train_indices), train_dataset_path, schema=ds.schema
+    generate_record_batches(ds, train_indices, chunk_size=CHUNK_SIZE), train_dataset_path, schema=ds.schema
 )
 lance.write_dataset(
-    generate_record_batches(ds, val_indices), val_dataset_path, schema=ds.schema
+    generate_record_batches(ds, val_indices, chunk_size=CHUNK_SIZE), val_dataset_path, schema=ds.schema
 )
 lance.write_dataset(
-    generate_record_batches(ds, test_indices), test_dataset_path, schema=ds.schema
+    generate_record_batches(ds, test_indices, chunk_size=CHUNK_SIZE), test_dataset_path, schema=ds.schema
 )
 
 print("Dataset has been split into train, validation, and test sets.")
