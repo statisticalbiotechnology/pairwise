@@ -18,4 +18,4 @@ dependencies:
     - path
     - pathlib
     - jiwer
-    - pylance=0.10.10
+    - pylance==0.10.10
