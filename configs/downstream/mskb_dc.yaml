@@ -12,10 +12,10 @@ denovo_tf:
   # DeNovoTeacherForcing specific hparams
   conf_threshold: 0
   # Training hparams
-  blr: 1.0e-4
+  blr: 4.0e-5
   lr_warmup: 1
   lr_start: 1.0e-7
-  lr_end: 2.0e-4
+  lr_end: 4.0e-5
   lr_warmup_steps: 20000
   lr_decay: 0
   lr_decay_start_step: 5000
