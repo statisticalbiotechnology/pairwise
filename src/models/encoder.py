@@ -349,6 +349,7 @@ def encoder_base_arch(
     use_mass=False,
     use_energy=False,
     bias=False, # 'pairwise' | 'regular' | False | None
+    dropout=0.25,
 ):
     model = Encoder(
         norm_type='layer',
@@ -364,7 +365,7 @@ def encoder_base_arch(
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
-        dropout=0.25,
+        dropout=dropout,
         bias=bias,
         gate=False,
         alphabet=False,
@@ -383,6 +384,7 @@ def encoder_pairwise(
     use_mass=False,
     use_energy=False,
     bias="pairwise", # 'pairwise' | 'regular' | False | None
+    dropout=0.25,
 ):
     model = Encoder(
         norm_type='layer',
@@ -398,7 +400,7 @@ def encoder_pairwise(
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
-        dropout=0.25,
+        dropout=dropout,
         bias=bias,
         gate=False,
         alphabet=False,
@@ -417,6 +419,7 @@ def encoder_deeper(
     use_mass=False,
     use_energy=False,
     bias=False, # 'pairwise' | 'regular' | False | None
+    dropout=0.25,
 ):
     model = Encoder(
         norm_type='layer',
@@ -432,7 +435,7 @@ def encoder_deeper(
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
-        dropout=0.25,
+        dropout=dropout,
         bias=bias,
         gate=False,
         alphabet=False,

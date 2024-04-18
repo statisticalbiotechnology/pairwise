@@ -24,8 +24,8 @@ denovo_tf:
   blr: 1.0e-4
   lr_warmup: 1
   lr_start: 1.0e-7
-  lr_end: 2.0e-4
-  lr_warmup_steps: 20000
+  lr_end: 1.0e-4
+  lr_warmup_steps: 14538
   lr_decay: 0
   lr_decay_start_step: 5000
   lr_decay_end_step: 25000
@@ -37,6 +37,7 @@ denovo_tf:
   epochs: 30
   subset: 0
   num_workers: 16
+  decoder_dropout: 0.1
 
 denovo_random:
   # DeNovoTeacherRandom specific hparams
@@ -49,3 +50,4 @@ denovo_random:
   epochs: 30
   subset: 0
   num_workers: 16
+  decoder_dropout: 0.1

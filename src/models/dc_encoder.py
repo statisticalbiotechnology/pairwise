@@ -200,6 +200,7 @@ def dc_encoder_base(
     use_energy=False,
     use_mass=False,
     static_peak_encoder=False,
+    dropout=0,
     **kwargs,
 ):
     d_model = 512
@@ -216,7 +217,7 @@ def dc_encoder_base(
         use_mass=use_mass,
         use_energy=use_energy,
         peak_encoder=peak_encoder,
-        dropout=0.25
+        dropout=dropout
     )
     return model
 
@@ -225,6 +226,7 @@ def dc_encoder_larger(
     use_energy=False,
     use_mass=False,
     static_peak_encoder=False,
+    dropout=0,
     **kwargs,
 ):
     d_model = 1024
@@ -241,7 +243,7 @@ def dc_encoder_larger(
         use_mass=use_mass,
         use_energy=use_energy,
         peak_encoder=peak_encoder,
-        dropout=0.1
+        dropout=dropout,
     )
     return model
 
@@ -250,6 +252,7 @@ def dc_encoder_huge(
     use_energy=False,
     use_mass=False,
     static_peak_encoder=False,
+    dropout=0,
     **kwargs,
 ):
     d_model = 2048
@@ -266,7 +269,7 @@ def dc_encoder_huge(
         use_mass=use_mass,
         use_energy=use_energy,
         peak_encoder=peak_encoder,
-        dropout=0.1
+        dropout=dropout,
     )
     return model
 
@@ -275,8 +278,10 @@ def casanovo_encoder(
     use_energy=False,
     use_mass=False,
     static_peak_encoder=False,
+    dropout=0,
     **kwargs,
 ):
+    dropout = 0 if dropout is None else dropout
     d_model = 512
     if static_peak_encoder:
         peak_encoder = StaticPeakEncoder(d_model)
@@ -291,5 +296,6 @@ def casanovo_encoder(
         use_mass=use_mass,
         use_energy=use_energy,
         peak_encoder=peak_encoder,
+        dropout=dropout
     )
     return model

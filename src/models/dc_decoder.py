@@ -228,49 +228,48 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
         return predict_logits.argmax(dim=-1, keepdim=True).type(torch.int32)
 
 
-def dc_decoder_tiny(amod_dict, d_model=256, **kwargs):
+def dc_decoder_tiny(amod_dict, d_model=256, dropout=0, **kwargs):
     model = PeptideTransformerDecoder(
         amod_dict,
         d_model,
         nhead=2,
         dim_feedforward=128,
         n_layers=1,
-        dropout=0,
         positional_encoder=True,
         max_charge=9,
         use_mass=True,
         use_charge=True,
+        dropout=dropout,
     )
     return model
 
 
-def dc_decoder_base(amod_dict, d_model=256, **kwargs):
+def dc_decoder_base(amod_dict, d_model=256, dropout=0, **kwargs):
     model = PeptideTransformerDecoder(
         amod_dict,
         d_model,
         nhead=8,
         dim_feedforward=512,
         n_layers=9,
-        dropout=0.25,
         positional_encoder=True,
         max_charge=9,
         use_mass=True,
-        use_charge=True,
+        use_charge=True, 
+        dropout=dropout,
     )
     return model
 
-
-def casanovo_decoder(amod_dict, d_model=256, **kwargs):
+def casanovo_decoder(amod_dict, d_model=256, dropout=0, **kwargs):
     model = PeptideTransformerDecoder(
         amod_dict,
         d_model,
         nhead=8,
         dim_feedforward=1024,
         n_layers=9,
-        dropout=0,
         positional_encoder=True,
         max_charge=10,
         use_mass=True,
         use_charge=True,
+        dropout=dropout,
     )
     return model

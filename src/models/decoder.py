@@ -1040,7 +1040,7 @@ class DenovoDecoder(pl.LightningModule):
         return dic2
 
 
-def decoder_greedy_base(token_dict, d_model=512, **kwargs):
+def decoder_greedy_base(token_dict, d_model=512, dropout=0.5, **kwargs):
     decoder_config = {
         "kv_indim": d_model,
         "running_units": 512,
@@ -1057,7 +1057,7 @@ def decoder_greedy_base(token_dict, d_model=512, **kwargs):
         "norm_type": "layer",
         "prenorm": True,
         "preembed": True,
-        "dropout": 0.5,
+        "dropout": dropout,
         "pool": False,
         "gate": False,
         "bias": False,
@@ -1067,7 +1067,7 @@ def decoder_greedy_base(token_dict, d_model=512, **kwargs):
     return model
 
 
-def decoder_greedy_small(token_dict, d_model=256, **kwargs):
+def decoder_greedy_small(token_dict, d_model=256, dropout=0, **kwargs):
     decoder_config = {
         "kv_indim": d_model,
         "running_units": 128,
@@ -1083,14 +1083,14 @@ def decoder_greedy_small(token_dict, d_model=256, **kwargs):
         "norm_type": "layer",
         "prenorm": True,
         "preembed": True,
-        "dropout": 0.1,
+        "dropout": dropout,
         "pool": False,
     }
     model = DenovoDecoder(token_dict, decoder_config, **kwargs)
     return model
 
 
-def decoder_greedy_tiny(token_dict, d_model=256, **kwargs):
+def decoder_greedy_tiny(token_dict, d_model=256, dropout=0, **kwargs):
     decoder_config = {
         "kv_indim": d_model,
         "running_units": 32,
@@ -1107,6 +1107,7 @@ def decoder_greedy_tiny(token_dict, d_model=256, **kwargs):
         "prenorm": True,
         "preembed": True,
         # penultimate_units: #?
+        "dropout": dropout,
         "pool": False,
     }
     model = DenovoDecoder(token_dict, decoder_config, **kwargs)

@@ -12,6 +12,7 @@ trinary_mz:
   epochs: 1
   subset: 0
   num_workers: 0
+  dropout: 0
 
 masked:
   # Masked trainer specific hparams
@@ -29,6 +30,7 @@ masked:
   epochs: 1
   subset: 0
   num_workers: 0
+  dropout: 0
 
   # Annealing
   lr_warmup: 1
@@ -60,6 +62,7 @@ masked_ae:
   epochs: 1
   subset: 0
   num_workers: 0
+  dropout: 0
 
   # Annealing
   lr_warmup: 1

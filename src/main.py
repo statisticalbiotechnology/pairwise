@@ -90,6 +90,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
         use_charge=global_args.use_charge,
         use_mass=global_args.use_mass,
         use_energy=global_args.use_energy,
+        dropout=config["pretrain_config"].get("dropout", 0)
     )
 
     if global_args.pretraining_task not in PRETRAIN_TASK_DICT:
@@ -253,7 +254,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
             global_args.decoder_model
         ), f"argument decoder_model must be provided when downstream finetuning"
         decoder = DECODER_DICT[global_args.decoder_model](
-            token_dicts, d_model=encoder.running_units
+            token_dicts, d_model=encoder.running_units, dropout=config["downstream_config"][global_args.downstream_task]["decoder_dropout"]
         )
 
         pl_downstream = DOWNSTREAM_TASK_DICT[global_args.downstream_task](
