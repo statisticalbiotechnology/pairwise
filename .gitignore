@@ -165,3 +165,4 @@ shellscript.sh
 .vscode/
 outs/
 slurm_outs/
+*.DS_store
