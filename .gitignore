@@ -166,3 +166,4 @@ shellscript.sh
 outs/
 slurm_outs/
 *.DS_store
+misc/plotting/csv/*
