@@ -125,9 +125,10 @@ def get_lance_data_module(
     batch_size,
     max_peaks=300,
     seed=0,
+    include_test=False,
 ):
     collate_fn = partial(pad_peaks, max_peaks=max_peaks)
-    return LanceDataModule(data_root_dir, batch_size, collate_fn, seed=seed)
+    return LanceDataModule(data_root_dir, batch_size, collate_fn, seed=seed, include_test=include_test)
 
 
 def get_mskb_data_module(

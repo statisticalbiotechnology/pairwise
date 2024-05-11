@@ -90,7 +90,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
         use_charge=global_args.use_charge,
         use_mass=global_args.use_mass,
         use_energy=global_args.use_energy,
-        dropout=config["pretrain_config"].get("dropout", 0)
+        dropout=config["pretrain_config"][global_args.pretraining_task].get("dropout", 0)
     )
 
     if global_args.pretraining_task not in PRETRAIN_TASK_DICT:
@@ -105,6 +105,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
             config["pretrain_config"][global_args.pretraining_task]["batch_size"],
             global_args.max_peaks,
             seed=global_args.seed,
+            include_test=False,
         )
         pretrain_callbacks = utils.configure_callbacks(
             global_args,
@@ -161,7 +162,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
             default_root_dir=global_args.log_dir,
             # profiler="simple",
             barebones=global_args.barebones,
-            num_sanity_val_steps=0,
+            num_sanity_val_steps=2,
             # detect_anomaly=True,
         )
 
@@ -169,6 +170,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
             print(
                 f"Resuming training from trainer state: {global_args.encoder_weights}"
             )
+
 
         start_time = time.time()
         # This is the call to start training the model
@@ -180,13 +182,13 @@ def main(global_args, pretrain_config=None, ds_config=None):
         end_time = time.time()  # End time measurement
         print(f"Pretraining finished in {end_time - start_time} seconds")
 
-        # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
-        if (
-            global_args.save_top_k > 0
-            and global_args.pretrain
-            and not global_args.barebones
-        ):
-            pretrainer.test(datamodule=pretrain_data_module, ckpt_path="best")
+        # # If we keep track of the best model wrt. val loss, select that model and evaluate it on the test set
+        # if (
+        #     global_args.save_top_k > 0
+        #     and global_args.pretrain
+        #     and not global_args.barebones
+        # ):
+        #     pretrainer.test(datamodule=pretrain_data_module, ckpt_path="best")
 
     elif global_args.encoder_weights:
         pl_encoder = PRETRAIN_TASK_DICT[

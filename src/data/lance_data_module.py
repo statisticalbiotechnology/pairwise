@@ -10,11 +10,12 @@ from data.lance_helper_fns import LanceDataset, _to_batch_dict
 
 class LanceDataModule(pl.LightningDataModule):
     def __init__(
-        self, data_dir: Path, batch_size: int, collate_fn: Callable, seed: int = 0
+        self, data_dir: Path, batch_size: int, collate_fn: Callable, seed: int = 0, include_test=True
     ):
         super().__init__()
 
-        subdirs = [path.join(data_dir, split) for split in ["train", "val", "test"]]
+        _splits = ["train", "val", "test"] if include_test else ["train", "val"]
+        subdirs = [path.join(data_dir, split) for split in _splits]
 
         subdirs_exist = all(
             [path.exists(path.join(_path, "indexed.lance")) for _path in subdirs]
