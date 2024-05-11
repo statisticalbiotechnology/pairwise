@@ -3,8 +3,8 @@ import pyarrow as pa
 from pathlib import Path
 
 # Define the root directory and the destination directory
-SOURCE_DATA_ROOT_DIR = "/proj/bedrock/datasets/MassIVE_KB/MassiveKB/mgfs/"
-DEST_DATA_DIR = "/proj/bedrock/datasets/MassIVE_KB/indexed.lance/"
+SOURCE_DATA_ROOT_DIR = "/proj/bedrock/datasets/foundational_dataset/combined/mgfs"
+DEST_DATA_DIR = "/proj/bedrock/datasets/foundational_dataset/combined/full.lance"
 FILE_TYPE_SUFFIX = ".mgf"
 
 # Create a Path object for the source directory
@@ -18,8 +18,8 @@ print(f"Found {len(mgf_files)} files to process.")
 
 annotated_dataset = SpectrumDataset(
     spectra=mgf_files,
-    path=DEST_DATA_DIR,
-    custom_fields=[pa.field("sequence", pa.string())],
+    path=DEST_DATA_DIR, batch_size=1000, min_peaks=10
+    # custom_fields=[pa.field("sequence", pa.string())],
 )
 
 # import lance

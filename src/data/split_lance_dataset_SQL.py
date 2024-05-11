@@ -4,18 +4,20 @@ import lance
 from tqdm import tqdm
 
 # Define your Lance dataset directory
-ROOT_DIR = "/Users/alfred/Datasets/test/failed_mgfs/"
+ROOT_DIR = "/proj/bedrock/datasets/foundational_dataset/combined/test"
 LANCE_DIR = os.path.join(ROOT_DIR, "debug.lance")
-CHUNK_SIZE = 10
+CHUNK_SIZE = 1000
+DELETION_CHUNK_SIZE = 10
 
 # Set the sizes for validation and test splits as a percentage of the total dataset
 VAL_PERCENT = 1.0  # 1% for validation
-TEST_PERCENT = 0.25  # 0.25% for testing
+TEST_PERCENT = 0  # 0.25% for testing
 
 ds = lance.dataset(LANCE_DIR)
 
 # Calculate the sizes for each dataset split
 total_rows = ds.count_rows()
+print(f"Source dataset #datapoints: {total_rows}")
 val_size = int(VAL_PERCENT / 100 * total_rows)
 test_size = int(TEST_PERCENT / 100 * total_rows)
 
@@ -78,19 +80,22 @@ def create_deletion_predicate(keys):
     ]
     return " OR ".join(conditions)
 
+try:
+    val_keys = extract_keys_for_indices(ds, val_indices)
+    test_keys = extract_keys_for_indices(ds, test_indices) if TEST_PERCENT > 0 else []
 
-val_keys = extract_keys_for_indices(ds, val_indices)
-test_keys = extract_keys_for_indices(ds, test_indices) if TEST_PERCENT > 0 else []
+    _split_keys = [('val', val_keys), ('test', test_keys)] if TEST_PERCENT > 0 else [('val', val_keys)]
 
-# Create and execute deletion predicates
-val_predicate = create_deletion_predicate(val_keys)
-if val_predicate:
-    ds.delete(val_predicate)
+    for dataset_label, keys in _split_keys:
+        for i in tqdm(range(0, len(keys), DELETION_CHUNK_SIZE), desc=f"Deleting the {len(keys)} {dataset_label} entries from source dataset ... "):
+            batch_keys = keys[i:i + DELETION_CHUNK_SIZE]
+            if batch_keys:
+                deletion_predicate = create_deletion_predicate(batch_keys)
+                
+                ds.delete(deletion_predicate)
 
-if TEST_PERCENT > 0:
-    test_predicate = create_deletion_predicate(test_keys)
-    if test_predicate:
-        ds.delete(test_predicate)
+except Exception as e:
+    print("Error during deletion:", e)
 
 # Print row counts and paths
 val_ds = lance.dataset(val_dataset_path)
