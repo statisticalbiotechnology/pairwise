@@ -128,7 +128,9 @@ def get_lance_data_module(
     include_test=False,
 ):
     collate_fn = partial(pad_peaks, max_peaks=max_peaks)
-    return LanceDataModule(data_root_dir, batch_size, collate_fn, seed=seed, include_test=include_test)
+    return LanceDataModule(
+        data_root_dir, batch_size, collate_fn, seed=seed, include_test=include_test
+    )
 
 
 def get_mskb_data_module(
@@ -192,10 +194,10 @@ def get_ninespecies_data_module(
 
     data_module = NinespeciesDataModule(
         (dataset_train, dataset_val, dataset_test),
-        batch_size=
-            (ds_config["batch_size"]
-            if global_args.num_workers < 0
-            else global_args.num_workers
+        batch_size=(
+            ds_config["batch_size"]
+            if global_args.batch_size < 0
+            else global_args.batch_size
         ),
         num_workers=(
             ds_config["num_workers"]

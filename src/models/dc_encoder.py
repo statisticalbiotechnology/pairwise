@@ -194,6 +194,19 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
             "num_cem_tokens": precursor_latents.shape[1],
         }
 
+    def get_layer_id(self, param_name):
+        """
+        Assign a parameter with its layer id
+        Following MAE: https://github.com/facebookresearch/mae/blob/main/util/lr_decay.py
+        """
+
+        if param_name.startswith("peak_encoder"):
+            return 0
+        elif param_name.startswith("transformer_encoder.layers."):
+            return int(param_name.split(".")[2])
+        else:
+            return self.n_layers
+
 
 def dc_encoder_base(
     use_charge=False,
@@ -217,9 +230,10 @@ def dc_encoder_base(
         use_mass=use_mass,
         use_energy=use_energy,
         peak_encoder=peak_encoder,
-        dropout=dropout
+        dropout=dropout,
     )
     return model
+
 
 def dc_encoder_larger(
     use_charge=False,
@@ -247,6 +261,7 @@ def dc_encoder_larger(
     )
     return model
 
+
 def dc_encoder_huge(
     use_charge=False,
     use_energy=False,
@@ -273,6 +288,7 @@ def dc_encoder_huge(
     )
     return model
 
+
 def casanovo_encoder(
     use_charge=False,
     use_energy=False,
@@ -296,6 +312,6 @@ def casanovo_encoder(
         use_mass=use_mass,
         use_energy=use_energy,
         peak_encoder=peak_encoder,
-        dropout=dropout
+        dropout=dropout,
     )
     return model
