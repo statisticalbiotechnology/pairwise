@@ -195,7 +195,7 @@ def get_ninespecies_data_module(
     data_module = NinespeciesDataModule(
         (dataset_train, dataset_val, dataset_test),
         batch_size=(
-            ds_config["batch_size"]
+            ds_config[global_args.downstream_task]["batch_size"]
             if global_args.batch_size < 0
             else global_args.batch_size
         ),
