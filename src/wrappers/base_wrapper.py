@@ -356,6 +356,61 @@ class BasePLWrapper(ABC, pl.LightningModule):
 
 class BaseDownstreamWrapper(BasePLWrapper):
     def __init__(
-        self, encoder, global_args, head=None, collate_fn=None, task_dict=None
+        self, encoder, decoder, global_args, head=None, collate_fn=None, task_dict=None
     ):
-        super().__init__(encoder, global_args, head, collate_fn, task_dict)
+        super().__init__(encoder, global_args, None, collate_fn, task_dict)
+        self.decoder = decoder
+        self.layer_decay = task_dict.get("layer_decay", None)
+        self.label_smoothing = self.task_dict.get("label_smoothing", 0)
+
+    def configure_optimizers(self):
+        if self.layer_decay is not None:
+            encoder_param_groups = self.create_encoder_param_groups(self.encoder)
+        else:
+            encoder_param_groups = self.encoder.parameters()
+        encoder_opt = torch.optim.AdamW(
+            encoder_param_groups,
+            lr=self.lr,
+            betas=(0.9, 0.999),
+            weight_decay=self.weight_decay,
+        )
+        opts = [encoder_opt]
+
+        opts.append(
+            torch.optim.AdamW(
+                self.decoder.parameters(),
+                lr=self.lr,
+                betas=(0.9, 0.999),
+                weight_decay=self.weight_decay,
+            ),
+        )
+        return opts
+
+    def create_encoder_param_groups(self, encoder: torch.nn.Module):
+        """Layer-wise learning rate decay following MAE:
+        https://github.com/facebookresearch/mae/blob/main/util/lr_decay.py"""
+        layer_decay = self.layer_decay if self.layer_decay is not None else 1.0
+
+        num_layers = encoder.n_layers
+        layer_scales = [layer_decay ** (num_layers - i) for i in range(num_layers)]
+
+        param_group_names = {}
+        param_groups = {}
+
+        for n, p in encoder.named_parameters():
+            if not p.requires_grad:
+                continue
+
+            layer_id = self.encoder.get_layer_id(n)
+
+            if n not in param_group_names:
+                this_scale = layer_scales[layer_id]
+
+                param_groups[n] = {
+                    "lr_scale": this_scale,
+                    "params": [],
+                }
+
+            param_groups[n]["params"].append(p)
+
+        return list(param_groups.values())

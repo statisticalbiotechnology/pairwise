@@ -51,9 +51,8 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         task_dict=None,
     ):
         super().__init__(
-            encoder, global_args, collate_fn=collate_fn, task_dict=task_dict
+            encoder, decoder, global_args, collate_fn=collate_fn, task_dict=task_dict
         )
-        self.decoder = decoder
 
         self.amod_dict = token_dicts["amod_dict"]
         self.int_to_aa = {v: k for k, v in self.amod_dict.items()}
@@ -170,7 +169,7 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
             logits,
             labels,
             reduction="none",
-            label_smoothing=self.task_dict["label_smoothing"],
+            label_smoothing=self.label_smoothing,
         )
         masked_loss = loss * padding_mask
         masked_loss = masked_loss.sum(dim=1, keepdim=True) / padding_mask.sum(
@@ -207,22 +206,6 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         deepnovo_metrics = self.deepnovo_metrics(preds_ffill, targ)
         stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
         return stats
-
-    def configure_optimizers(self):
-        return [
-            torch.optim.Adam(
-                self.encoder.parameters(),
-                lr=self.lr,
-                betas=(0.9, 0.999),
-                weight_decay=self.weight_decay,
-            ),
-            torch.optim.Adam(
-                self.decoder.parameters(),
-                lr=self.lr,
-                betas=(0.9, 0.999),
-                weight_decay=self.weight_decay,
-            ),
-        ]
 
     def _replace_eos_with_null(self, tensor: torch.Tensor):
         tensor = tensor.clone()
