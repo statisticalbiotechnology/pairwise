@@ -364,7 +364,10 @@ class BaseDownstreamWrapper(BasePLWrapper):
         self.label_smoothing = self.task_dict.get("label_smoothing", 0)
 
     def configure_optimizers(self):
-        encoder_param_groups = self.create_encoder_param_groups(self.encoder)
+        if self.layer_decay is not None:
+            encoder_param_groups = self.create_encoder_param_groups(self.encoder)
+        else:
+            encoder_param_groups = self.encoder.parameters()
         encoder_opt = torch.optim.AdamW(
             encoder_param_groups,
             lr=self.lr,
