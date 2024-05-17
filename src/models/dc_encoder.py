@@ -261,6 +261,32 @@ def dc_encoder_larger(
     )
     return model
 
+def dc_encoder_larger_deeper(
+    use_charge=False,
+    use_energy=False,
+    use_mass=False,
+    static_peak_encoder=False,
+    dropout=0,
+    **kwargs,
+):
+    d_model = 1024
+    if static_peak_encoder:
+        peak_encoder = StaticPeakEncoder(d_model)
+    else:
+        peak_encoder = True
+    model = SpectrumTransformerEncoder(
+        d_model=d_model,
+        nhead=8,
+        dim_feedforward=2048,
+        n_layers=15,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
+        peak_encoder=peak_encoder,
+        dropout=dropout,
+    )
+    return model
+
 
 def dc_encoder_huge(
     use_charge=False,
