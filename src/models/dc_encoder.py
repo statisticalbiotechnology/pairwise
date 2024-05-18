@@ -194,6 +194,31 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
             "num_cem_tokens": precursor_latents.shape[1],
         }
 
+def dc_encoder_smaller(
+    use_charge=False,
+    use_energy=False,
+    use_mass=False,
+    static_peak_encoder=False,
+    **kwargs,
+):
+    d_model = 256
+    if static_peak_encoder:
+        peak_encoder = StaticPeakEncoder(d_model)
+    else:
+        peak_encoder = True
+    model = SpectrumTransformerEncoder(
+        d_model=d_model,
+        nhead=8,
+        dim_feedforward=1024,
+        n_layers=9,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
+        peak_encoder=peak_encoder,
+        dropout=0.25
+    )
+    return model
+
 
 def dc_encoder_base(
     use_charge=False,
@@ -244,6 +269,32 @@ def dc_encoder_larger(
         peak_encoder=peak_encoder,
     )
     return model
+
+def dc_encoder_larger_deeper(
+    use_charge=False,
+    use_energy=False,
+    use_mass=False,
+    static_peak_encoder=False,
+    **kwargs,
+):
+    d_model = 1024
+    if static_peak_encoder:
+        peak_encoder = StaticPeakEncoder(d_model)
+    else:
+        peak_encoder = True
+    model = SpectrumTransformerEncoder(
+        d_model=d_model,
+        nhead=8,
+        dim_feedforward=2048,
+        n_layers=15,
+        dropout=0.1,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
+        peak_encoder=peak_encoder,
+    )
+    return model
+
 
 def dc_encoder_huge(
     use_charge=False,

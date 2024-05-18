@@ -259,6 +259,21 @@ def dc_decoder_base(amod_dict, d_model=256, **kwargs):
     )
     return model
 
+def dc_decoder_deeper(amod_dict, d_model=256, **kwargs):
+    model = PeptideTransformerDecoder(
+        amod_dict,
+        d_model,
+        nhead=8,
+        dim_feedforward=512,
+        n_layers=15,
+        dropout=0.25,
+        positional_encoder=True,
+        max_charge=9,
+        use_mass=True,
+        use_charge=True,
+    )
+    return model
+
 def dc_decoder_jl(amod_dict, d_model=256, **kwargs):
     model = PeptideTransformerDecoder(
         amod_dict,
