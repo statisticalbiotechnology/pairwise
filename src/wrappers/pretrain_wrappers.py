@@ -29,8 +29,10 @@ class TrinaryMZPLWrapper(BasePLWrapper):
             mzab,
             {
                 "mass": spectra["precursor_mz"] if self.encoder.use_mass else None,
-                "charge": spectra["precursor_charge"] if self.encoder.use_charge else None,
-                "key_padding_mask": key_padding_mask,# if self.mask_zero_tokens else None,
+                "charge": (
+                    spectra["precursor_charge"] if self.encoder.use_charge else None
+                ),
+                "key_padding_mask": key_padding_mask,  # if self.mask_zero_tokens else None,
             },
             target,
         ), batch_size
@@ -126,6 +128,7 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         )
         return opts
 
+
 class MaskedTrainingPLWrapper(BasePLWrapper):
     def __init__(
         self,
@@ -139,6 +142,9 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
         self.learned_masked_token = task_dict["learned_masked_token"]
         self.mz_to_int_ratio = task_dict["mz_to_int_ratio"]
         self.positional_encoding = task_dict["positional_encoding"]
+
+        self.mz_scale_mean = task_dict.get("mz_scale_mean", None)
+        self.mz_scale_std = task_dict.get("mz_scale_std", None)
 
         if self.predict_fourier:
             head = torch.torch.nn.TransformerEncoderLayer(
@@ -232,6 +238,29 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
         loss_mask = ~keep_mask
         return masked_input, loss_mask
 
+    def standard_scale_mz(self, mzab: torch.Tensor, peak_lengths: torch.Tensor):
+        """
+        Standard scale the mz_array_batch using precomputed mean and std for non-padding positions.
+        """
+        mz_array_batch = mzab[:, :, 0]
+        B, L = mz_array_batch.shape
+
+        mask = (
+            torch.arange(L).unsqueeze(0).repeat((B, 1)).type_as(peak_lengths)
+            < peak_lengths
+        )
+
+        valid_mz = mz_array_batch[mask]
+        scaled_mz = (valid_mz - self.mz_scale_mean) / self.mz_scale_std
+
+        scaled_mz_array_batch = mz_array_batch.clone()
+        scaled_mz_array_batch[mask] = scaled_mz
+
+        scaled_mzab = mzab.clone()
+        scaled_mzab[:, :, 0] = scaled_mz_array_batch
+
+        return scaled_mzab
+
     def _parse_batch(self, batch, Eval=False):
         mz_arr = batch["mz_array"]
         int_arr = batch["intensity_array"]
@@ -253,7 +282,7 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
         if self.predict_fourier:
             target = self.target_peak_encoder(mzab)
         else:
-            target = mzab
+            target = self.standard_scale_mz(mzab, peak_lengths)
 
         key_padding_mask = self._get_padding_mask(mzab, peak_lengths)
 
@@ -276,9 +305,9 @@ class MaskedTrainingPLWrapper(BasePLWrapper):
             fourier_features=parsed_batch["fourier_features"],
             mass=parsed_batch["mass"] if self.encoder.use_mass else None,
             charge=parsed_batch["charge"] if self.encoder.use_charge else None,
-            key_padding_mask=parsed_batch["key_padding_mask"]
-            if self.mask_zero_tokens
-            else None,
+            key_padding_mask=(
+                parsed_batch["key_padding_mask"] if self.mask_zero_tokens else None
+            ),
             return_mask=True,
             **kwargs
         )
@@ -472,7 +501,7 @@ class MaskedAutoencoderWrapper(MaskedTrainingPLWrapper):
         if self.predict_fourier:
             target = self.target_peak_encoder(mzab)
         else:
-            target = mzab
+            target = self.standard_scale_mz(mzab, peak_lengths)
 
         parsed_batch = {
             "encoder_input": {
@@ -524,9 +553,9 @@ class MaskedAutoencoderWrapper(MaskedTrainingPLWrapper):
             encoder_input["masked_mzab"],
             mass=encoder_input["mass"] if self.encoder.use_mass else None,
             charge=encoder_input["charge"] if self.encoder.use_charge else None,
-            key_padding_mask=encoder_input["key_padding_mask"]
-            if self.mask_zero_tokens
-            else None,
+            key_padding_mask=(
+                encoder_input["key_padding_mask"] if self.mask_zero_tokens else None
+            ),
             return_mask=True,
             **kwargs
         )

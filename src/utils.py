@@ -1,70 +1,173 @@
-from depthcharge.data import SpectrumDataset
+from copy import deepcopy
+
+from depthcharge.tokenizers.peptides import MskbPeptideTokenizer, PeptideTokenizer
+from data.mskb_tokenizer import MSKBTokenizer
+from data.ninespecies_data_module import NinespeciesDataModule
 import numpy as np
-from torch.utils.data.dataset import random_split
 from torch.utils.data.dataset import Subset
 import os
-from pathlib import Path
 import torch
 from functools import partial
 
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
-from lance_data_module import LanceDataModule
-from pl_callbacks import FLOPProfilerCallback, CosineAnnealLRCallback, LinearWarmupLRCallback, ExponentialDecayLRCallback
+from data.lance_data_module import LanceDataModule
+from pl_callbacks import (
+    FLOPProfilerCallback,
+    CosineAnnealLRCallback,
+    LinearWarmupLRCallback,
+    ExponentialDecayLRCallback,
+)
 
 from collate_functions import pad_peaks, pad_peptides
 
 from loader_parquet import PeptideDataset, PeptideParser
+
+RESIDUES_MSKB = {
+    "G": 57.021464,
+    "A": 71.037114,
+    "S": 87.032028,
+    "P": 97.052764,
+    "V": 99.068414,
+    "T": 101.047670,
+    "C+57.021": 160.030649,  # 103.009185 + 57.021464
+    "L": 113.084064,
+    "I": 113.084064,
+    "N": 114.042927,
+    "D": 115.026943,
+    "Q": 128.058578,
+    "K": 128.094963,
+    "E": 129.042593,
+    "M": 131.040485,
+    "H": 137.058912,
+    "F": 147.068414,
+    "R": 156.101111,
+    "Y": 163.063329,
+    "W": 186.079313,
+    # Amino acid modifications.
+    "M+15.995": 147.035400,  # Met oxidation:   131.040485 + 15.994915
+    "N+0.984": 115.026943,  # Asn deamidation: 114.042927 +  0.984016
+    "Q+0.984": 129.042594,  # Gln deamidation: 128.058578 +  0.984016
+    # N-terminal modifications.
+    "+42.011": 42.010565,  # Acetylation
+    "+43.006": 43.005814,  # Carbamylation
+    "-17.027": -17.026549,  # NH3 loss
+    "+43.006-17.027": 25.980265,  # Carbamylation and NH3 loss
+}
+
+N_TERMINAL_MSKB = [
+    "+42.011",  # Acetylation
+    "+43.006",  # Carbamylation
+    "-17.027",  # NH3 loss
+    "+43.006-17.027",  # Carbamylation and NH3 loss
+]
+
+RESIDUES_NINESPECIES = {
+    "G": 57.021464,
+    "A": 71.037114,
+    "S": 87.032028,
+    "P": 97.052764,
+    "V": 99.068414,
+    "T": 101.047670,
+    "C_+57.02": 160.030649,  # 103.009185 + 57.021464
+    "L": 113.084064,
+    "I": 113.084064,
+    "N": 114.042927,
+    "D": 115.026943,
+    "Q": 128.058578,
+    "K": 128.094963,
+    "E": 129.042593,
+    "M": 131.040485,
+    "H": 137.058912,
+    "F": 147.068414,
+    "R": 156.101111,
+    "Y": 163.063329,
+    "W": 186.079313,
+    # Amino acid modifications.
+    "M_+15.99": 147.035400,  # Met oxidation:   131.040485 + 15.994915
+    "N_+.98": 115.026943,  # Asn deamidation: 114.042927 +  0.984016
+    "Q_+.98": 129.042594,  # Gln deamidation: 128.058578 +  0.984016
+    # N-terminal modifications.
+    "_+42.011": 42.010565,  # Acetylation
+    "_+43.006": 43.005814,  # Carbamylation
+    "_-17.027": -17.026549,  # NH3 loss
+    "_+43.006-17.027": 25.980265,  # Carbamylation and NH3 loss
+}
+
+N_TERMINAL_NINESPECIES = [
+    "_+42.011",  # Acetylation
+    "_+43.006",  # Carbamylation
+    "_-17.027",  # NH3 loss
+    "_+43.006-17.027",  # Carbamylation and NH3 loss
+]
+
+
+def get_token_dicts_mskb(amod_dict, include_hidden=False):
+    amod_dict = deepcopy(amod_dict)
+    amod_dict["X"] = len(amod_dict)  # Pad token
+
+    input_dict = deepcopy(amod_dict)
+    input_dict["<SOS>"] = len(amod_dict)
+    if include_hidden:
+        input_dict["<H>"] = len(input_dict)
+
+    output_dict = deepcopy(amod_dict)
+    output_dict["<EOS>"] = len(amod_dict)
+    return {
+        "residues": RESIDUES_MSKB,
+        "amod_dict": amod_dict,
+        "input_dict": input_dict,
+        "output_dict": output_dict,
+    }
 
 
 def get_lance_data_module(
     data_root_dir,
     batch_size,
     max_peaks=300,
+    seed=0,
+    include_test=False,
 ):
     collate_fn = partial(pad_peaks, max_peaks=max_peaks)
-    return LanceDataModule(data_root_dir, batch_size, collate_fn)
+    return LanceDataModule(
+        data_root_dir, batch_size, collate_fn, seed=seed, include_test=include_test
+    )
 
 
-def get_spectrum_dataset_splits(
-    data_root_dir, splits=[0.6, 0.2, 0.2], max_peaks=300, random_seed=42, subset=0
+def get_mskb_data_module(
+    data_root_dir,
+    batch_size,
+    max_peaks=300,
+    max_length=30,
+    seed=0,
+    include_hidden=False,
 ):
-    """NOT USED ANYMORE"""
-    assert abs(sum(splits) - 1) < 1e-6
-    lance_dir = os.path.join(data_root_dir, "indexed.lance")
-    if os.path.exists(lance_dir):
-        spectrum_dataset = SpectrumDataset.from_lance(lance_dir)
-    else:
-        mgf_files = list(Path(data_root_dir).rglob("**/*.mgf"))
-        spectrum_dataset = SpectrumDataset(mgf_files, path=lance_dir)
 
-    # Calculate sizes based on the desired split ratios
-    train_size, val_size, test_size = splits
+    tokenizer = MSKBTokenizer(RESIDUES_MSKB, n_terminal=N_TERMINAL_MSKB)
+    token_dicts = get_token_dicts_mskb(tokenizer.index, include_hidden=include_hidden)
 
-    # Use random_split to create the train, validation, and test datasets
-    dataset_train, dataset_val, dataset_test = random_split(
-        spectrum_dataset,
-        [train_size, val_size, test_size],
-        generator=torch.Generator().manual_seed(random_seed),
+    collate_fn = partial(
+        pad_peptides,
+        max_peaks=max_peaks,
+        max_length=max_length,
+        null_token_idx=token_dicts["amod_dict"]["X"],
+        tokenizer=tokenizer,
+        label_name="sequence",
     )
 
-    if subset:
-        assert subset >= 0 and subset <= 1
-        dataset_train, dataset_val, dataset_test = [
-            Subset(dataset, np.arange(int(len(dataset) * subset)))
-            for dataset in [dataset_train, dataset_val, dataset_test]
-        ]
-
-    return (dataset_train, dataset_val, dataset_test), partial(
-        pad_peaks, max_peaks=max_peaks
+    return (
+        LanceDataModule(data_root_dir, batch_size, collate_fn, seed=seed),
+        token_dicts,
     )
 
 
-def prepend_relative_path(root_dir, rel_path):
-    return os.path.join
-
-
-def get_ninespecies_dataset_splits(
-    data_root_dir, ds_config, max_peaks=300, subset=0, include_hidden=False
+def get_ninespecies_data_module(
+    data_root_dir,
+    ds_config,
+    global_args,
+    max_peaks=300,
+    max_length=30,
+    subset=0,
+    include_hidden=False,
 ):
     path_dict = ds_config["paths"]
 
@@ -76,6 +179,7 @@ def get_ninespecies_dataset_splits(
 
     parser = PeptideParser(ds_config)
     dfs, token_dicts = parser.get_data(include_hidden=include_hidden)
+    token_dicts["residues"] = RESIDUES_NINESPECIES
     amod_dict = token_dicts["amod_dict"]
     dataset_train = PeptideDataset(dfs["train"], amod_dict)
     dataset_val = PeptideDataset(dfs["val"], amod_dict)
@@ -89,14 +193,33 @@ def get_ninespecies_dataset_splits(
         #]
         dataset_train = Subset(dataset_train, np.arange(int(len(dataset_train) * subset)))
 
-    return (
+    data_module = NinespeciesDataModule(
         (dataset_train, dataset_val, dataset_test),
-        partial(pad_peptides, max_peaks=max_peaks, null_token_idx=amod_dict["X"]),
-        token_dicts,
+        batch_size=(
+            ds_config[global_args.downstream_task]["batch_size"]
+            if global_args.batch_size < 0
+            else global_args.batch_size
+        ),
+        num_workers=(
+            ds_config["num_workers"]
+            if global_args.num_workers < 0
+            else global_args.num_workers
+        ),
+        collate_fn=partial(
+            pad_peptides,
+            max_peaks=max_peaks,
+            max_length=max_length,
+            null_token_idx=amod_dict["X"],
+        ),
+        pin_mem=global_args.pin_mem,
     )
 
+    return (data_module, token_dicts)
 
-def configure_callbacks(args, task_args, val_metric_name: str = "val_loss", metric_mode="min"):
+
+def configure_callbacks(
+    args, task_args, val_metric_name: str = "val_loss", metric_mode="min"
+):
     callbacks = []
     filename = f"{{epoch}}-{{{val_metric_name}:.2f}}"
     # Checkpoint callback
@@ -121,12 +244,12 @@ def configure_callbacks(args, task_args, val_metric_name: str = "val_loss", metr
             )
         ]
 
-    if task_args['lr_warmup']:
+    if task_args["lr_warmup"]:
         callbacks += [
             LinearWarmupLRCallback(
-                starting_lr=task_args['lr_start'], 
-                ending_lr=task_args['lr_end'], 
-                warmup_steps=task_args['lr_warmup_steps']
+                starting_lr=task_args["lr_start"],
+                ending_lr=task_args["lr_end"],
+                warmup_steps=task_args["lr_warmup_steps"],
             )
         ]
 

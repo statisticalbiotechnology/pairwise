@@ -1,6 +1,5 @@
 import torch
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader
 from abc import ABC, abstractmethod
 from collections import deque
 
@@ -356,42 +355,61 @@ class BasePLWrapper(ABC, pl.LightningModule):
 
 class BaseDownstreamWrapper(BasePLWrapper):
     def __init__(
-        self, encoder, global_args, datasets, head=None, collate_fn=None, task_dict=None
+        self, encoder, decoder, global_args, head=None, collate_fn=None, task_dict=None
     ):
-        super().__init__(encoder, global_args, head, collate_fn, task_dict)
-        self.datasets = datasets
+        super().__init__(encoder, global_args, None, collate_fn, task_dict)
+        self.decoder = decoder
+        self.layer_decay = task_dict.get("layer_decay", None)
+        self.label_smoothing = self.task_dict.get("label_smoothing", 0)
 
-    def train_dataloader(self):
-        return DataLoader(
-            self.datasets[0],
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_mem,
-            drop_last=True,
-            collate_fn=self.collate_fn,
-            persistent_workers=self.num_workers > 0,
-            shuffle=True,
+    def configure_optimizers(self):
+        if self.layer_decay is not None:
+            encoder_param_groups = self.create_encoder_param_groups(self.encoder)
+        else:
+            encoder_param_groups = self.encoder.parameters()
+        encoder_opt = torch.optim.AdamW(
+            encoder_param_groups,
+            lr=self.lr,
+            betas=(0.9, 0.999),
+            weight_decay=self.weight_decay,
         )
+        opts = [encoder_opt]
 
-    def val_dataloader(self):
-        return DataLoader(
-            self.datasets[1],
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_mem,
-            drop_last=True,
-            collate_fn=self.collate_fn,
-            persistent_workers=self.num_workers > 0,
+        opts.append(
+            torch.optim.AdamW(
+                self.decoder.parameters(),
+                lr=self.lr,
+                betas=(0.9, 0.999),
+                weight_decay=self.weight_decay,
+            ),
         )
+        return opts
 
-    def test_dataloader(self):
-        return DataLoader(
-            self.datasets[2],
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_mem,
-            drop_last=False,
-            collate_fn=self.collate_fn,
-            persistent_workers=self.num_workers > 0,
-        )
+    def create_encoder_param_groups(self, encoder: torch.nn.Module):
+        """Layer-wise learning rate decay following MAE:
+        https://github.com/facebookresearch/mae/blob/main/util/lr_decay.py"""
+        layer_decay = self.layer_decay if self.layer_decay is not None else 1.0
 
+        num_layers = encoder.n_layers
+        layer_scales = [layer_decay ** (num_layers - i) for i in range(num_layers)]
+
+        param_group_names = {}
+        param_groups = {}
+
+        for n, p in encoder.named_parameters():
+            if not p.requires_grad:
+                continue
+
+            layer_id = self.encoder.get_layer_id(n)
+
+            if n not in param_group_names:
+                this_scale = layer_scales[layer_id]
+
+                param_groups[n] = {
+                    "lr_scale": this_scale,
+                    "params": [],
+                }
+
+            param_groups[n]["params"].append(p)
+
+        return list(param_groups.values())

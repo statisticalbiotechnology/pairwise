@@ -1,9 +1,13 @@
 from functools import partial
 import pytorch_lightning as pl
 from pathlib import Path
-from lance_data_module import LanceDataModule
+from data.lance_data_module import LanceDataModule
+
+# from data.lance_data_module import LanceDataModule
 import torch
-from collate_functions import pad_peaks
+
+# from collate_functions import pad_peaks, pad_peptides
+from utils import get_lance_data_module
 
 
 # Define a simple Lightning Module for testing purposes
@@ -25,10 +29,14 @@ class TestModel(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=0.001)
 
 
-DATA_DIR = Path("/Users/alfred/Datasets/instanovo_splits_subset")
+# DATA_DIR = Path("/Users/alfred/Datasets/instanovo_splits_subset")
+DATA_DIR = Path("/Users/alfred/Datasets/MassIVE_KB")
 
-collate_fn = partial(pad_peaks, max_peaks=100)
-data_module = LanceDataModule(data_dir=DATA_DIR, batch_size=100, collate_fn=collate_fn)
+data_module = get_lance_data_module(
+    DATA_DIR, batch_size=100, max_peaks=100, mode="supervised"
+)
+# collate_fn = partial(pad_peaks, max_peaks=100)
+# data_module = LanceDataModule(data_dir=DATA_DIR, batch_size=100, collate_fn=collate_fn)
 
 
 # Instantiate the test model
@@ -36,7 +44,7 @@ model = TestModel()
 
 # Create a PyTorch Lightning Trainer
 trainer = pl.Trainer(
-    max_epochs=1, accelerator="cpu", devices=3, num_nodes=1, logger=None
+    max_epochs=1, accelerator="cpu", devices=1, num_nodes=1, logger=False
 )  # Adjust the trainer parameters as needed
 
 # Run training

@@ -1,5 +1,6 @@
 num_workers: 16
 
+dataset_name: ninespecies
 task: denovo
 top_pks: 100
 pep_length: [0, 30]
@@ -24,7 +25,7 @@ denovo_tf:
   lr_start: 0.0
   lr_end: 5.0e-4
   lr_warmup_steps: 100000
-  lr_decay: 1
+  lr_decay: 0
   lr_decay_start_step: 100000
   lr_decay_end_step: 600000
   lr_decay_rate: 0.99999
