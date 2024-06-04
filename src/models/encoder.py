@@ -1,4 +1,4 @@
-
+import numpy as np
 import models.model_parts as mp
 import models.model_parts_pw as pw
 import torch as th
@@ -11,7 +11,11 @@ def init_encoder_weights(module):
         if module.first.bias is not None: 
             module.first.bias = I.zeros_(module.first.bias)
     if isinstance(module, mp.SelfAttention):
+        #limit = 0.5*np.sqrt(6 / (module.indim*module.d + module.indim*module.h))
+        #module.qkv.weight = I.uniform_(module.qkv.weight, -limit, limit)
         module.qkv.weight = I.normal_(module.qkv.weight, 0.0, (2/3)*module.indim**-0.5)
+        #limit = 0.5*np.sqrt(6 / (module.h*module.d + module.h*module.out_units))
+        #module.Wo.weight = I.uniform_(module.Wo.weight, -limit, limit)
         module.Wo.weight = I.normal_(module.Wo.weight, 0.0, (1/3)*(module.h*module.d)**-0.5)
         if hasattr(module, 'Wb'):
             module.Wb.weight = I.zeros_(module.Wb.weight)
@@ -23,7 +27,8 @@ def init_encoder_weights(module):
             module.Wg.weight = I.zeros_(module.Wg.weight)
             module.Wg.bias = I.constant_(module.Wg.bias, 1.) # gate mostly open ~ 0.73
     elif isinstance(module, mp.FFN):
-        module.W1.weight = I.xavier_uniform_(module.W1.weight)
+        #module.W1.weight = I.xavier_uniform_(module.W1.weight)
+        module.W1.weight = I.normal_(module.W1.weight, 0.0, (2/3)*(module.indim)**-0.5)
         module.W1.bias = I.zeros_(module.W1.bias)
         module.W2.weight = I.normal_(module.W2.weight, 0.0, (1/3)*(module.indim*module.mult)**-0.5)
         #module.W2.weight = I.xavier_uniform_(module.W2.weight)
@@ -165,11 +170,11 @@ class Encoder(nn.Module):
             ) 
             for _ in range(depth)
         ])
-        self.main_proj = nn.Identity()#L.Dense(embedding_units, kernel_initializer=I.Zeros())
+        self.main_proj = nn.Identity()#nn.Linear(running_units, running_units)
         
         # Normalization type
         self.norm = mp.get_norm_type(norm_type)
-        
+
         # Recycling embedder
         self.recyc = nn.Sequential(
             self.norm(running_units) if prenorm else nn.Identity(),
@@ -344,7 +349,7 @@ class Encoder(nn.Module):
                 return_mask=return_mask,
                 return_full=return_full
             )
-        
+
         return output
 
 def encoder_base_arch(
@@ -355,9 +360,9 @@ def encoder_base_arch(
 ):
     model = Encoder(
         norm_type='layer',
-        mz_units=512,
-        ab_units=512,
-        subdivide=False,
+        mz_units=1024,
+        ab_units=256,
+        subdivide=True,
         running_units=512,
         att_d=64,
         att_h=8,

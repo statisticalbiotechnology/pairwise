@@ -1,8 +1,8 @@
 data_root_dir: /proj/bedrock/datasets/InstaNovo_SPLITS_full
 output_dir: /proj/bedrock/checkpoints/checkpoint
 log_dir: /proj/bedrock/logs/log
-wandb_project: SubsetPretrain # ProteomeTools | {choose your exp.}
-wandb_entity: kall # kall | joellapin
+wandb_project: debug # ProteomeTools | {choose your exp.}
+wandb_entity: joellapin # kall | joellapin
 log_wandb: 1
 num_workers: 16
 matmul_precision: high
@@ -14,8 +14,8 @@ save_last: 0
 every_n_epochs: 0
 
 # Models
-encoder_model: dc_encoder_base # encoder_base_arch | dc_encoder_base | encoder_pairwise
-decoder_model: dc_decoder_base # decoder_greedy_base | dc_decoder_base
+encoder_model: encoder_base_arch # encoder_base_arch | dc_encoder_base | encoder_pairwise
+decoder_model: decoder_greedy_base # decoder_greedy_base | dc_decoder_base
 
 #### Training hyperparameters
 batch_size: 100
