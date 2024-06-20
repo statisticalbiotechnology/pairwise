@@ -1,3 +1,4 @@
+from copy import deepcopy
 import torch
 from data_augmentation import RandomWindowAugmentation
 from wrappers.base_wrapper import BasePLWrapper
@@ -656,9 +657,10 @@ class DinoTrainingPLWrapper(BasePLWrapper):
             encoder,
             DINOHead(**_head_kwargs),
         )
+        self.encoder = self.student.backbone
 
         self.teacher = MultiCropWrapper(
-            encoder,
+            deepcopy(encoder),
             DINOHead(**_head_kwargs),
         )
 
@@ -679,6 +681,7 @@ class DinoTrainingPLWrapper(BasePLWrapper):
         )
 
         self.teacher_momentum = task_dict["teacher_momentum"]
+        self.rand_window_size = task_dict["rand_window_size"]
 
     def training_step(self, batch, batch_idx):
         result = super().training_step(batch, batch_idx)
@@ -698,7 +701,7 @@ class DinoTrainingPLWrapper(BasePLWrapper):
         int_arr = spectra["intensity_array"]
         mzab = torch.stack([mz_arr, int_arr], dim=-1)
         lengths = spectra["peak_lengths"]
-        crops = self.aug(mzab, lengths)
+        crops = self.aug(mzab, lengths, self.rand_window_size)
         batch_size = mzab.shape[0]
         # TODO/FIXME: add support to include c/e/m tokens
         return crops, batch_size
