@@ -80,13 +80,21 @@ class RandomWindowAugmentation:
             * lengths
         ).long()
 
-    def __call__(self, sequences, lengths):
+    def _get_window_sizes(self, lengths, local=True, random=False):
+        if random:
+            return self._random_window_size(lengths, local)
+        else:
+            scale = self.local_high if local else self.global_high
+            return (lengths * scale).long()
+
+    def __call__(self, sequences, lengths, rand_size=False):
         """
         Perform data augmentation by generating global and local crops.
 
         Args:
             sequences (torch.Tensor): Input sequences of shape (batch_size, seq_len, embed_dim).
             lengths (torch.Tensor): Lengths of sequences in the batch.
+            rand_size (bool): Whether to use random window sizes or fixed maximum window sizes.
 
         Returns:
             list: List of tuples containing cropped sequences and corresponding padding masks.
@@ -96,13 +104,15 @@ class RandomWindowAugmentation:
 
         # Global crops
         for _ in range(self.num_global_crops):
-            global_crop_sizes = self._random_window_size(lengths, local=False)
-            crops.append(self._random_window(sequences, lengths, global_crop_sizes))
+            global_sizes = self._get_window_sizes(
+                lengths, local=False, random=rand_size
+            )
+            crops.append(self._random_window(sequences, lengths, global_sizes))
 
         # Local crops
         for _ in range(self.num_local_crops):
-            local_crop_sizes = self._random_window_size(lengths)
-            crops.append(self._random_window(sequences, lengths, local_crop_sizes))
+            local_sizes = self._get_window_sizes(lengths, random=rand_size)
+            crops.append(self._random_window(sequences, lengths, local_sizes))
 
         return crops
 
