@@ -193,11 +193,19 @@ def get_args_parser(conf_parser):
         default=0.999,
         help="Number multiplied to learning rate each step",
     )
+
     parser.add_argument(
         "--scale_lr_by_batchsize",
         type=int,
         default=0,
         help="Bool (0/1): Turns on MAE-style lr scaling which multiplies lr by (eff_batch_size / 256)",
+    )
+
+    parser.add_argument(
+        "--cls_token",
+        type=int,
+        default=0,
+        help="Bool (0/1): Adds a learned CLS token to the input of the encoders",
     )
 
     parser.add_argument(
@@ -359,6 +367,7 @@ def sanity_checks(args):
     args.profile_flops = bool(args.profile_flops)
     args.pretrain = bool(args.pretrain)
     args.watch_model = bool(args.watch_model)
+    args.cls_token = bool(args.cls_token)
 
 
 def uniquify_path(path):

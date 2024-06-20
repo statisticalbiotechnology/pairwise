@@ -20,6 +20,7 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
         use_charge=False,
         use_energy=False,
         use_mass=False,
+        cls_token=False,
     ) -> None:
         super().__init__(
             d_model, nhead, dim_feedforward, n_layers, dropout, peak_encoder
@@ -37,6 +38,12 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
         self.use_charge = use_charge
         self.use_energy = use_energy
         self.use_mass = use_mass
+
+        if cls_token:
+            self.cls_token = torch.nn.Parameter(torch.zeros(1, 1, d_model))
+            torch.nn.init.trunc_normal_(self.cls_token, std=0.02)
+        else:
+            self.cls_token = None
 
     def precursor_hook(
         self,
@@ -172,26 +179,29 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
                 **kwargs,
             )
 
-        peaks = torch.cat([precursor_latents, peaks], dim=1)
+        num_cem_tokens = precursor_latents.shape[1]
+        if self.cls_token is not None:
+            cls_tokens = self.cls_token.expand(n_batch, -1, -1)
+            peaks = torch.cat([cls_tokens, precursor_latents, peaks], dim=1)
+            num_cem_tokens += 1
+        else:
+            peaks = torch.cat([precursor_latents, peaks], dim=1)
 
         if key_padding_mask is not None:
-            # Additional mask entries (sequence dim) due to charge/energy/mass
-            cem_mask_pos = torch.tensor(
-                [[False] * precursor_latents.shape[1]] * n_batch
-            ).type_as(key_padding_mask)
+            # Additional mask entries (sequence dim) due to charge/energy/mass, and cls_token
+            cem_mask_pos = torch.tensor([[False] * num_cem_tokens] * n_batch).type_as(
+                key_padding_mask
+            )
             mask = torch.cat([cem_mask_pos, key_padding_mask], dim=1)
         else:
             mask = None
 
         encoder_out = self.transformer_encoder(peaks, src_key_padding_mask=mask)
 
-        if torch.any(encoder_out.isnan()):
-            bp = 0
-
         return {
             "emb": encoder_out,
             "mask": mask,
-            "num_cem_tokens": precursor_latents.shape[1],
+            "num_cem_tokens": num_cem_tokens,
         }
 
     def get_layer_id(self, param_name):
@@ -214,6 +224,7 @@ def dc_encoder_base(
     use_mass=False,
     static_peak_encoder=False,
     dropout=0,
+    cls_token=False,
     **kwargs,
 ):
     d_model = 512
@@ -231,6 +242,36 @@ def dc_encoder_base(
         use_energy=use_energy,
         peak_encoder=peak_encoder,
         dropout=dropout,
+        cls_token=cls_token,
+    )
+    return model
+
+
+def dc_encoder_tiny(
+    use_charge=False,
+    use_energy=False,
+    use_mass=False,
+    static_peak_encoder=False,
+    dropout=0,
+    cls_token=False,
+    **kwargs,
+):
+    d_model = 64
+    if static_peak_encoder:
+        peak_encoder = StaticPeakEncoder(d_model)
+    else:
+        peak_encoder = True
+    model = SpectrumTransformerEncoder(
+        d_model=d_model,
+        nhead=8,
+        dim_feedforward=256,
+        n_layers=2,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
+        peak_encoder=peak_encoder,
+        dropout=dropout,
+        cls_token=cls_token,
     )
     return model
 
@@ -241,6 +282,7 @@ def dc_encoder_larger(
     use_mass=False,
     static_peak_encoder=False,
     dropout=0,
+    cls_token=False,
     **kwargs,
 ):
     d_model = 1024
@@ -258,8 +300,10 @@ def dc_encoder_larger(
         use_energy=use_energy,
         peak_encoder=peak_encoder,
         dropout=dropout,
+        cls_token=cls_token,
     )
     return model
+
 
 def dc_encoder_larger_deeper(
     use_charge=False,
@@ -267,6 +311,7 @@ def dc_encoder_larger_deeper(
     use_mass=False,
     static_peak_encoder=False,
     dropout=0,
+    cls_token=False,
     **kwargs,
 ):
     d_model = 1024
@@ -284,6 +329,7 @@ def dc_encoder_larger_deeper(
         use_energy=use_energy,
         peak_encoder=peak_encoder,
         dropout=dropout,
+        cls_token=cls_token,
     )
     return model
 
@@ -294,6 +340,7 @@ def dc_encoder_huge(
     use_mass=False,
     static_peak_encoder=False,
     dropout=0,
+    cls_token=False,
     **kwargs,
 ):
     d_model = 2048
@@ -311,6 +358,7 @@ def dc_encoder_huge(
         use_energy=use_energy,
         peak_encoder=peak_encoder,
         dropout=dropout,
+        cls_token=cls_token,
     )
     return model
 
@@ -321,6 +369,7 @@ def casanovo_encoder(
     use_mass=False,
     static_peak_encoder=False,
     dropout=0,
+    cls_token=False,
     **kwargs,
 ):
     dropout = 0 if dropout is None else dropout
@@ -339,5 +388,6 @@ def casanovo_encoder(
         use_energy=use_energy,
         peak_encoder=peak_encoder,
         dropout=dropout,
+        cls_token=cls_token,
     )
     return model
