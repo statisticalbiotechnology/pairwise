@@ -13,7 +13,7 @@ trinary_mz:
   epochs: 1
   subset: 0
   num_workers: 0
-  dropout: 0
+  dropout: 0.25
 
 masked:
   # Masked trainer specific hparams

@@ -21,7 +21,6 @@ def init_decoder_weights(module):
         if module.first.bias is not None:
             module.first.bias = I.zeros_(module.first.bias)
     if isinstance(module, (mp.SelfAttention, mp.CrossAttention)):
-<<<<<<< HEAD
         #limit = np.sqrt(6 / (module.h*module.d + module.h*module.out_units))
         #module.Wo.weight = I.uniform_(module.Wo.weight, -limit, limit)
         module.Wo.weight = I.normal_(module.Wo.weight, 0.0, (1/3)*(module.h*module.d)**-0.5)
