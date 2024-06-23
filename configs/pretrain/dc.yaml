@@ -67,3 +67,48 @@ masked_ae:
   # Annealing
   lr_warmup: 0
   lr_decay: 0
+
+
+dino:
+  # Data augmentation
+  rand_window_size: False
+  global_crops_scale:
+    - 0.5
+    - 0.9
+  local_crops_scale:
+    - 0.3
+    - 0.5
+  num_global_crops: 2
+  num_local_crops: 5
+
+  # MLP hparams
+  mlp_out_dim: 4096
+  mlp_use_bn: False
+  mlp_norm_last_layer: True
+  mlp_nlayers: 3
+  mlp_hidden_dim: 2048
+  mlp_bottleneck_dim: 256
+
+  # Training hparams Dino
+  warmup_teacher_temp: 0.04 # Initial value
+  teacher_temp: 0.04 # Final value after warmup
+  warmup_teacher_temp_epochs: 0 
+  student_temp: 0.1
+  center_momentum: 0.9
+  teacher_momentum: 0.9995 # Was 0.996
+  pooling: "cls" # "cls" or "average"
+
+  # Training hparams General
+  anneal_lr: 1
+  anneal_per_step: True
+  warmup_duration: 10000
+  lr_start: 0
+  blr: 4.0e-5
+  lr_end: 4.0e-6
+  batch_size: 100
+  ref_batch_size: 100
+  weight_decay: 1.0e-5
+  epochs: 1
+  subset: 0
+  num_workers: 0
+  dropout: 0

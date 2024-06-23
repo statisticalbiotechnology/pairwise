@@ -20,9 +20,14 @@ denovo_tf:
   # DeNovoTeacherForcing specific hparams
   conf_threshold: 0
   # Training hparams
+  anneal_lr: False
+  anneal_per_step: True
+  warmup_duration: 10000
+  lr_start: 0
+  blr: 1.0e-4
+  lr_end: 1.0e-6
   batch_size: 100
   ref_batch_size: 100
-  blr: 1.0e-4
   weight_decay: 0
   epochs: 15
   subset: 0
