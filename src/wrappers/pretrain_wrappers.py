@@ -675,7 +675,7 @@ class DinoTrainingPLWrapper(BasePLWrapper):
             warmup_teacher_temp=task_dict["warmup_teacher_temp"],
             teacher_temp=task_dict["teacher_temp"],
             warmup_teacher_temp_epochs=task_dict["warmup_teacher_temp_epochs"],
-            nepochs=global_args.epochs,
+            nepochs=task_dict["epochs"],
             student_temp=task_dict["student_temp"],
             center_momentum=task_dict["center_momentum"],
         )
