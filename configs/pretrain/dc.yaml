@@ -47,6 +47,10 @@ masked_ae:
   mz_to_int_ratio: 0.67
   mask_ratio: 0.75
 
+  # Scaling for regression target (non-fourier target)
+  mz_scale_mean: 448.74
+  mz_scale_std: 223.25
+
   # Decoder architecture hparams
   decoder_running_units: 256
   decoder_nhead: 8
