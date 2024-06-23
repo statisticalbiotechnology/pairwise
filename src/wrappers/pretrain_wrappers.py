@@ -713,11 +713,15 @@ class DinoTrainingPLWrapper(BasePLWrapper):
         return student_out, teacher_out
 
     def _get_losses(self, student_out, teacher_out):
-        return self.dino_loss(
+        loss = self.dino_loss(
             student_out,
             teacher_out,
             epoch=self.trainer.current_epoch,  # TODO/FIXME: probably change anneal by step instead
         )
+        if not torch.all(torch.isfinite(loss)):
+            print("Loss is NaN")
+            raise SystemExit(1)
+        return loss
 
     def _get_train_stats(self, returns, parsed_batch):
         student_out, teacher_out = returns
