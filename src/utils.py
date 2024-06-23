@@ -235,31 +235,17 @@ def configure_callbacks(
             )
         ]
 
-    if args.anneal_lr:
+    if task_args["anneal_lr"]:
         # Cosine annealing LR with warmup callback
         callbacks += [
             CosineAnnealLRCallback(
-                lr=args.lr, min_lr=args.min_lr, warmup_epochs=args.warmup_epochs
+                lr_start=task_args["lr_start"],
+                blr=task_args["blr"],
+                lr_end=task_args["lr_end"],
+                warmup_duration=task_args["warmup_duration"],
+                anneal_per_step=task_args["anneal_per_step"],
             )
         ]
-
-    if task_args["lr_warmup"]:
-        callbacks += [
-            LinearWarmupLRCallback(
-                starting_lr=task_args["lr_start"],
-                ending_lr=task_args["lr_end"],
-                warmup_steps=task_args["lr_warmup_steps"],
-            )
-        ]
-
-    # if task_args['lr_decay']:
-    #     callbacks += [
-    #         ExponentialDecayLRCallback(
-    #             starting_step=task_args['lr_decay_start_step'],
-    #             ending_step=task_args['lr_decay_end_step'],
-    #             decay=task_args['lr_decay_rate']
-    #         )
-    #     ]
 
     # measure FLOPs on the first train batch
     if args.profile_flops:
