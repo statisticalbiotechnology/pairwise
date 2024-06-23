@@ -190,7 +190,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             for key, val in train_stats.items()
         }
         self.log_dict(
-            {**train_stats},
+            {**train_stats, "lr": self.lr},
             on_epoch=True,
             on_step=True,
             batch_size=batch_size,

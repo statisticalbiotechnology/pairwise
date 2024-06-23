@@ -105,14 +105,14 @@ dino:
   # Training hparams General
   anneal_lr: 1
   anneal_per_step: True
-  warmup_duration: 10000
+  warmup_duration: 100000
   lr_start: 0
-  blr: 4.0e-5
-  lr_end: 4.0e-6
-  batch_size: 100
-  ref_batch_size: 100
+  blr: 1.0e-5
+  lr_end: 1.0e-7
+  batch_size: 32
+  ref_batch_size: 256
   weight_decay: 1.0e-5
-  epochs: 1
+  epochs: 2
   subset: 0
   num_workers: 0
   dropout: 0
