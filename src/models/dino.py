@@ -10,7 +10,7 @@ import math
 import warnings
 import torch
 import torch.nn.functional as F
-
+import torch.distributed as dist
 
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
@@ -167,8 +167,8 @@ class DINOLoss(nn.Module):
         Update center used for teacher output.
         """
         batch_center = torch.sum(teacher_output, dim=0, keepdim=True)
-        # dist.all_reduce(batch_center)
-        batch_center = batch_center / (len(teacher_output))  # * dist.get_world_size()
+        dist.all_reduce(batch_center)
+        batch_center = batch_center / (len(teacher_output) * dist.get_world_size())
 
         # ema update
         self.center = self.center * self.center_momentum + batch_center * (
