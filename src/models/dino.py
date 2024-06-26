@@ -12,6 +12,7 @@ import torch
 import torch.nn.functional as F
 import torch.distributed as dist
 
+
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
@@ -167,8 +168,12 @@ class DINOLoss(nn.Module):
         Update center used for teacher output.
         """
         batch_center = torch.sum(teacher_output, dim=0, keepdim=True)
-        dist.all_reduce(batch_center)
-        batch_center = batch_center / (len(teacher_output) * dist.get_world_size())
+        if dist.is_initialized():
+            dist.all_reduce(batch_center)
+            world_size = dist.get_world_size()
+        else:
+            world_size = 1
+        batch_center = batch_center / (len(teacher_output) * world_size)
 
         # ema update
         self.center = self.center * self.center_momentum + batch_center * (
@@ -238,7 +243,12 @@ class MultiCropWrapper(nn.Module):
             if self.pooling == "cls":
                 embed = embeds[:, 0, :]  # shape (batch_size * num_crops, embed_dim)
             elif self.pooling == "average":
-                embed = embeds.mean(dim=1)  # shape (batch_size * num_crops, embed_dim)
+                embeds = embeds[:, _out["num_cem_tokens"] :, :]
+                non_pad = ~padding_masks
+                embeds = non_pad.unsqueeze(-1) * embeds
+                embed = embeds.sum(dim=1) / non_pad.sum(
+                    dim=-1, keepdim=True
+                )  # shape (batch_size * num_crops, embed_dim)
             else:
                 raise ValueError("Incorrect pooling type")
 

@@ -656,12 +656,14 @@ class DinoTrainingPLWrapper(BasePLWrapper):
         self.student = MultiCropWrapper(
             encoder,
             DINOHead(**_head_kwargs),
+            pooling=task_dict["pooling"],
         )
         self.encoder = self.student.backbone
 
         self.teacher = MultiCropWrapper(
             deepcopy(encoder),
             DINOHead(**_head_kwargs),
+            pooling=task_dict["pooling"],
         )
 
         self.teacher.load_state_dict(self.student.state_dict())
