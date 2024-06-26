@@ -210,7 +210,7 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
         Following MAE: https://github.com/facebookresearch/mae/blob/main/util/lr_decay.py
         """
 
-        if param_name.startswith("peak_encoder"):
+        if param_name.startswith("peak_encoder") or param_name.startswith("cls_token"):
             return 0
         elif param_name.startswith("transformer_encoder.layers."):
             return int(param_name.split(".")[2])

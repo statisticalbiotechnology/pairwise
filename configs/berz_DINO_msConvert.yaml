@@ -24,6 +24,6 @@ mask_ratio: 0.75
 
 # De novo
 decoder_model: dc_decoder_base
-downstream_config: configs/downstream/dc.yaml
+downstream_config: configs/downstream/dc_dino.yaml
 downstream_task: denovo_tf
 downstream_root_dir: /proj/bedrock/datasets/9_species_xy

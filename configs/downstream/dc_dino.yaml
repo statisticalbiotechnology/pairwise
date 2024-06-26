@@ -1,0 +1,51 @@
+num_workers: 16
+
+dataset_name: ninespecies
+task: denovo
+top_pks: 100
+pep_length: [0, 30]
+charge: [0, 10]
+add_mass: True
+
+paths:
+  train:
+    - train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet
+    - train-00000-of-00002-ca1fbc3de7c99259.parquet
+  val: 
+    - validation-00000-of-00001-b84568f5bf3ba95d.parquet
+  test: 
+    - test-00000-of-00001-15be7bb3864037e7.parquet
+
+denovo_tf:
+  decoder_use_cls: True
+  layer_decay: 0.75
+  # DeNovoTeacherForcing specific hparams
+  conf_threshold: 0
+  # Training hparams
+  anneal_lr: False
+  anneal_per_step: True
+  warmup_duration: 10000
+  lr_start: 0
+  blr: 1.0e-4
+  lr_end: 1.0e-6
+  batch_size: 100
+  ref_batch_size: 100
+  weight_decay: 0
+  epochs: 30
+  subset: 0
+  num_workers: 16
+  decoder_dropout: 0.1
+  label_smoothing: 0.0
+
+denovo_random:
+  # DeNovoTeacherRandom specific hparams
+  conf_threshold: 0
+  # Training hparams
+  batch_size: 100
+  ref_batch_size: 100
+  blr: 1.0e-4
+  weight_decay: 0
+  epochs: 30
+  subset: 0
+  num_workers: 16
+  decoder_dropout: 0.1

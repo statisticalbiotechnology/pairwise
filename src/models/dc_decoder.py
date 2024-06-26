@@ -71,6 +71,7 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
         self,
         input_intseq: torch.Tensor,
         encoder_out: dict[torch.Tensor],
+        cls_token: torch.Tensor | None = None,
         mass: torch.Tensor | None = None,
         charge: torch.Tensor | None = None,
         peptide_lengths: torch.Tensor | None = None,
@@ -80,7 +81,7 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
 
         Parameters
         ----------
-        intseq : list of str, torch.Tensor, or None
+        input_intseq : torch.Tensor
             The partial integer peptide sequences for which to predict the next
             amino acid.
         encoder_out: dict[torch.Tensor]
@@ -89,27 +90,27 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
                 ``SpectrumEncoder``.
             "mask" : torch.Tensor of shape (batch_size, n_peaks)
                 The mask that indicates which elements of ``memory`` are padding.
-        mass: float torch.Tensor of size (batch_size, 1)
-            precursor mass
-        charge: int torch.Tensor of size (batch_size, 1)
-            precursor charge
-        peptide_lengths: int torch.Tensor of size (batch_size, 1)
-            length of the ground-truth peptides. used during training for key_padding_mask
+        cls_token: torch.Tensor of shape (batch_size, 1, d_model) or None
+            The CLS token spectrum embeddings representations from a ``TransformerEncoder``, such as a
+            ``SpectrumEncoder``.
+        mass: torch.Tensor of shape (batch_size, 1) or None
+            Precursor mass.
+        charge: torch.Tensor of shape (batch_size, 1) or None
+            Precursor charge.
+        peptide_lengths: torch.Tensor of shape (batch_size, 1) or None
+            Length of the ground-truth peptides. Used during training for key_padding_mask.
         causal: bool
-            if True, apply a causal mask to the sequence (needed for teacher forcing)
+            If True, apply a causal mask to the sequence (needed for teacher forcing).
 
         Returns
         -------
-        output_dict: dict
-            "logits" : torch.Tensor of size (batch_size, len_sequence, n_amino_acids)
+        dict
+            "logits" : torch.Tensor of shape (batch_size, len_sequence, n_amino_acids)
                 The raw output for the final linear layer. These can be Softmax
                 transformed to yield the probability of each amino acid for the
                 prediction.
-            "target_inds" : list[torch.Tensor, torch.Tensor]
-                list of generated target indices of type torch.Tensor of size (batch_size,)
-                for each entry in the batch, generates a random index for the training task.
-            "intseq": returns the input intseq for compatibility
-
+            "padding_mask" : torch.Tensor or None
+                The padding mask for the output logits.
         """
         memory = encoder_out["emb"]
         memory_key_padding_mask = encoder_out["mask"]
@@ -144,8 +145,12 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
 
         tgt = self.positional_encoder(tgt)
 
+        # Prepend CLS token to decoder input if provided
+        if cls_token is not None:
+            tgt = torch.cat([cls_token, tgt], dim=1)
+            num_precursor_tokens += cls_token.shape[1]
+
         # Causal mask
-        # tgt_mask = generate_tgt_mask(tgt.shape[1]).to(self.device)
         if causal:
             tgt_mask = generate_causal_tgt_mask(tgt.shape[1]).to(self.device)
         else:
@@ -166,8 +171,6 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
         logits = logits[:, num_precursor_tokens:, :]
 
         # Create padding mask for the loss
-        # True == pad_token
-        # False == normal token (incl start)
         if peptide_lengths is None:
             padding_mask = None
         else:
@@ -195,6 +198,7 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
     def predict_sequence(
         self,
         enc_out: dict[torch.Tensor],
+        cls_token: torch.Tensor | None = None,
         mass: torch.Tensor | None = None,
         charge: torch.Tensor | None = None,
         causal: bool = True,
@@ -213,7 +217,12 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
         # Gather predictions (fixed length loop)
         for i in range(0, self.max_seq_len):
             dec_out = self.forward(
-                input_intseq, enc_out, mass=mass, charge=charge, causal=causal
+                input_intseq,
+                enc_out,
+                cls_token=cls_token,
+                mass=mass,
+                charge=charge,
+                causal=causal,
             )
             cur_logits = dec_out["logits"]
 
@@ -254,10 +263,11 @@ def dc_decoder_base(amod_dict, d_model=256, dropout=0, **kwargs):
         positional_encoder=True,
         max_charge=9,
         use_mass=True,
-        use_charge=True, 
+        use_charge=True,
         dropout=dropout,
     )
     return model
+
 
 def casanovo_decoder(amod_dict, d_model=256, dropout=0, **kwargs):
     model = PeptideTransformerDecoder(
