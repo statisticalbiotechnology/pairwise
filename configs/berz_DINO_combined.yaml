@@ -23,6 +23,7 @@ pretraining_task: dino
 mask_ratio: 0.75
 
 # De novo
+cross_attend: 0
 decoder_model: dc_decoder_base
 downstream_config: configs/downstream/dc_dino.yaml
 downstream_task: denovo_tf

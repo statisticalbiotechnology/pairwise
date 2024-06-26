@@ -209,6 +209,13 @@ def get_args_parser(conf_parser):
     )
 
     parser.add_argument(
+        "--cross_attend",
+        type=int,
+        default=1,
+        help="Bool (0/1): 1 = Decoder cross-attends encoder output",
+    )
+
+    parser.add_argument(
         "--warmup_epochs", type=int, default=40, metavar="N", help="epochs to warmup LR"
     )
 
@@ -368,6 +375,7 @@ def sanity_checks(args):
     args.pretrain = bool(args.pretrain)
     args.watch_model = bool(args.watch_model)
     args.cls_token = bool(args.cls_token)
+    args.cross_attend = bool(args.cross_attend)
 
 
 def uniquify_path(path):

@@ -265,6 +265,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
             dropout=config["downstream_config"][global_args.downstream_task][
                 "decoder_dropout"
             ],
+            cross_attend=global_args.cross_attend,
         )
 
         pl_downstream = DOWNSTREAM_TASK_DICT[global_args.downstream_task](

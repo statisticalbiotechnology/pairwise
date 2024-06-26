@@ -33,6 +33,7 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
         use_mass: bool = True,
         use_charge: bool = True,
         max_seq_len: int = 31,
+        cross_attend: bool = True,
     ) -> None:
         self.amod_dict = token_dicts["amod_dict"]
         self.input_dict = token_dicts["input_dict"]
@@ -55,10 +56,25 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
             max_charge,
         )
 
+        if not cross_attend:
+            del self.transformer_decoder
+            layer = torch.nn.TransformerEncoderLayer(
+                d_model=d_model,
+                nhead=nhead,
+                dim_feedforward=dim_feedforward,
+                batch_first=True,
+                dropout=dropout,
+            )
+
+            self.transformer_decoder = torch.nn.TransformerEncoder(
+                layer, num_layers=n_layers
+            )
+
         self.d_model = d_model
         self.use_mass = use_mass
         self.use_charge = use_charge
         self.max_seq_len = max_seq_len
+        self.cross_attend = cross_attend
 
         # Override the final projection with
         # the correct num_classes
@@ -156,15 +172,27 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
         else:
             tgt_mask = None
 
-        # Forward
-        dec_embeds = self.transformer_decoder.forward(
-            tgt=tgt,
-            memory=memory,
-            tgt_mask=tgt_mask,
-            # tgt_is_causal=True,
-            tgt_key_padding_mask=None,
-            memory_key_padding_mask=memory_key_padding_mask,
-        )
+        if self.cross_attend:
+            # Forward
+            dec_embeds = self.transformer_decoder.forward(
+                tgt=tgt,
+                memory=memory,
+                tgt_mask=tgt_mask,
+                # tgt_is_causal=True,
+                tgt_key_padding_mask=None,
+                memory_key_padding_mask=memory_key_padding_mask,
+            )
+        else:
+            # Forward without cross attention
+            assert (
+                cls_token is not None
+            ), "Can only forward without cross-attention if cls_token is given"
+            dec_embeds = self.transformer_decoder.forward(
+                src=tgt,
+                mask=tgt_mask,
+                # is_causal=True,
+                src_key_padding_mask=None,
+            )
         logits = self.final(dec_embeds)
 
         # Remove precursor token(s)
@@ -237,7 +265,7 @@ class PeptideTransformerDecoder(depthcharge.transformers.PeptideTransformerDecod
         return predict_logits.argmax(dim=-1, keepdim=True).type(torch.int32)
 
 
-def dc_decoder_tiny(amod_dict, d_model=256, dropout=0, **kwargs):
+def dc_decoder_tiny(amod_dict, d_model=256, dropout=0, cross_attend=True, **kwargs):
     model = PeptideTransformerDecoder(
         amod_dict,
         d_model,
@@ -249,11 +277,12 @@ def dc_decoder_tiny(amod_dict, d_model=256, dropout=0, **kwargs):
         use_mass=True,
         use_charge=True,
         dropout=dropout,
+        cross_attend=cross_attend,
     )
     return model
 
 
-def dc_decoder_base(amod_dict, d_model=256, dropout=0, **kwargs):
+def dc_decoder_base(amod_dict, d_model=256, dropout=0, cross_attend=True, **kwargs):
     model = PeptideTransformerDecoder(
         amod_dict,
         d_model,
@@ -265,11 +294,12 @@ def dc_decoder_base(amod_dict, d_model=256, dropout=0, **kwargs):
         use_mass=True,
         use_charge=True,
         dropout=dropout,
+        cross_attend=cross_attend,
     )
     return model
 
 
-def casanovo_decoder(amod_dict, d_model=256, dropout=0, **kwargs):
+def casanovo_decoder(amod_dict, d_model=256, dropout=0, cross_attend=True, **kwargs):
     model = PeptideTransformerDecoder(
         amod_dict,
         d_model,
@@ -281,5 +311,6 @@ def casanovo_decoder(amod_dict, d_model=256, dropout=0, **kwargs):
         use_mass=True,
         use_charge=True,
         dropout=dropout,
+        cross_attend=cross_attend,
     )
     return model
