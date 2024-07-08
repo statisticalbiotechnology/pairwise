@@ -658,13 +658,14 @@ class DinoTrainingPLWrapper(BasePLWrapper):
             DINOHead(**_head_kwargs),
             pooling=task_dict["pooling"],
         )
-        self.encoder = self.student.backbone
 
         self.teacher = MultiCropWrapper(
             deepcopy(encoder),
             DINOHead(**_head_kwargs),
             pooling=task_dict["pooling"],
         )
+
+        del self.encoder
 
         self.teacher.load_state_dict(self.student.state_dict())
         for param in self.teacher.parameters():
@@ -744,3 +745,9 @@ class DinoTrainingPLWrapper(BasePLWrapper):
             lr=self.lr,
             weight_decay=self.weight_decay,
         )
+
+    def get_encoder(
+        self,
+    ):
+        """Return the encoder for downstream use"""
+        return self.student.backbone

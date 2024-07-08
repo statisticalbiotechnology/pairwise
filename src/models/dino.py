@@ -191,18 +191,71 @@ class MultiCropWrapper(nn.Module):
     concatenated features.
     """
 
-    def __init__(self, backbone, head, pooling="cls"):
+    def __init__(
+        self,
+        backbone,
+        head,
+        pooling="cls",
+        num_heads=8,
+    ):
         super(MultiCropWrapper, self).__init__()
         self.backbone = backbone
         self.head = head
 
-        assert pooling in ["cls", "average"], "Only supported"
-        if pooling == "cls":
+        _pool_options = [
+            "cls",
+            "average",
+            "avg_frozen",
+            "crossattend",
+            "crossattend_cls",
+        ]
+        assert (
+            pooling in _pool_options
+        ), f"'{pooling}' not in supported options: {_pool_options}"
+        if pooling == "cls" or pooling == "crossattend_cls":
             assert hasattr(
                 backbone, "cls_token"
-            ), "Backbone needs to have attribute CLS_token if pooling=CLS"
+            ), "Backbone needs to have attribute CLS_token if pooling=cls"
 
         self.pooling = pooling
+        self.use_proj = pooling in ["average", "avg_frozen"]
+        self.num_heads = num_heads
+
+        if self.use_proj:
+            self.proj = nn.Linear(backbone.running_units, backbone.running_units)
+            if pooling == "avg_frozen":
+                for param in self.proj.parameters():
+                    param.requires_grad = False
+
+        if pooling == "crossattend" or "crossattend_cls":
+            self.cross_attend_token = nn.Parameter(
+                torch.randn(1, 1, backbone.running_units)
+            )
+            self.multihead_attn = nn.MultiheadAttention(
+                embed_dim=backbone.running_units, num_heads=num_heads, batch_first=True
+            )
+        bp = 0
+
+    def _pool_cls(self, embeds):
+        return embeds[:, 0, :]
+
+    def _pool_proj_average(self, embeds, padding_masks):
+        embeds = self.proj(embeds)
+        non_pad = ~padding_masks
+        embeds = non_pad.unsqueeze(-1) * embeds
+        embed = embeds.sum(dim=1) / non_pad.sum(dim=-1, keepdim=True)
+        return embed
+
+    def _pool_crossattend(self, embeds, padding_masks):
+        batch_size = embeds.shape[0]
+        cross_attend_tokens = self.cross_attend_token.expand(batch_size, -1, -1)
+        attn_output, _ = self.multihead_attn(
+            query=cross_attend_tokens,
+            key=embeds,
+            value=embeds,
+            key_padding_mask=padding_masks,
+        )
+        return attn_output.squeeze(1)
 
     def forward(self, x):
         """
@@ -234,21 +287,22 @@ class MultiCropWrapper(nn.Module):
             sequences = torch.cat([x[i][0] for i in range(start_idx, end_idx)])
             if padding:
                 padding_masks = torch.cat([x[i][1] for i in range(start_idx, end_idx)])
+
             _out = self.backbone(
                 sequences,
                 key_padding_mask=padding_masks if padding else None,
             )
             embeds = _out["emb"]
+            # These masks accomadate the new shape of embeds due to additional c/e/m or cls tokens
+            out_masks = _out["mask"]
+
             # Pool over output sequence
             if self.pooling == "cls":
-                embed = embeds[:, 0, :]  # shape (batch_size * num_crops, embed_dim)
-            elif self.pooling == "average":
-                embeds = embeds[:, _out["num_cem_tokens"] :, :]
-                non_pad = ~padding_masks
-                embeds = non_pad.unsqueeze(-1) * embeds
-                embed = embeds.sum(dim=1) / non_pad.sum(
-                    dim=-1, keepdim=True
-                )  # shape (batch_size * num_crops, embed_dim)
+                embed = self._pool_cls(embeds)
+            elif self.pooling == "average" or self.pooling == "avg_frozen":
+                embed = self._pool_proj_average(embeds, out_masks)
+            elif self.pooling == "crossattend":
+                embed = self._pool_crossattend(embeds, out_masks)
             else:
                 raise ValueError("Incorrect pooling type")
 

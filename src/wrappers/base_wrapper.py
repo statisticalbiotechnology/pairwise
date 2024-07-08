@@ -353,6 +353,13 @@ class BasePLWrapper(ABC, pl.LightningModule):
                 }
             )
 
+    @abstractmethod
+    def get_encoder(
+        self,
+    ):
+        """Return the encoder for downstream use"""
+        return self.encoder
+
 
 class BaseDownstreamWrapper(BasePLWrapper):
     def __init__(

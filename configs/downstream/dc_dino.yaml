@@ -17,7 +17,7 @@ paths:
     - test-00000-of-00001-15be7bb3864037e7.parquet
 
 denovo_tf:
-  decoder_use_cls: True
+  decoder_use_cls: False
   layer_decay: 0.75
   # DeNovoTeacherForcing specific hparams
   conf_threshold: 0

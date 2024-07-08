@@ -100,7 +100,7 @@ dino:
   student_temp: 0.1
   center_momentum: 0.9
   teacher_momentum: 0.9995 # Was 0.996
-  pooling: "cls" # "cls" or "average"
+  pooling: "crossattend" # "cls",  "average",  "avg_frozen",  "crossattend" or  "crossattend_cls"
 
   # Training hparams General
   anneal_lr: 1

@@ -224,7 +224,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
     if global_args.downstream_task != "none":
         # Extract pretrained encoder nn.Module
         if global_args.pretrain or global_args.encoder_weights:
-            encoder = pl_encoder.encoder
+            encoder = pl_encoder.get_encoder()
 
         ds_callbacks = utils.configure_callbacks(
             global_args,
