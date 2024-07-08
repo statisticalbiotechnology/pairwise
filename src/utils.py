@@ -222,6 +222,7 @@ def configure_callbacks(
 ):
     callbacks = []
     filename = f"{{epoch}}-{{{val_metric_name}:.2f}}"
+    #filename = f"{{epoch}}-{{step}}"
     # Checkpoint callback
     if not args.barebones:
         callbacks += [
@@ -233,6 +234,7 @@ def configure_callbacks(
                 save_top_k=args.save_top_k,
                 save_last=args.save_last,
                 every_n_epochs=args.every_n_epochs,
+                #every_n_train_steps=args.every_n_train_steps,
             )
         ]
 
