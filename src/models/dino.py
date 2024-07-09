@@ -227,7 +227,7 @@ class MultiCropWrapper(nn.Module):
                 for param in self.proj.parameters():
                     param.requires_grad = False
 
-        if pooling == "crossattend" or "crossattend_cls":
+        if pooling in ["crossattend", "crossattend_cls"]:
             self.cross_attend_token = nn.Parameter(
                 torch.randn(1, 1, backbone.running_units)
             )
