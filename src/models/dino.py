@@ -299,9 +299,9 @@ class MultiCropWrapper(nn.Module):
             # Pool over output sequence
             if self.pooling == "cls":
                 embed = self._pool_cls(embeds)
-            elif self.pooling == "average" or self.pooling == "avg_frozen":
+            elif self.pooling in ["average", "avg_frozen"]:
                 embed = self._pool_proj_average(embeds, out_masks)
-            elif self.pooling == "crossattend":
+            elif self.pooling in ["crossattend", "crossattend_cls"]:
                 embed = self._pool_crossattend(embeds, out_masks)
             else:
                 raise ValueError("Incorrect pooling type")
