@@ -3,7 +3,7 @@ output_dir: /proj/bedrock/checkpoints/checkpoint
 log_dir: /proj/bedrock/logs/log
 wandb_project: combined # ProteomeTools | {choose your exp.}
 wandb_entity: kall # kall | joellapin
-log_wandb: 1
+log_wandb: 0
 num_workers: 16
 matmul_precision: high
 precision: 32-true

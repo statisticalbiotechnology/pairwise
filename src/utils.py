@@ -3,6 +3,7 @@ from copy import deepcopy
 from depthcharge.tokenizers.peptides import MskbPeptideTokenizer, PeptideTokenizer
 from data.mskb_tokenizer import MSKBTokenizer
 from data.ninespecies_data_module import NinespeciesDataModule
+from data.loader_hf import LoaderHF, collate_fn
 import numpy as np
 from torch.utils.data.dataset import Subset
 import os
@@ -99,6 +100,41 @@ N_TERMINAL_NINESPECIES = [
     "_-17.027",  # NH3 loss
     "_+43.006-17.027",  # Carbamylation and NH3 loss
 ]
+
+RESIDUES_NINESPECIES_IDAI = {
+    "G": 57.021464,
+    "A": 71.037114,
+    "S": 87.032028,
+    "P": 97.052764,
+    "V": 99.068414,
+    "T": 101.047670,
+    "C(+57.02)": 160.030649,  # 103.009185 + 57.021464
+    "L": 113.084064,
+    "I": 113.084064,
+    "N": 114.042927,
+    "D": 115.026943,
+    "Q": 128.058578,
+    "K": 128.094963,
+    "E": 129.042593,
+    "M": 131.040485,
+    "H": 137.058912,
+    "F": 147.068414,
+    "R": 156.101111,
+    "Y": 163.063329,
+    "W": 186.079313,
+    "O": 261.1915, # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3070376/
+    # Amino acid modifications.
+    "M[15.9949]": 147.035400,  # Met oxidation:   131.040485 + 15.994915
+    "N[0.9840]": 115.026943,  # Asn deamidation: 114.042927 +  0.984016
+    "Q[0.9840]": 129.042594,  # Gln deamidation: 128.058578 +  0.984016
+    # N-terminal modifications.
+    "[0.9840]": 0.984016, # Deamidation
+    "[15.9949]": 15.994915, # Oxidation
+    "[42.0106]": 42.010565,  # Acetylation
+    "[43.0058]": 43.005814,  # Carbamylation
+    "[-17.0265]": -17.026549,  # NH3 loss
+    "[25.9803]": 25.980265,  # Carbamylation and NH3 loss
+}
 
 
 def get_token_dicts_mskb(amod_dict, include_hidden=False):
@@ -216,6 +252,78 @@ def get_ninespecies_data_module(
 
     return (data_module, token_dicts)
 
+def get_ninespecies_HF_data_module(
+    data_root_dir,
+    ds_config,
+    global_args,
+    max_peaks=300,
+    max_length=30,
+    subset=0,
+    include_hidden=False,
+):
+    
+    never_changing_path = "/proj/bedrock/datasets/9_species_InstaDeepAI"
+    
+    dataset_directory = os.path.join(never_changing_path, "parquet/processed")
+    dictionary_path = os.path.join(never_changing_path, "ns_dictionary.txt")
+    loader = LoaderHF(
+        dataset_directory=dataset_directory,
+        val_species=ds_config['val_species'],
+        dictionary_path=dictionary_path,
+        top_peaks=ds_config['top_pks'],
+        num_workers=ds_config['num_workers'],
+        pep_length=ds_config['pep_length'],
+        charge=ds_config['charge'],
+        buffer_size=10000,
+    )
+    dfs = {
+        'train': loader.dataset['train'],
+        'val': loader.dataset['val'],
+    }
+
+    amod_dic = loader.amod_dic
+    input_dict = deepcopy(loader.amod_dic)
+    input_dict["<SOS>"] = len(loader.amod_dic)
+    output_dict = deepcopy(loader.amod_dic)
+    output_dict["<EOS>"] = len(loader.amod_dic)
+    token_dicts = {
+        "amod_dict": amod_dic,
+        "input_dict": input_dict,
+        "output_dict": output_dict,
+    }
+
+    token_dicts["residues"] = RESIDUES_NINESPECIES_IDAI
+    amod_dict = token_dicts["amod_dict"]
+    dataset_train = loader.dataset['train']
+    dataset_val = loader.dataset['val']
+    dataset_test = loader.dataset['val']
+
+    if subset:
+        #assert subset >= 0 and subset <= 1
+        #dataset_train, dataset_val, dataset_test = [
+        #    Subset(dataset, np.arange(int(len(dataset) * subset)))
+        #    for dataset in [dataset_train, dataset_val, dataset_test]
+        #]
+        dataset_train = Subset(dataset_train, np.arange(int(len(dataset_train) * subset)))
+
+    data_module = NinespeciesDataModule(
+        (dataset_train, dataset_val, dataset_test),
+        batch_size=(
+            ds_config[global_args.downstream_task]["batch_size"]
+            if global_args.batch_size < 0
+            else global_args.batch_size
+        ),
+        num_workers=(
+            ds_config["num_workers"]
+            if global_args.num_workers < 0
+            else global_args.num_workers
+        ),
+        collate_fn=collate_fn,
+        pin_mem=global_args.pin_mem,
+        shuffle=False,
+    )
+
+    return (data_module, token_dicts)
 
 def configure_callbacks(
     args, task_args, val_metric_name: str = "val_loss", metric_mode="min"
@@ -315,6 +423,71 @@ def partition_seq(seq, collect_mods=False):
 
     return output
 
+def partition_modified_sequence(modseq):
+    
+    NotAA = lambda x: (x < 65) | (x > 90)
+
+    sequence = []
+    p = 0
+
+    #if modseq == '.N[0.9840]AINIEELFQGISR.':
+    #    print()
+    while p < len(modseq):
+        character = modseq[p]
+        hx = ord(character)
+
+        # Pull out mod, in the form of a floating point number
+        if NotAA(hx):
+            mod_lst = []
+
+            # N-terminal modifications precede the amino acid letter
+            nterm = True if p == 2 else False
+
+            # All numerals and mathematical symbols are below 65
+            while NotAA(hx):
+                mod_lst.append(character)
+                p += 1
+
+                # This will happen if we have a C-term modification
+                if p == len(modseq):
+                    break
+                else:
+                    character = modseq[p]
+                    hx = ord(character)
+            mod = "".join(mod_lst)
+
+            # Get rid of absent terminal modifications, represented as period
+            if mod == '.':
+                continue
+            elif mod[-1] == '.':
+                mod = mod[:-1]
+
+            # Add the amino acid to the end of the number if N-term
+            if nterm:# & (mod != "(+57.02)"):
+                # Leave the 57.02 with C
+                if "(+57.02)" in mod:
+                    sequence[0] = sequence[0] + "(+57.02)"
+                    mod = mod[8:]
+
+                # The modification stands as its own token at the beginning
+                if len(mod) > 0:
+                    sequence.insert(0, mod)
+
+            # Grab the previously stored sequence AA and add modification to it
+            else:
+                sequence[-1] += mod
+
+            p -= 1
+
+        else:
+            sequence.append(character)
+
+        #if "" in sequence:
+        #    print(sequence)
+
+        p += 1
+
+    return sequence
 
 class Scale:
     masses = {

@@ -253,6 +253,9 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
             # "pep_auc": pep_auc, #TODO: add pr-curves after training is complete
         }
 
+    def on_train_epoch_start(self):
+        self.trainer.datamodule.datasets[0].set_epoch(self.trainer.current_epoch)
+
 
 class DeNovoRandom(DeNovoTeacherForcing):
     def __init__(

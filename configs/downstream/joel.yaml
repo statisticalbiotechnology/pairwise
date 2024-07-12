@@ -1,6 +1,6 @@
 num_workers: 16
 
-dataset_name: ninespecies
+dataset_name: ninespecies_hf
 task: denovo
 top_pks: 100 # this doesn't work
 pep_length: [0, 30]
@@ -15,6 +15,8 @@ paths:
     - validation-00000-of-00001-b84568f5bf3ba95d.parquet
   test: 
     - test-00000-of-00001-15be7bb3864037e7.parquet
+
+val_species: saccharomyces_cerevisiae
 
 denovo_tf:
   # DeNovoTeacherForcing specific hparams
