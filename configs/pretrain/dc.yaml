@@ -80,8 +80,8 @@ dino:
     - 0.5
     - 0.9
   local_crops_scale:
-    - 0.3
-    - 0.5
+    - 0.2
+    - 0.2
   num_global_crops: 2
   num_local_crops: 5
 
@@ -94,8 +94,8 @@ dino:
   mlp_bottleneck_dim: 256
 
   # Training hparams Dino
-  warmup_teacher_temp: 0.01 # Initial value
-  teacher_temp: 0.01 # Final value after warmup
+  warmup_teacher_temp: 0.03 # Initial value
+  teacher_temp: 0.03 # Final value after warmup
   warmup_teacher_temp_epochs: 0 
   student_temp: 0.1
   center_momentum: 0.9
@@ -105,7 +105,7 @@ dino:
   # Training hparams General
   anneal_lr: 1
   anneal_per_step: True
-  warmup_duration: 100000
+  warmup_duration: 20000
   lr_start: 0
   blr: 1.0e-5
   lr_end: 1.0e-7
