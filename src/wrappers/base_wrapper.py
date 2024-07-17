@@ -353,7 +353,6 @@ class BasePLWrapper(ABC, pl.LightningModule):
                 }
             )
 
-    @abstractmethod
     def get_encoder(
         self,
     ):
