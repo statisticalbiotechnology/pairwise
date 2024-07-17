@@ -4,7 +4,6 @@ trinary_mz:
   # Training hparams
   batch_size: 100
   ref_batch_size: 100
-  blr: 4.0e-5
   weight_decay: 1.0e-5
   epochs: 1
   subset: 0
@@ -12,8 +11,12 @@ trinary_mz:
   dropout: 0
 
   # Annealing
-  lr_warmup: 0
-  lr_decay: 0
+  anneal_lr: 0
+  anneal_per_step: True
+  warmup_duration: 20000
+  lr_start: 0
+  blr: 4.0e-5
+  lr_end: 1.0e-6
 
 masked:
   # Masked trainer specific hparams
@@ -27,7 +30,6 @@ masked:
   # Training hparams
   batch_size: 100
   ref_batch_size: 100
-  blr: 4.0e-5
   weight_decay: 1.0e-5
   epochs: 1
   subset: 0
@@ -35,8 +37,12 @@ masked:
   dropout: 0
 
   # Annealing
-  lr_warmup: 0
-  lr_decay: 0
+  anneal_lr: 0
+  anneal_per_step: True
+  warmup_duration: 20000
+  lr_start: 0
+  blr: 4.0e-5
+  lr_end: 1.0e-6
 
 masked_ae:
   # Masked Autoencoder trainer specific hparams
@@ -61,7 +67,6 @@ masked_ae:
   # Training hparams
   batch_size: 100
   ref_batch_size: 100
-  blr: 4.0e-5
   weight_decay: 1.0e-5
   epochs: 1
   subset: 0
@@ -69,8 +74,12 @@ masked_ae:
   dropout: 0
 
   # Annealing
-  lr_warmup: 0
-  lr_decay: 0
+  anneal_lr: 0
+  anneal_per_step: True
+  warmup_duration: 20000
+  lr_start: 0
+  blr: 4.0e-5
+  lr_end: 1.0e-6
 
 
 dino:
@@ -80,8 +89,8 @@ dino:
     - 0.5
     - 0.9
   local_crops_scale:
-    - 0.2
-    - 0.2
+    - 0.1
+    - 0.1
   num_global_crops: 2
   num_local_crops: 5
 
@@ -108,7 +117,7 @@ dino:
   warmup_duration: 20000
   lr_start: 0
   blr: 1.0e-5
-  lr_end: 1.0e-7
+  lr_end: 1.0e-6
   batch_size: 64
   ref_batch_size: 256
   weight_decay: 0.04
