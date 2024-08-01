@@ -1,3 +1,20 @@
+"""
+This script processes IPC files in batches to generate embeddings for mass spectrometry data
+using a deep learning model. It reads data, processes it in mini-batches, performs a model 
+forward pass, and appends the embeddings to the original data, saving the output in new IPC files.
+
+User Specifications:
+- Input Directory: Path to the IPC files.
+- Output Directory: Path to save processed files.
+- Batch Size: Number of samples processed per mini-batch.
+- Max Peaks: Maximum number of peaks to retain per spectrum.
+- Columns of Interest: Specify column names (e.g., mz, intensity, charge, mass) that must be present in the IPC files.
+- Model Forward: Define the model's forward pass for generating embeddings.
+
+Dependencies:
+- PyTorch, PyArrow, TQDM
+"""
+
 import torch
 import pytorch_lightning as pl
 import numpy as np
@@ -122,13 +139,12 @@ def main(
     batch_size=32,
     max_peaks=1000,
 ):
-    # List of IPC files to process
-    data_paths = [
-        "apis_mellifera.ipc",
-        "candidatus_endoloripes.ipc",
-        "h_sapiens.ipc",
-        "mus_musculus.ipc",
-    ]
+    # List all files in the specified directory
+    data_paths = [f for f in os.listdir(data_root_dir) if f.endswith(".ipc")]
+
+    if not data_paths:
+        print(f"No IPC files found in {data_root_dir}")
+        return
 
     # Process each file and write embeddings to new IPC files
     for filename in data_paths:
@@ -147,6 +163,7 @@ def main(
 
 
 if __name__ == "__main__":
+    ### ------- STUFF FOR LOADING THE ENCODER ------
     # Parse args
     global_args, pretrain_config, ds_config = parse_args_and_config()
 
@@ -162,10 +179,18 @@ if __name__ == "__main__":
 
     # Load the pre-trained encoder model wrapped for DINO embeddings
     embedder = load_encoder(global_args, pretrain_config, ds_config)
+    ### --------------------------------------------
 
+    ### ------- SET INPUT DIR CONTAINING THE IPC FILES HERE ------
     # Define directories and column names
-    data_root_dir = "/Users/alfred/Datasets/9_species_IPC"
-    output_root_dir = os.path.join(data_root_dir, "embedded")
+    DATA_ROOT_DIR = "/Users/alfred/Datasets/9_species_IPC"
+    OUTPUT_ROOT_DIR = os.path.join(DATA_ROOT_DIR, "embedded")
+
+    # Try increasing and see if processing a fulle file is faster
+    MODEL_BATCH_SIZE = 32
+    # May result in CUDA out of memory errors if too large, in that case decrease again
+
+    # These columns names
     column_names = {
         "mz": "mz_array",
         "intensity": "intensity_array",
@@ -176,9 +201,9 @@ if __name__ == "__main__":
     # Run the main function to process IPC files and generate embeddings
     main(
         embedder=embedder,
-        data_root_dir=data_root_dir,
-        output_root_dir=output_root_dir,
+        data_root_dir=DATA_ROOT_DIR,
+        output_root_dir=OUTPUT_ROOT_DIR,
         column_names=column_names,
-        batch_size=32,
-        max_peaks=1000,
+        batch_size=MODEL_BATCH_SIZE,
+        max_peaks=global_args.max_peaks,
     )
