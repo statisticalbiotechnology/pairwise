@@ -1,9 +1,12 @@
+from copy import deepcopy
 import torch
+from data_augmentation import RandomWindowAugmentation
 from wrappers.base_wrapper import BasePLWrapper
 from models.heads import ClassifierHead
 import torch.nn.functional as F
 import torch.nn as nn
 from models.peak_encoder import StaticPeakEncoder, PosEncoder
+from models.dino import DINOHead, DINOLoss, MultiCropWrapper
 
 
 class TrinaryMZPLWrapper(BasePLWrapper):
@@ -618,3 +621,134 @@ class MaskedAutoencoderWrapper(MaskedTrainingPLWrapper):
             ),
         ]
         return opts
+
+
+class DinoTrainingPLWrapper(BasePLWrapper):
+    def __init__(
+        self,
+        encoder,
+        global_args,
+        collate_fn=None,
+        task_dict=None,
+    ):
+        super().__init__(
+            encoder, global_args, collate_fn=collate_fn, task_dict=task_dict
+        )
+
+        self.TASK_NAME = "dino"
+        self.aug = RandomWindowAugmentation(
+            global_crops_scale=task_dict["global_crops_scale"],
+            local_crops_scale=task_dict["local_crops_scale"],
+            num_global_crops=task_dict["num_global_crops"],
+            num_local_crops=task_dict["num_local_crops"],
+            padding_value=0,
+        )
+
+        _head_kwargs = dict(
+            in_dim=encoder.running_units,
+            out_dim=task_dict["mlp_out_dim"],
+            use_bn=task_dict["mlp_use_bn"],
+            norm_last_layer=task_dict["mlp_norm_last_layer"],
+            nlayers=task_dict["mlp_nlayers"],
+            hidden_dim=task_dict["mlp_hidden_dim"],
+            bottleneck_dim=task_dict["mlp_bottleneck_dim"],
+        )
+
+        self.student = MultiCropWrapper(
+            encoder,
+            DINOHead(**_head_kwargs),
+            pooling=task_dict["pooling"],
+        )
+
+        self.teacher = MultiCropWrapper(
+            deepcopy(encoder),
+            DINOHead(**_head_kwargs),
+            pooling=task_dict["pooling"],
+        )
+
+        del self.encoder
+
+        self.teacher.load_state_dict(self.student.state_dict())
+        for param in self.teacher.parameters():
+            param.requires_grad = False
+
+        self.dino_loss = DINOLoss(
+            out_dim=task_dict["mlp_out_dim"],
+            num_crops_tot=task_dict["num_global_crops"] + task_dict["num_local_crops"],
+            num_global_crops=task_dict["num_global_crops"],
+            warmup_teacher_temp=task_dict["warmup_teacher_temp"],
+            teacher_temp=task_dict["teacher_temp"],
+            warmup_teacher_temp_epochs=task_dict["warmup_teacher_temp_epochs"],
+            nepochs=task_dict["epochs"],
+            student_temp=task_dict["student_temp"],
+            center_momentum=task_dict["center_momentum"],
+        )
+
+        self.teacher_momentum = task_dict["teacher_momentum"]
+        self.rand_window_size = task_dict["rand_window_size"]
+
+    def training_step(self, batch, batch_idx):
+        result = super().training_step(batch, batch_idx)
+        self.update_teacher(self.teacher_momentum)
+        return result
+
+    @torch.no_grad()
+    def update_teacher(self, momentum):
+        for param_q, param_k in zip(
+            self.student.parameters(), self.teacher.parameters()
+        ):
+            param_k.data.mul_(momentum).add_(param_q.data, alpha=1 - momentum)
+
+    def _parse_batch(self, batch, Eval=None):
+        spectra = batch
+        mz_arr = spectra["mz_array"]
+        int_arr = spectra["intensity_array"]
+        mzab = torch.stack([mz_arr, int_arr], dim=-1)
+        lengths = spectra["peak_lengths"]
+        crops = self.aug(mzab, lengths, self.rand_window_size)
+        batch_size = mzab.shape[0]
+        # TODO/FIXME: add support to include c/e/m tokens
+        return crops, batch_size
+
+    def forward(self, parsed_batch, **kwargs):
+        student_out = self.student(parsed_batch)
+        with torch.no_grad():
+            teacher_out = self.teacher(parsed_batch[: self.aug.num_global_crops])
+        return student_out, teacher_out
+
+    def _get_losses(self, student_out, teacher_out):
+        loss = self.dino_loss(
+            student_out,
+            teacher_out,
+            epoch=self.trainer.current_epoch,  # TODO/FIXME: probably change anneal by step instead
+        )
+        if not torch.all(torch.isfinite(loss)):
+            print("Loss is NaN")
+            raise SystemExit(1)
+        return loss
+
+    def _get_train_stats(self, returns, parsed_batch):
+        student_out, teacher_out = returns
+        loss = self._get_losses(student_out, teacher_out)
+        stats = {"loss": loss}
+        return loss, stats
+
+    def _get_eval_stats(self, returns, parsed_batch):
+        student_out, teacher_out = returns
+        loss = self._get_losses(student_out, teacher_out)
+        stats = {"loss": loss}
+        return stats
+
+    def configure_optimizers(self):
+        return torch.optim.AdamW(
+            self.student.parameters(),
+            betas=(0.9, 0.9999),
+            lr=self.lr,
+            weight_decay=self.weight_decay,
+        )
+
+    def get_encoder(
+        self,
+    ):
+        """Return the encoder for downstream use"""
+        return self.student.backbone

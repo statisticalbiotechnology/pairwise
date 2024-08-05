@@ -11,6 +11,7 @@ import time
 
 from wrappers.downstream_wrappers import DeNovoRandom, DeNovoTeacherForcing
 from wrappers.pretrain_wrappers import (
+    DinoTrainingPLWrapper,
     MaskedAutoencoderWrapper,
     MaskedTrainingPLWrapper,
     TrinaryMZPLWrapper,
@@ -37,6 +38,7 @@ PRETRAIN_TASK_DICT = {
     "masked": MaskedTrainingPLWrapper,
     "masked_ae": MaskedAutoencoderWrapper,
     "trinary_mz": TrinaryMZPLWrapper,
+    "dino": DinoTrainingPLWrapper,
 }
 
 DOWNSTREAM_TASK_DICT = {
@@ -93,6 +95,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
         dropout=config["pretrain_config"][global_args.pretraining_task].get(
             "dropout", 0
         ),
+        cls_token=global_args.cls_token,
     )
 
     if global_args.pretraining_task not in PRETRAIN_TASK_DICT:
@@ -230,7 +233,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
     if global_args.downstream_task != "none":
         # Extract pretrained encoder nn.Module
         if global_args.pretrain or global_args.encoder_weights:
-            encoder = pl_encoder.encoder
+            encoder = pl_encoder.get_encoder()
 
         ds_callbacks = utils.configure_callbacks(
             global_args,
@@ -271,6 +274,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
             dropout=config["downstream_config"][global_args.downstream_task][
                 "decoder_dropout"
             ],
+            cross_attend=global_args.cross_attend,
         )
 
         pl_downstream = DOWNSTREAM_TASK_DICT[global_args.downstream_task](

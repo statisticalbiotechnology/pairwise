@@ -190,7 +190,7 @@ class BasePLWrapper(ABC, pl.LightningModule):
             for key, val in train_stats.items()
         }
         self.log_dict(
-            {**train_stats},
+            {**train_stats, "lr": self.lr},
             on_epoch=True,
             on_step=True,
             batch_size=batch_size,
@@ -352,6 +352,14 @@ class BasePLWrapper(ABC, pl.LightningModule):
                     ),
                 }
             )
+
+
+    def get_encoder(
+        self,
+    ):
+        """Return the encoder for downstream use"""
+        return self.encoder
+
 
 class BaseDownstreamWrapper(BasePLWrapper):
     def __init__(

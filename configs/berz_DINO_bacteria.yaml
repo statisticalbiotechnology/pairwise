@@ -1,0 +1,28 @@
+data_root_dir: /proj/bedrock/datasets/bacteria_PXD010000__PXD010613/no_labels/
+output_dir: /proj/bedrock/checkpoints/checkpoint
+log_dir: /proj/bedrock/logs/log
+wandb_project: bacteria-Dino
+wandb_entity: kall
+log_wandb: 1
+num_workers: 16
+matmul_precision: high
+precision: 32-true
+
+
+### Training hyperparameters
+max_peaks: 1000
+
+# Tasks
+encoder_model: dc_encoder_larger
+cls_token: 0
+pretrain_config: configs/pretrain/dc.yaml
+pretrain: 1
+pretraining_task: dino
+mask_ratio: 0.75
+
+# De novo
+cross_attend: 1
+decoder_model: dc_decoder_base
+downstream_config: configs/downstream/dc_dino.yaml
+downstream_task: denovo_tf
+downstream_root_dir: /proj/bedrock/datasets/9_species_xy

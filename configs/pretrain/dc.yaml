@@ -4,7 +4,6 @@ trinary_mz:
   # Training hparams
   batch_size: 100
   ref_batch_size: 100
-  blr: 4.0e-5
   weight_decay: 1.0e-5
   epochs: 1
   subset: 0
@@ -12,8 +11,12 @@ trinary_mz:
   dropout: 0
 
   # Annealing
-  lr_warmup: 0
-  lr_decay: 0
+  anneal_lr: 0
+  anneal_per_step: True
+  warmup_duration: 20000
+  lr_start: 0
+  blr: 4.0e-5
+  lr_end: 1.0e-6
 
 masked:
   # Masked trainer specific hparams
@@ -27,7 +30,6 @@ masked:
   # Training hparams
   batch_size: 100
   ref_batch_size: 100
-  blr: 4.0e-5
   weight_decay: 1.0e-5
   epochs: 1
   subset: 0
@@ -35,8 +37,12 @@ masked:
   dropout: 0
 
   # Annealing
-  lr_warmup: 0
-  lr_decay: 0
+  anneal_lr: 0
+  anneal_per_step: True
+  warmup_duration: 20000
+  lr_start: 0
+  blr: 4.0e-5
+  lr_end: 1.0e-6
 
 masked_ae:
   # Masked Autoencoder trainer specific hparams
@@ -46,6 +52,10 @@ masked_ae:
   positional_encoding: True
   mz_to_int_ratio: 0.67
   mask_ratio: 0.75
+
+  # Scaling for regression target (non-fourier target)
+  mz_scale_mean: 448.74
+  mz_scale_std: 223.25
 
   # Decoder architecture hparams
   decoder_running_units: 256
@@ -57,7 +67,6 @@ masked_ae:
   # Training hparams
   batch_size: 100
   ref_batch_size: 100
-  blr: 4.0e-5
   weight_decay: 1.0e-5
   epochs: 1
   subset: 0
@@ -65,5 +74,54 @@ masked_ae:
   dropout: 0
 
   # Annealing
-  lr_warmup: 0
-  lr_decay: 0
+  anneal_lr: 0
+  anneal_per_step: True
+  warmup_duration: 20000
+  lr_start: 0
+  blr: 4.0e-5
+  lr_end: 1.0e-6
+
+
+dino:
+  # Data augmentation
+  rand_window_size: False
+  global_crops_scale:
+    - 0.5
+    - 0.9
+  local_crops_scale:
+    - 0.1
+    - 0.1
+  num_global_crops: 2
+  num_local_crops: 5
+
+  # MLP hparams
+  mlp_out_dim: 4096
+  mlp_use_bn: False
+  mlp_norm_last_layer: True
+  mlp_nlayers: 3
+  mlp_hidden_dim: 2048
+  mlp_bottleneck_dim: 256
+
+  # Training hparams Dino
+  warmup_teacher_temp: 0.03 # Initial value
+  teacher_temp: 0.03 # Final value after warmup
+  warmup_teacher_temp_epochs: 0 
+  student_temp: 0.1
+  center_momentum: 0.9
+  teacher_momentum: 0.9995 # Was 0.996
+  pooling: "crossattend" # "cls",  "average",  "avg_frozen",  "crossattend" or  "crossattend_cls"
+
+  # Training hparams General
+  anneal_lr: 1
+  anneal_per_step: True
+  warmup_duration: 20000
+  lr_start: 0
+  blr: 1.0e-5
+  lr_end: 1.0e-6
+  batch_size: 64
+  ref_batch_size: 256
+  weight_decay: 0.04
+  epochs: 2
+  subset: 0
+  num_workers: 0
+  dropout: 0

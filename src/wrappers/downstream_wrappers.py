@@ -66,6 +66,8 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         self.EOS = self.output_dict["<EOS>"]
         self.NT = self.amod_dict[self.null_token]
 
+        self.decoder_use_cls = task_dict["decoder_use_cls"]
+
         self.predcats = len(self.output_dict)
 
         self.TASK_NAME = "denovo_tf"
@@ -133,9 +135,13 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
             return_mask=True,
             **kwargs
         )
+        if self.decoder_use_cls:
+            cls_token = outs["emb"][:, : self.encoder.cls_token.shape[1]]
+
         preds = self.decoder(
             parsed_batch["input_intseq"],
             outs,
+            cls_token=cls_token if self.decoder_use_cls else None,
             mass=parsed_batch["mass"] if self.decoder.use_mass else None,
             charge=parsed_batch["charge"] if self.decoder.use_charge else None,
             peptide_lengths=parsed_batch["peptide_lengths"],
@@ -151,8 +157,11 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
             return_mask=True,
             **kwargs
         )
+        if self.decoder_use_cls:
+            cls_token = outs["emb"][:, : self.encoder.cls_token.shape[1]]
         preds = self.decoder.predict_sequence(
             outs,
+            cls_token=cls_token if self.decoder_use_cls else None,
             mass=parsed_batch["mass"] if self.decoder.use_mass else None,
             charge=parsed_batch["charge"] if self.decoder.use_charge else None,
             causal=True,
