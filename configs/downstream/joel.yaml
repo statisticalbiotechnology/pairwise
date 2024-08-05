@@ -1,8 +1,8 @@
-num_workers: 16
+num_workers: 12
 
-dataset_name: ninespecies
+dataset_name: ninespecies_hf
 task: denovo
-top_pks: 100
+top_pks: 100 # this doesn't work
 pep_length: [0, 30]
 charge: [0, 10]
 add_mass: True
@@ -16,11 +16,13 @@ paths:
   test: 
     - test-00000-of-00001-15be7bb3864037e7.parquet
 
+val_species: saccharomyces_cerevisiae
+
 denovo_tf:
   # DeNovoTeacherForcing specific hparams
   conf_threshold: 0
   # Training hparams
-  blr: 1.0e-4
+  blr: 2.0e-4
   lr_warmup: 1
   lr_start: 1.0e-7
   lr_end: 2.0e-4

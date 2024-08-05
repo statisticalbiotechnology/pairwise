@@ -17,7 +17,6 @@ from wrappers.pretrain_wrappers import (
     TrinaryMZPLWrapper,
 )
 
-
 import utils
 
 import models.encoder as encoders
@@ -50,7 +49,6 @@ DOWNSTREAM_TASK_DICT = {
 def update_args(args, config_dict):
     for key, val in config_dict.items():
         setattr(args, key, val)
-
 
 def main(global_args, pretrain_config=None, ds_config=None):
     print(f"Saving checkpoints in {global_args.output_dir}")
@@ -257,6 +255,18 @@ def main(global_args, pretrain_config=None, ds_config=None):
                 ],
                 include_hidden=global_args.downstream_task == "denovo_random",
             )
+        elif config['downstream_config']['dataset_name'] == "ninespecies_hf":
+            ds_data_module, token_dicts = utils.get_ninespecies_HF_data_module(
+                global_args.downstream_root_dir,
+                config["downstream_config"],
+                global_args,
+                max_peaks=global_args.max_peaks,
+                max_length=global_args.max_length,
+                subset=config["downstream_config"][global_args.downstream_task][
+                    "subset"
+                ],
+                include_hidden=global_args.downstream_task == "denovo_random",
+            )
         elif config["downstream_config"]["dataset_name"] == "massivekb":
             ds_data_module, token_dicts = utils.get_mskb_data_module(
                 global_args.downstream_root_dir,
@@ -266,6 +276,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
                 seed=global_args.seed,
                 include_hidden=global_args.downstream_task == "denovo_random",
             )
+        
         # Define decoder model
         assert (
             global_args.decoder_model
@@ -338,6 +349,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
             barebones=global_args.barebones,
             # num_sanity_val_steps=0,
             limit_train_batches=config['limit_train_batches'],
+            limit_val_batches=config['limit_val_batches'],
         )
 
         start_time = time.time()

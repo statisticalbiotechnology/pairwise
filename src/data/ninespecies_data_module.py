@@ -12,6 +12,7 @@ class NinespeciesDataModule(pl.LightningDataModule):
         collate_fn: Callable | None = None,
         pin_mem: bool = False,
         seed: int = 0,
+        shuffle=True,
     ):
         super().__init__()
 
@@ -21,7 +22,8 @@ class NinespeciesDataModule(pl.LightningDataModule):
         self.collate_fn = collate_fn
         self.pin_mem = pin_mem
         self.seed = seed
-
+        self.shuffle = shuffle
+    
     def setup(self, stage=None):
         pass
 
@@ -31,30 +33,30 @@ class NinespeciesDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_mem,
-            drop_last=True,
+            #drop_last=True,
             collate_fn=self.collate_fn,
             persistent_workers=self.num_workers > 0,
-            shuffle=True,
+            #shuffle=self.shuffle,
         )
 
     def val_dataloader(self):
         return DataLoader(
             self.datasets[1],
             batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_mem,
+            #num_workers=self.num_workers,
+            #pin_memory=self.pin_mem,
             drop_last=True,
             collate_fn=self.collate_fn,
-            persistent_workers=self.num_workers > 0,
+            #persistent_workers=self.num_workers > 0,
         )
 
     def test_dataloader(self):
         return DataLoader(
             self.datasets[2],
             batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_mem,
+            #num_workers=self.num_workers,
+            #pin_memory=self.pin_mem,
             drop_last=False,
             collate_fn=self.collate_fn,
-            persistent_workers=self.num_workers > 0,
+            #persistent_workers=self.num_workers > 0,
         )

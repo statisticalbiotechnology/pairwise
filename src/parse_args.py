@@ -223,6 +223,12 @@ def get_args_parser(conf_parser):
         default=1.0,
         help="Percentage of training set to use in downstream",
     )
+    parser.add_argument(
+        "--limit_val_batches",
+        type=int,
+        default=500,
+        help="Maximum number of batches to run in validation",
+    )
 
     # Dataset parameters
     parser.add_argument(
