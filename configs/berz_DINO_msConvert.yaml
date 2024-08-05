@@ -8,9 +8,6 @@ num_workers: 16
 matmul_precision: high
 precision: 32-true
 
-###### TODO: FIX THESE WARMUP HPARAMS
-anneal_lr: 0
-warmup_epochs: 0
 ### Training hyperparameters
 max_peaks: 1000
 

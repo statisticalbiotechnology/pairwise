@@ -118,9 +118,10 @@ def main(global_args, pretrain_config=None, ds_config=None):
             global_args.pretraining_task + "_val_loss_epoch",
         )
 
-        # Instantiate PL wrapper based on the pretraining task
         if global_args.encoder_weights:
-            pl_encoder = PRETRAIN_TASK_DICT[global_args.pretraining_task].load_from_checkpoint(
+            pl_encoder = PRETRAIN_TASK_DICT[
+                global_args.pretraining_task
+            ].load_from_checkpoint(
                 global_args.encoder_weights,
                 global_args=global_args,
                 encoder=encoder,
@@ -128,6 +129,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
             )
             print(f"Loading encoder checkpoint: {global_args.encoder_weights}")
         else:
+            # Instantiate PL wrapper based on the pretraining task
             pl_encoder = PRETRAIN_TASK_DICT[global_args.pretraining_task](
                 encoder,
                 global_args=global_args,

@@ -4,7 +4,7 @@
 data_root_dir: /proj/bedrock/datasets/InstaNovo_SPLITS_full
 output_dir: /proj/bedrock/checkpoints/checkpoint
 log_dir: /proj/bedrock/logs/log
-wandb_project: ProteomeTools
+wandb_project: MSKB
 wandb_entity: kall
 log_wandb: 1
 num_workers: 16

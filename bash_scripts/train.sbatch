@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-#SBATCH -A Berzelius-2023-189
-#SBATCH -t 0-02:00:00
+#SBATCH -A Berzelius-2024-32
+#SBATCH -t 1-00:00:00
 #SBATCH --gpus=1
 #SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=16
@@ -10,4 +10,4 @@
 module load Anaconda/2021.05-nsc1
 conda activate FoundationV2
 
-srun python src/main.py --config=configs/berzelius.yaml --num_devices=1 --num_nodes=1
+srun python src/main.py --config=configs/berz_mae_foundational_combined.yaml --num_devices=1 --num_nodes=1 --pretrain=0

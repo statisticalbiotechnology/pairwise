@@ -18,10 +18,10 @@ precision: 32-true
 anneal_lr: 0
 warmup_epochs: 0
 ### Training hyperparameters
-max_peaks: 100
+max_peaks: 1000
 
 # Tasks
-encoder_model: dc_encoder_base
+encoder_model: dc_encoder_larger
 pretrain_config: configs/pretrain/dc.yaml
 pretrain: 1
 pretraining_task: masked_ae
