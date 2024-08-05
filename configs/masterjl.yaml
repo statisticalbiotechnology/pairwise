@@ -1,9 +1,9 @@
 data_root_dir: /proj/bedrock/datasets/foundational_dataset/combined
 output_dir: /proj/bedrock/checkpoints/checkpoint
 log_dir: /proj/bedrock/logs/log
-wandb_project: combined # ProteomeTools | {choose your exp.}
-wandb_entity: kall # kall | joellapin
-log_wandb: 0
+wandb_project: debug # ProteomeTools | {choose your exp.}
+wandb_entity: joellapin # kall | joellapin
+log_wandb: 1
 num_workers: 16
 matmul_precision: high
 precision: 32-true
