@@ -1,4 +1,4 @@
-
+import numpy as np
 import models.model_parts as mp
 import models.model_parts_pw as pw
 import torch as th
@@ -11,7 +11,11 @@ def init_encoder_weights(module):
         if module.first.bias is not None: 
             module.first.bias = I.zeros_(module.first.bias)
     if isinstance(module, mp.SelfAttention):
+        #limit = 0.5*np.sqrt(6 / (module.indim*module.d + module.indim*module.h))
+        #module.qkv.weight = I.uniform_(module.qkv.weight, -limit, limit)
         module.qkv.weight = I.normal_(module.qkv.weight, 0.0, (2/3)*module.indim**-0.5)
+        #limit = 0.5*np.sqrt(6 / (module.h*module.d + module.h*module.out_units))
+        #module.Wo.weight = I.uniform_(module.Wo.weight, -limit, limit)
         module.Wo.weight = I.normal_(module.Wo.weight, 0.0, (1/3)*(module.h*module.d)**-0.5)
         if hasattr(module, 'Wb'):
             module.Wb.weight = I.zeros_(module.Wb.weight)
@@ -23,7 +27,8 @@ def init_encoder_weights(module):
             module.Wg.weight = I.zeros_(module.Wg.weight)
             module.Wg.bias = I.constant_(module.Wg.bias, 1.) # gate mostly open ~ 0.73
     elif isinstance(module, mp.FFN):
-        module.W1.weight = I.xavier_uniform_(module.W1.weight)
+        #module.W1.weight = I.xavier_uniform_(module.W1.weight)
+        module.W1.weight = I.normal_(module.W1.weight, 0.0, (2/3)*(module.indim)**-0.5)
         module.W1.bias = I.zeros_(module.W1.bias)
         module.W2.weight = I.normal_(module.W2.weight, 0.0, (1/3)*(module.indim*module.mult)**-0.5)
         #module.W2.weight = I.xavier_uniform_(module.W2.weight)
@@ -106,16 +111,19 @@ class Encoder(nn.Module):
             mdimpw = self.pw_mzunits//4 if subdivide else self.pw_mzunits
             self.mdimpw = mdimpw
             self.MzpwSeq = nn.Identity()#Sequential(nn.Linear(mdimpw, mdimpw), nn.SiLU())
-            self.pwfirst = nn.Linear(self.pw_mzunits, self.pw_runits)
-            self.alphapw = nn.Parameter(th.tensor(0.1), requires_grad=True)
+            self.pwfirst = nn.Identity()#nn.Linear(self.pw_mzunits, self.pw_runits)
+            #self.alphapw = nn.Parameter(th.tensor(0.1), requires_grad=True)
             #self.pospw = pw.RelPos(sequence_length, self.pw_runits)
             # Evolve features
-            multdict = {'in_dim': self.pw_runits, 'c': 128}
-            attdict = {'in_dim': self.pw_runits, 'c': pw_attention_ch, 'h': pw_attention_h}
-            ptdict = {'in_dim': self.pw_runits, 'n': 4}
+            #multdict = {'in_dim': self.pw_runits, 'c': 128}
+            #attdict = {'in_dim': self.pw_runits, 'c': pw_attention_ch, 'h': pw_attention_h}
+            #ptdict = {'in_dim': self.pw_runits, 'n': 4}
             self.PwSeq = nn.Sequential(*[
-                pw.PairStack(multdict, attdict, ptdict, drop_rate=0)
-                for m in range(pw_blocks)
+                #pw.PairStack(multdict, attdict, ptdict, drop_rate=0)
+                #for m in range(pw_blocks)
+                nn.Linear(self.pw_mzunits, ffn_multiplier*self.pw_runits),
+                nn.SiLU(),
+                nn.Linear(ffn_multiplier*self.pw_runits, self.pw_runits)
             ])
 
         # charge/energy/mass embedding transformation
@@ -162,11 +170,11 @@ class Encoder(nn.Module):
             ) 
             for _ in range(depth)
         ])
-        self.main_proj = nn.Identity()#L.Dense(embedding_units, kernel_initializer=I.Zeros())
+        self.main_proj = nn.Identity()#nn.Linear(running_units, running_units)
         
         # Normalization type
         self.norm = mp.get_norm_type(norm_type)
-        
+
         # Recycling embedder
         self.recyc = nn.Sequential(
             self.norm(running_units) if prenorm else nn.Identity(),
@@ -341,7 +349,7 @@ class Encoder(nn.Module):
                 return_mask=return_mask,
                 return_full=return_full
             )
-        
+
         return output
 
 def encoder_base_arch(
@@ -361,7 +369,7 @@ def encoder_base_arch(
         att_h=8,
         depth=9,
         ffn_multiplier=4,
-        prenorm=True,
+        prenorm=False,
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
@@ -396,7 +404,7 @@ def encoder_pairwise(
         att_h=8,
         depth=9,
         ffn_multiplier=4,
-        prenorm=True,
+        prenorm=False,
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
@@ -407,6 +415,108 @@ def encoder_pairwise(
 
         pw_mz_units=512,
         pw_run_units=64,
+        pw_attention_ch=32,
+        pw_attention_h=4,
+        pw_blocks=1
+    )
+    
+    return model
+
+def encoder_pairwise_smaller(
+    use_charge=False,
+    use_mass=False,
+    use_energy=False,
+    bias="pairwise", # 'pairwise' | 'regular' | False | None
+):
+    model = Encoder(
+        norm_type='layer',
+        mz_units=256,
+        ab_units=256,
+        subdivide=True,
+        running_units=256,
+        att_d=32,
+        att_h=8,
+        depth=9,
+        ffn_multiplier=4,
+        prenorm=False,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
+        dropout=0.25,
+        bias=bias,
+        gate=False,
+        alphabet=False,
+
+        pw_mz_units=512,
+        pw_run_units=256,
+        pw_attention_ch=32,
+        pw_attention_h=4,
+        pw_blocks=1
+    )
+    
+    return model
+
+def encoder_pairwise_larger(
+    use_charge=False,
+    use_mass=False,
+    use_energy=False,
+    bias="pairwise", # 'pairwise' | 'regular' | False | None
+):
+    model = Encoder(
+        norm_type='layer',
+        mz_units=1024,
+        ab_units=256,
+        subdivide=True,
+        running_units=1024,
+        att_d=128,
+        att_h=8,
+        depth=9,
+        ffn_multiplier=2,
+        prenorm=False,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
+        dropout=0.25,
+        bias=bias,
+        gate=False,
+        alphabet=False,
+
+        pw_mz_units=1024,
+        pw_run_units=128,
+        pw_attention_ch=32,
+        pw_attention_h=4,
+        pw_blocks=1
+    )
+    
+    return model
+
+def encoder_pairwise_larger_deeper(
+    use_charge=False,
+    use_mass=False,
+    use_energy=False,
+    bias="pairwise", # 'pairwise' | 'regular' | False | None
+):
+    model = Encoder(
+        norm_type='layer',
+        mz_units=1024,
+        ab_units=256,
+        subdivide=True,
+        running_units=1024,
+        att_d=128,
+        att_h=8,
+        depth=15,
+        ffn_multiplier=2,
+        prenorm=False,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
+        dropout=0.25,
+        bias=bias,
+        gate=False,
+        alphabet=False,
+
+        pw_mz_units=1024,
+        pw_run_units=128,
         pw_attention_ch=32,
         pw_attention_h=4,
         pw_blocks=1

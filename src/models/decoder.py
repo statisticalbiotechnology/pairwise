@@ -21,14 +21,14 @@ def init_decoder_weights(module):
         if module.first.bias is not None:
             module.first.bias = I.zeros_(module.first.bias)
     if isinstance(module, (mp.SelfAttention, mp.CrossAttention)):
-        module.Wo.weight = I.normal_(
-            module.Wo.weight, 0.0, (1 / 3) * (module.h * module.d) ** -0.5
-        )
-        if hasattr(module, "qkv"):
-            module.qkv.weight = I.normal_(
-                module.qkv.weight, 0.0, (2 / 3) * module.indim**-0.5
-            )
-        if hasattr(module, "Wb"):
+        #limit = np.sqrt(6 / (module.h*module.d + module.h*module.out_units))
+        #module.Wo.weight = I.uniform_(module.Wo.weight, -limit, limit)
+        module.Wo.weight = I.normal_(module.Wo.weight, 0.0, (1/3)*(module.h*module.d)**-0.5)
+        if hasattr(module, 'qkv'):
+            #limit = np.sqrt(6 / (module.indim*module.d + module.indim*module.h))
+            #module.qkv.weight = I.uniform_(module.qkv.weight, -limit, limit)
+            module.qkv.weight = I.normal_(module.qkv.weight, 0.0, (2/3)*module.indim**-0.5)
+        if hasattr(module, 'Wb'):
             module.Wb.weight = I.zeros_(module.Wb.weight)
             module.Wb.bias = I.zeros_(module.Wb.bias)
         elif hasattr(module, "Wpw"):
@@ -38,8 +38,15 @@ def init_decoder_weights(module):
             module.Wg.weight = I.zeros_(module.Wg.weight)
             module.Wg.bias = I.constant_(module.Wg.bias, 1.0)  # gate mostly open ~ 0.73
     elif isinstance(module, mp.FFN):
-        module.W1.weight = I.xavier_uniform_(module.W1.weight)
+        #module.W1.weight = I.xavier_uniform_(module.W1.weight)
+        module.W1.weight = I.normal_(module.W1.weight, 0.0, (2/3)*(module.indim**-0.5))
         module.W1.bias = I.zeros_(module.W1.bias)
+        module.W2.weight = I.normal_(module.W2.weight, 0.0, (1/3)*(module.indim*module.mult)**-0.5)
+        #module.W2.weight = I.xavier_uniform_(module.W2.weight)
+    #elif isinstance(module, mp.TransBlock):
+    #    if hasattr(module, 'embed') and module.embed_type == 'normembed':
+    #        module.embed.weight = I.zeros_(module.embed.weight)
+    #        module.embed.bias = I.zeros_(module.embed.bias)
         module.W2.weight = I.normal_(
             module.W2.weight, 0.0, (1 / 3) * (module.indim * module.mult) ** -0.5
         )
@@ -48,7 +55,6 @@ def init_decoder_weights(module):
         module.weight = I.xavier_uniform_(module.weight)
         if module.bias is not None:
             module.bias = I.zeros_(module.bias)
-
 
 class Decoder(pl.LightningModule):
     def __init__(
@@ -229,7 +235,7 @@ class Decoder(pl.LightningModule):
                 charge = charge.type(torch.float32)
                 ce_emb.append(mp.FourierFeatures(charge, 1, 10, self.ce_units))
             if self.use_energy:
-                ce_emb.append(mp.FourierFeatures(energy, self.ce_units, 150.0))
+                ce_emb.append(mp.FourierFeatures(energy, 1, 150, self.ce_units))
             if self.use_mass:
                 ce_emb.append(mp.FourierFeatures(mass, 0.001, 10000, self.ce_units))
             if len(ce_emb) > 1:
@@ -1053,11 +1059,11 @@ def decoder_greedy_base(token_dict, d_model=512, dropout=0.5, **kwargs):
         "use_charge": True,
         "use_energy": False,
         "use_mass": True,
-        "prec_type": "pretoken",
+        "prec_type": 'inject',
         "norm_type": "layer",
         "prenorm": True,
         "preembed": True,
-        "dropout": dropout,
+        "dropout": 0.25,
         "pool": False,
         "gate": False,
         "bias": False,

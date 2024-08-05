@@ -204,19 +204,44 @@ class SpectrumTransformerEncoder(depthcharge.transformers.SpectrumTransformerEnc
             "num_cem_tokens": num_cem_tokens,
         }
 
-    def get_layer_id(self, param_name):
-        """
-        Assign a parameter with its layer id
-        Following MAE: https://github.com/facebookresearch/mae/blob/main/util/lr_decay.py
-        """
+def dc_encoder_smaller(
+    use_charge=False,
+    use_energy=False,
+    use_mass=False,
+    static_peak_encoder=False,
+    **kwargs,
+):
+    d_model = 256
+    if static_peak_encoder:
+        peak_encoder = StaticPeakEncoder(d_model)
+    else:
+        peak_encoder = True
+    model = SpectrumTransformerEncoder(
+        d_model=d_model,
+        nhead=8,
+        dim_feedforward=1024,
+        n_layers=9,
+        use_charge=use_charge,
+        use_mass=use_mass,
+        use_energy=use_energy,
+        peak_encoder=peak_encoder,
+        dropout=0.25
+    )
+    return model
 
-        if param_name.startswith("peak_encoder") or param_name.startswith("cls_token"):
-            return 0
-        elif param_name.startswith("transformer_encoder.layers."):
-            return int(param_name.split(".")[2])
-        else:
-            return self.n_layers
 
+def get_layer_id(self, param_name):
+    """
+    Assign a parameter with its layer id
+    Following MAE: https://github.com/facebookresearch/mae/blob/main/util/lr_decay.py
+    """
+
+    if param_name.startswith("peak_encoder") or param_name.startswith("cls_token"):
+        return 0
+    elif param_name.startswith("transformer_encoder.layers."):
+        return int(param_name.split(".")[2])
+    else:
+        return self.n_layers
 
 def dc_encoder_base(
     use_charge=False,
