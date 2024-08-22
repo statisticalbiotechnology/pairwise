@@ -257,7 +257,7 @@ class MultiCropWrapper(nn.Module):
         )
         return attn_output.squeeze(1)
 
-    def forward(self, x):
+    def forward(self, x, mass=None, charge=None):
         """
         Args:
             x (list of tuples): Each tuple contains (sequences, padding_masks)
@@ -291,6 +291,8 @@ class MultiCropWrapper(nn.Module):
             _out = self.backbone(
                 sequences,
                 key_padding_mask=padding_masks if padding else None,
+                mass=mass,
+                charge=charge,
             )
             embeds = _out["emb"]
             # These masks accomadate the new shape of embeds due to additional c/e/m or cls tokens

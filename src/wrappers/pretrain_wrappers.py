@@ -99,7 +99,7 @@ class TrinaryMZPLWrapper(BasePLWrapper):
         # target = F.one_hot(target, 3) # Not needed, CE loss expects class inds for the target
 
         return mz_batch, target
-    
+
     """
     def on_validation_epoch_end(self):
         # Update the current best achieved value for each val metric
@@ -122,6 +122,7 @@ class TrinaryMZPLWrapper(BasePLWrapper):
                 self.log_dict(self.tracker.best_metrics)
                 self.best_metrics_logged = True
     """
+
     def configure_optimizers(self):
         opts = torch.optim.Adam(
             self.parameters(),
@@ -562,16 +563,22 @@ class MaskedAutoencoderWrapper(MaskedTrainingPLWrapper):
             return_mask=True,
             **kwargs
         )
-        # Remove tokens added for charge/energy/mass
-        num_cem_tokens = outs["num_cem_tokens"]
-        encoder_out = outs["emb"][:, num_cem_tokens:, :]
+        encoder_out = outs["emb"]
 
         # Project the embeddings to the decoder's running_units
         if self.proj_before:
             encoder_out = self.proj_before(encoder_out)
 
+        # Remove tokens added for charge/energy/mass
+        num_cem_tokens = outs["num_cem_tokens"]
+        cem_tokens = encoder_out[:, :num_cem_tokens, :]
+        encoder_out = encoder_out[:, num_cem_tokens:, :]
+
         misc_items = parsed_batch["misc_items"]
 
+        decoder_padding_mask = misc_items["decoder_padding_mask"]
+
+        # Create decoder input (disregarding c/e/m/cls tokens)
         decoder_input = self._create_decoder_input(
             target=misc_items["target"],
             encoder_embeddings=encoder_out,
@@ -579,11 +586,22 @@ class MaskedAutoencoderWrapper(MaskedTrainingPLWrapper):
             keep_positions=misc_items["keep_positions"],
             masked_positions=misc_items["masked_positions"],
             padding_value=self.padding_value,
-            decoder_padding_mask=misc_items["decoder_padding_mask"],
+            decoder_padding_mask=decoder_padding_mask,
         )
 
+        if num_cem_tokens > 0:
+            # Additional mask entries (sequence dim) due to charge/energy/mass, and cls_token
+            cem_mask_pos = torch.tensor(
+                [[False] * num_cem_tokens] * encoder_out.shape[0]
+            ).type_as(decoder_padding_mask)
+            decoder_padding_mask = torch.cat(
+                [cem_mask_pos, decoder_padding_mask], dim=1
+            )
+            # Add back c/e/m/cls tokens to the decoder input
+            decoder_input = torch.cat([cem_tokens, decoder_input], dim=1)
+
         decoder_out = self.decoder(
-            decoder_input, src_key_padding_mask=misc_items["decoder_padding_mask"]
+            decoder_input, src_key_padding_mask=decoder_padding_mask
         )
 
         if self.proj_after:
@@ -591,7 +609,7 @@ class MaskedAutoencoderWrapper(MaskedTrainingPLWrapper):
         else:
             preds = decoder_out
 
-        return preds
+        return preds[:, num_cem_tokens:, :]  # Strip c/e/m/cls tokens for the final pred
 
     def _get_train_stats(self, returns, parsed_batch):
         loss_mask = parsed_batch["misc_items"]["masked_positions"]
@@ -708,12 +726,23 @@ class DinoTrainingPLWrapper(BasePLWrapper):
         crops = self.aug(mzab, lengths, self.rand_window_size)
         batch_size = mzab.shape[0]
         # TODO/FIXME: add support to include c/e/m tokens
-        return crops, batch_size
+        parsed_batch = {
+            "charge": spectra["precursor_charge"],
+            "mass": spectra["precursor_mz"],
+            "crops": crops,
+        }
+        return parsed_batch, batch_size
 
     def forward(self, parsed_batch, **kwargs):
-        student_out = self.student(parsed_batch)
+        student_out = self.student(
+            parsed_batch["crops"],
+            mass=parsed_batch["mass"] if self.get_encoder().use_mass else None,
+            charge=parsed_batch["charge"] if self.get_encoder().use_charge else None,
+        )
         with torch.no_grad():
-            teacher_out = self.teacher(parsed_batch[: self.aug.num_global_crops])
+            teacher_out = self.teacher(
+                parsed_batch["crops"][: self.aug.num_global_crops]
+            )
         return student_out, teacher_out
 
     def _get_losses(self, student_out, teacher_out):
