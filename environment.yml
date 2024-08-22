@@ -19,3 +19,4 @@ dependencies:
     - pathlib
     - jiwer
     - pylance==0.10.10
+    - datasets
