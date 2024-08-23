@@ -248,6 +248,8 @@ class Encoder(nn.Module):
 
         # Pairwise features
         if self.bias == "pairwise":
+            if self.cls_token is not None:
+                Mz = th.cat([th.zeros((Mz.shape[0], 1), device=Mz.device), Mz], dim=1)
             dtsr = mp.delta_tensor(Mz, 0.0)
             # expand based on mz_units
             if self.subdivide:
@@ -257,7 +259,7 @@ class Encoder(nn.Module):
                 mzpw_emb = mp.FourierFeatures(dtsr, 0.001, 10000, self.pw_mzunits)
             # transform based on pw_units
             mzpw_emb = self.MzpwSeq(mzpw_emb)
-            mzpw_emb = mzpw_emb.reshape(x.shape[0], x.shape[1], x.shape[1], -1)
+            mzpw_emb = mzpw_emb.reshape(x.shape[0], Mz.shape[1], Mz.shape[1], -1)
         else:
             mzpw_emb = None
 
@@ -579,7 +581,7 @@ def encoder_pairwise(
         bias=bias,
         gate=False,
         alphabet=False,
-        pw_mz_units=512,
+        pw_mz_units=128,
         pw_run_units=64,
         pw_attention_ch=32,
         pw_attention_h=4,

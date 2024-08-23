@@ -13,7 +13,7 @@ precision: 32-true
 max_peaks: 1000
 
 # Tasks
-encoder_model: dc_encoder_larger
+encoder_model: encoder_pairwise
 cls_token: 0
 pretrain_config: configs/pretrain/dc.yaml
 pretrain: 1
