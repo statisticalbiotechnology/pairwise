@@ -46,7 +46,7 @@ class RandomWindowAugmentation:
             tuple: Cropped sequences and corresponding padding masks.
         """
         batch_size, seq_len, embed_dim = sequences.shape
-        # Find max allowd start index
+        # Find max allowed start index
         window_sizes = torch.min(lengths, window_sizes)
         max_window_start = lengths - window_sizes
 
@@ -120,20 +120,30 @@ class RandomWindowAugmentation:
 if __name__ == "__main__":
     import pytorch_lightning as pl
 
-    # pl.seed_everything(0)
+    pl.seed_everything(0)
     # Example usage
-    batch_size, seq_len, embed_dim = 4, 8, 2
+    batch_size, seq_len, embed_dim = 4, 10, 2
     sequences = torch.randn(batch_size, seq_len, embed_dim)
     # lengths = torch.randint(seq_len // 2, seq_len, (batch_size,))
-    lengths = torch.tensor([8, 7, 3, 2]).long()
+    lengths = torch.tensor([10, 9, 7, 5]).long()
+
+    # Simulate pad tokens (= 0)
+    mask = torch.arange(seq_len).expand(batch_size, seq_len) >= lengths.unsqueeze(1)
+    sequences[mask.unsqueeze(-1).expand_as(sequences)] = 0
 
     augmentation = RandomWindowAugmentation(
-        global_crops_scale=(0.5, 0.9),
-        local_crops_scale=(0.3, 0.5),
+        global_crops_scale=(0.9, 0.9),
+        local_crops_scale=(0.2, 0.2),
         num_global_crops=2,
         num_local_crops=5,
     )
     augmented_sequences = augmentation(sequences, lengths)
 
+    print(f"Original Sequence Shape = {sequences.shape}")
+    print(f"Original Sequence Peak Lengths = {lengths}")
     for idx, (aug_seq, pad_mask) in enumerate(augmented_sequences):
-        print(f"Augmented Sequence {idx+1}: Shape = {aug_seq.shape}")
+        # print(f"Augmented Sequence {idx+1}: Shape = {aug_seq.shape}")
+        _local_or_global = "Local" if idx >= augmentation.num_global_crops else "Global"
+        print(
+            f"{_local_or_global} Augmented Sequence {idx+1} (~pad_mask).sum(-1) = length of real peaks = {(~pad_mask).sum(-1)}"
+        )
