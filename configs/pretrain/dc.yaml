@@ -84,6 +84,7 @@ masked_ae:
 
 dino:
   # Data augmentation
+  selection_mode: "window" # 'window' for consecutive, "random" for random selections
   rand_window_size: False
   global_crops_scale:
     - 0.9

@@ -120,6 +120,55 @@ class RandomWindowAugmentation:
         return crops
 
 
+class RandomSelectionAugmentation(RandomWindowAugmentation):
+    def _random_selection(self, sequences, lengths, selection_sizes):
+        batch_size, seq_len, embed_dim = sequences.shape
+        selected_sequences = torch.full(
+            (batch_size, selection_sizes.max(), embed_dim),
+            self.padding_value,
+            dtype=sequences.dtype,
+            device=sequences.device,
+        )
+
+        padding_mask = torch.ones(
+            (batch_size, selection_sizes.max()),
+            dtype=torch.bool,
+            device=sequences.device,
+        )
+
+        for i in range(batch_size):
+            # Randomly permute indices and select based on selection sizes
+            selection_indices = torch.randperm(
+                lengths[i].item(), device=sequences.device
+            )[: selection_sizes[i]]
+            selected_sequences[i, : selection_sizes[i]] = sequences[
+                i, selection_indices
+            ]
+            padding_mask[i, : selection_sizes[i]] = False
+
+        return selected_sequences, padding_mask
+
+    def __call__(self, sequences, lengths, rand_size=False):
+        crops = []
+        lengths = lengths.squeeze(-1)
+        if any(lengths < 1):
+            print("Warning: Found empty spectrum. Can lead to unexpected behaviour. ")
+
+        # Global crops
+        for _ in range(self.num_global_crops):
+            global_sizes = self._get_window_sizes(
+                lengths, local=False, random=rand_size
+            )
+            crops.append(self._random_selection(sequences, lengths, global_sizes))
+
+        # Local crops
+        for _ in range(self.num_local_crops):
+            local_sizes = self._get_window_sizes(lengths, random=rand_size)
+            crops.append(self._random_selection(sequences, lengths, local_sizes))
+
+        return crops
+
+
 if __name__ == "__main__":
     import pytorch_lightning as pl
 
@@ -127,25 +176,34 @@ if __name__ == "__main__":
     # Example usage
     batch_size, seq_len, embed_dim = 4, 10, 2
     sequences = torch.randn(batch_size, seq_len, embed_dim)
-    # lengths = torch.randint(seq_len // 2, seq_len, (batch_size,))
     lengths = torch.tensor([10, 9, 7, 5]).long()
 
     # Simulate pad tokens (= 0)
     mask = torch.arange(seq_len).expand(batch_size, seq_len) >= lengths.unsqueeze(1)
     sequences[mask.unsqueeze(-1).expand_as(sequences)] = 0
 
-    augmentation = RandomWindowAugmentation(
-        global_crops_scale=(0.9, 0.9),
-        local_crops_scale=(0.1, 0.1),
-        num_global_crops=2,
-        num_local_crops=5,
-    )
+    # Switch between "window" and "random"
+    use_window_selection = False  #
+    if use_window_selection:
+        augmentation = RandomWindowAugmentation(
+            global_crops_scale=(0.9, 0.9),
+            local_crops_scale=(0.2, 0.2),
+            num_global_crops=2,
+            num_local_crops=5,
+        )
+    else:
+        augmentation = RandomSelectionAugmentation(
+            global_crops_scale=(0.9, 0.9),
+            local_crops_scale=(0.2, 0.2),
+            num_global_crops=2,
+            num_local_crops=5,
+        )
+
     augmented_sequences = augmentation(sequences, lengths)
 
     print(f"Original Sequence Shape = {sequences.shape}")
     print(f"Original Sequence Peak Lengths = {lengths}")
     for idx, (aug_seq, pad_mask) in enumerate(augmented_sequences):
-        # print(f"Augmented Sequence {idx+1}: Shape = {aug_seq.shape}")
         _local_or_global = "Local" if idx >= augmentation.num_global_crops else "Global"
         print(
             f"{_local_or_global} Augmented Sequence {idx+1} (~pad_mask).sum(-1) = length of real peaks = {(~pad_mask).sum(-1)}"

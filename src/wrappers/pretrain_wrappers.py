@@ -1,6 +1,6 @@
 from copy import deepcopy
 import torch
-from data_augmentation import RandomWindowAugmentation
+from data_augmentation import RandomSelectionAugmentation, RandomWindowAugmentation
 from wrappers.base_wrapper import BasePLWrapper
 from models.heads import ClassifierHead
 import torch.nn.functional as F
@@ -654,13 +654,25 @@ class DinoTrainingPLWrapper(BasePLWrapper):
         )
 
         self.TASK_NAME = "dino"
-        self.aug = RandomWindowAugmentation(
-            global_crops_scale=task_dict["global_crops_scale"],
-            local_crops_scale=task_dict["local_crops_scale"],
-            num_global_crops=task_dict["num_global_crops"],
-            num_local_crops=task_dict["num_local_crops"],
-            padding_value=0,
-        )
+
+        if task_dict["selection_mode"] == "window":
+            self.aug = RandomWindowAugmentation(
+                global_crops_scale=task_dict["global_crops_scale"],
+                local_crops_scale=task_dict["local_crops_scale"],
+                num_global_crops=task_dict["num_global_crops"],
+                num_local_crops=task_dict["num_local_crops"],
+                padding_value=0,
+            )
+        elif task_dict["selection_mode"] == "random":
+            self.aug = RandomSelectionAugmentation(
+                global_crops_scale=task_dict["global_crops_scale"],
+                local_crops_scale=task_dict["local_crops_scale"],
+                num_global_crops=task_dict["num_global_crops"],
+                num_local_crops=task_dict["num_local_crops"],
+                padding_value=0,
+            )
+        else:
+            ValueError("Invalid 'selection_mode' for crops")
 
         _head_kwargs = dict(
             in_dim=encoder.running_units,
