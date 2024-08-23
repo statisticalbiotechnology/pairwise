@@ -12,7 +12,7 @@ precision: 32-true
 save_top_k: 0
 save_last: 0
 every_n_epochs: 0
-every_n_train_steps: 10000
+every_n_train_steps: 10000 # utils.py:329
 
 # Models
 encoder_model: encoder_base_arch # encoder_base_arch | dc_encoder_base | encoder_pairwise

@@ -274,11 +274,12 @@ def get_ninespecies_HF_data_module(
         num_workers=ds_config['num_workers'],
         pep_length=ds_config['pep_length'],
         charge=ds_config['charge'],
-        buffer_size=10000,
+        buffer_size=100,
     )
     dfs = {
         'train': loader.dataset['train'],
         'val': loader.dataset['val'],
+        'test': loader.dataset['test'],
     }
 
     amod_dic = loader.amod_dic
@@ -296,7 +297,7 @@ def get_ninespecies_HF_data_module(
     amod_dict = token_dicts["amod_dict"]
     dataset_train = loader.dataset['train']
     dataset_val = loader.dataset['val']
-    dataset_test = loader.dataset['val']
+    dataset_test = loader.dataset['test']
 
     if subset:
         #assert subset >= 0 and subset <= 1
