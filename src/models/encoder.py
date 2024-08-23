@@ -69,7 +69,7 @@ class Encoder(nn.Module):
         ffn_multiplier=4,  # multiply inp units for 1st FFN transform
         prenorm=True,  # normalization before attention/ffn layers
         norm_type="layer",  # normalization type
-        preembed=False,  # embed/add charge/energy/mass before FFN
+        preembed=True,  # embed/add charge/energy/mass before FFN
         depth=9,  # number of transblocks
         dropout=0,  # dropout on residual in SelfAtt and FFN
         bias=False,  # Att. bias: 'regular' | 'pairwise' | False/None
@@ -112,9 +112,7 @@ class Encoder(nn.Module):
 
         # Position modulation
         
-        if preembed:
-            # NOTE: This can't be set as a learnable parameter if not used, when training with DDP
-            self.alpha = nn.Parameter(_alpha = th.tensor(0.1), requires_grad=True)
+
 
 
         mdim = mz_units // 4 if subdivide else mz_units
@@ -157,6 +155,7 @@ class Encoder(nn.Module):
         if self.atleast1:
             num = sum([use_charge, use_energy, use_mass])
             self.ce_emb = nn.Sequential(nn.Linear(ce_units * num, ce_units), nn.SiLU())
+            self.alpha = nn.Parameter(_alpha = th.tensor(0.1), requires_grad=True)
 
         # First transformation
         self.first = nn.Linear(mz_units + ab_units, running_units, bias=False)
