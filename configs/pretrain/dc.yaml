@@ -86,11 +86,11 @@ dino:
   # Data augmentation
   rand_window_size: False
   global_crops_scale:
-    - 0.5
+    - 0.9
     - 0.9
   local_crops_scale:
-    - 0.1
-    - 0.1
+    - 0.2
+    - 0.2
   num_global_crops: 2
   num_local_crops: 5
 
