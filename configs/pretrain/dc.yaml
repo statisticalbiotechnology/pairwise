@@ -8,7 +8,7 @@ trinary_mz:
   epochs: 1
   subset: 0
   num_workers: 0
-  dropout: 0
+  dropout: 0.25
 
   # Annealing
   anneal_lr: 0
@@ -34,7 +34,7 @@ masked:
   epochs: 1
   subset: 0
   num_workers: 0
-  dropout: 0
+  dropout: 0.25
 
   # Annealing
   anneal_lr: 0
@@ -71,7 +71,7 @@ masked_ae:
   epochs: 1
   subset: 0
   num_workers: 0
-  dropout: 0
+  dropout: 0.25
 
   # Annealing
   anneal_lr: 0
@@ -124,4 +124,4 @@ dino:
   epochs: 2
   subset: 0
   num_workers: 0
-  dropout: 0
+  dropout: 0.25

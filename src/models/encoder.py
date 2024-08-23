@@ -592,6 +592,7 @@ def encoder_pairwise_smaller(
     use_energy=False,
     bias="pairwise",  # 'pairwise' | 'regular' | False | None
     cls_token=False,
+    dropout=0.25,
 ):
     model = Encoder(
         norm_type="layer",
@@ -607,7 +608,7 @@ def encoder_pairwise_smaller(
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
-        dropout=0.25,
+        dropout=dropout,
         bias=bias,
         gate=False,
         alphabet=False,
@@ -628,6 +629,7 @@ def encoder_pairwise_larger(
     use_energy=False,
     bias="pairwise",  # 'pairwise' | 'regular' | False | None
     cls_token=False,
+    dropout=0.25,
 ):
     model = Encoder(
         norm_type="layer",
@@ -643,7 +645,7 @@ def encoder_pairwise_larger(
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
-        dropout=0.25,
+        dropout=dropout,
         bias=bias,
         gate=False,
         alphabet=False,
@@ -664,6 +666,7 @@ def encoder_pairwise_larger_deeper(
     use_energy=False,
     bias="pairwise",  # 'pairwise' | 'regular' | False | None
     cls_token=False,
+    dropout=0.25,
 ):
     model = Encoder(
         norm_type="layer",
@@ -679,7 +682,7 @@ def encoder_pairwise_larger_deeper(
         use_charge=use_charge,
         use_mass=use_mass,
         use_energy=use_energy,
-        dropout=0.25,
+        dropout=dropout,
         bias=bias,
         gate=False,
         alphabet=False,
