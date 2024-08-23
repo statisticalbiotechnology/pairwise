@@ -82,10 +82,11 @@ class RandomWindowAugmentation:
 
     def _get_window_sizes(self, lengths, local=True, random=False):
         if random:
-            return self._random_window_size(lengths, local)
+            _window_sizes = self._random_window_size(lengths, local)
         else:
             scale = self.local_high if local else self.global_high
-            return (lengths * scale).long()
+            _window_sizes = (lengths * scale).long()
+        return _window_sizes.clamp(min=1)
 
     def __call__(self, sequences, lengths, rand_size=False):
         """
@@ -101,6 +102,8 @@ class RandomWindowAugmentation:
         """
         crops = []
         lengths = lengths.squeeze(-1)
+        if any(lengths < 1):
+            print("Warning: Found empty spectrum. Can lead to unexpected behaviour. ")
 
         # Global crops
         for _ in range(self.num_global_crops):
@@ -133,7 +136,7 @@ if __name__ == "__main__":
 
     augmentation = RandomWindowAugmentation(
         global_crops_scale=(0.9, 0.9),
-        local_crops_scale=(0.2, 0.2),
+        local_crops_scale=(0.1, 0.1),
         num_global_crops=2,
         num_local_crops=5,
     )
