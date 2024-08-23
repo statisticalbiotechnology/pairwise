@@ -68,7 +68,7 @@ masked_ae:
   batch_size: 100
   ref_batch_size: 100
   weight_decay: 1.0e-5
-  epochs: 1
+  epochs: 10
   subset: 0
   num_workers: 0
   dropout: 0.25
@@ -79,7 +79,7 @@ masked_ae:
   warmup_duration: 20000
   lr_start: 0
   blr: 4.0e-5
-  lr_end: 1.0e-6
+  lr_end: 4.0e-5
 
 
 dino:
@@ -117,11 +117,11 @@ dino:
   warmup_duration: 20000
   lr_start: 0
   blr: 1.0e-5
-  lr_end: 1.0e-6
+  lr_end: 1.0e-5
   batch_size: 64
   ref_batch_size: 256
   weight_decay: 0.04
-  epochs: 2
+  epochs: 10
   subset: 0
   num_workers: 0
   dropout: 0.25
