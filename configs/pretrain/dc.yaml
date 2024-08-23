@@ -104,8 +104,8 @@ dino:
   mlp_bottleneck_dim: 256
 
   # Training hparams Dino
-  warmup_teacher_temp: 0.03 # Initial value
-  teacher_temp: 0.03 # Final value after warmup
+  warmup_teacher_temp: 0.02 # Initial value
+  teacher_temp: 0.02 # Final value after warmup
   warmup_teacher_temp_epochs: 0 
   student_temp: 0.1
   center_momentum: 0.9
