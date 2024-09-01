@@ -59,7 +59,7 @@ class LoaderHF:
         val_species: str,
         dictionary_path: str=None,
         add_start_token: bool=True,
-        top_pks: int=100,
+        top_peaks: int=100,
         batch_size: int=100,
         num_workers: int=0,
         **kwargs
@@ -83,9 +83,6 @@ class LoaderHF:
                 line.split()[0]:m for m, line in enumerate(open(dictionary_path))
             }
             self.amod_dic['X'] = len(self.amod_dic)
-            #for key in exceptions.keys():
-            #    if exceptions[key] in self.amod_dic.keys():
-            #        self.amod_dic[key] = self.amod_dic[exceptions[key]]
             self.amod_dic_rev = {b:a for a,b in self.amod_dic.items()}
             self.input_dic = deepcopy(self.amod_dic)
             if add_start_token:
@@ -113,7 +110,7 @@ class LoaderHF:
             map_fn(
                 example,
                 self.amod_dic,
-                top=top_pks, 
+                top=top_peaks, 
                 max_seq=kwargs['pep_length'][1]
             ), 
             remove_columns=[
@@ -148,8 +145,8 @@ class LoaderHF:
         # Shuffle the dataset
         if 'buffer_size' in kwargs.keys():
             dataset['train'] = dataset['train'].shuffle(buffer_size=kwargs['buffer_size'])
-        else:
-            dataset['train'] = dataset['train'].shuffle()
+        #else:
+        #    dataset['train'] = dataset['train'].shuffle()
         
         self.dataset = dataset
 

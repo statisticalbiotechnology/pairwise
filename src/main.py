@@ -260,8 +260,6 @@ def main(global_args, pretrain_config=None, ds_config=None):
                 global_args.downstream_root_dir,
                 config["downstream_config"],
                 global_args,
-                max_peaks=global_args.max_peaks,
-                max_length=global_args.max_length,
                 subset=config["downstream_config"][global_args.downstream_task][
                     "subset"
                 ],

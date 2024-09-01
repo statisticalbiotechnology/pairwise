@@ -256,8 +256,9 @@ def get_ninespecies_HF_data_module(
     data_root_dir,
     ds_config,
     global_args,
-    max_peaks=300,
-    max_length=30,
+    #max_peaks=300,
+    #max_length=30,
+    #max_charge=10,
     subset=0,
     include_hidden=False,
 ):
@@ -270,11 +271,11 @@ def get_ninespecies_HF_data_module(
         dataset_directory=dataset_directory,
         val_species=ds_config['val_species'],
         dictionary_path=dictionary_path,
-        top_peaks=ds_config['top_pks'],
-        num_workers=ds_config['num_workers'],
+        top_peaks=ds_config['top_peaks'],
+        num_workers=global_args.num_workers,#ds_config['num_workers'],
         pep_length=ds_config['pep_length'],
         charge=ds_config['charge'],
-        buffer_size=100,
+        buffer_size=ds_config['buffer_size'],
     )
     dfs = {
         'train': loader.dataset['train'],

@@ -2,15 +2,21 @@ trinary_mz:
   test: 123
 
   # Training hparams
-  batch_size: 100
-  lr_warmup: 0
-  lr_start: 1.0e-7
-  lr_end: 2.0e-4
-  lr_warmup_steps: 20000
+  anneal_lr: 0
+  anneal_per_step: True
+  warmup_duration: 20000
+  lr_start: 0
   blr: 4.0e-5
-  lr_decay: False
+  lr_end: 4.0e-5
+  #lr_warmup: 0
+  #lr_start: 1.0e-7
+  #lr_end: 2.0e-4
+  #lr_warmup_steps: 20000
+  #blr: 4.0e-5
+  #lr_decay: False
+  batch_size: 100
   weight_decay: 1.0e-5
-  epochs: 1
+  epochs: 10
   subset: 0
   num_workers: 0
   dropout: 0.25

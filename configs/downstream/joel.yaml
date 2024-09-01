@@ -1,22 +1,32 @@
-num_workers: 4
 
-dataset_name: ninespecies_hf
+#paths:
+#  train:
+#    - train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet
+#    - train-00000-of-00002-ca1fbc3de7c99259.parquet
+#  val: 
+#    - validation-00000-of-00001-b84568f5bf3ba95d.parquet
+#  test: 
+#    - test-00000-of-00001-15be7bb3864037e7.parquet
+#add_mass: True
+
+# Must set these options for the HF dataset. There are no global arguments for them.
+# See utils.py:get_ninespecies_HF_data_module
+# apis_mellifera 196222
+# homo_sapiens 44925
+# bacillus_subtilis 1359692
+# candidatus_endoloripes 82335
+# methanosarcina_mazei 264460
+# mus_musculus 26074
+# saccharomyces_cerevisiae 589091
+# solanum_lycopersicum 181538
+# vigna_mungo 1103314
 task: denovo
-top_pks: 100 # this doesn't work
+dataset_name: ninespecies_hf
+val_species: apis_mellifera
+top_peaks: 300 # separate from max_peaks
 pep_length: [0, 30]
 charge: [0, 10]
-add_mass: True
-
-paths:
-  train:
-    - train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet
-    - train-00000-of-00002-ca1fbc3de7c99259.parquet
-  val: 
-    - validation-00000-of-00001-b84568f5bf3ba95d.parquet
-  test: 
-    - test-00000-of-00001-15be7bb3864037e7.parquet
-
-val_species: saccharomyces_cerevisiae
+buffer_size: 100
 
 denovo_tf:
   # DeNovoTeacherForcing specific hparams
@@ -38,8 +48,8 @@ denovo_tf:
   weight_decay: 0
   epochs: 30
   subset: 0
-  num_workers: 16
   decoder_dropout: 0.25
+  decoder_use_cls: False
 
 denovo_random:
   # DeNovoTeacherRandom specific hparams

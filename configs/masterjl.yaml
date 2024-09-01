@@ -1,10 +1,10 @@
-data_root_dir: /proj/bedrock/datasets/foundational_dataset/combined
+data_root_dir: /proj/bedrock/datasets/bacteria_PXD010000__PXD010613/no_labels/
 output_dir: /proj/bedrock/checkpoints/checkpoint
 log_dir: /proj/bedrock/logs/log
-wandb_project: debug # ProteomeTools | {choose your exp.}
-wandb_entity: joellapin # kall | joellapin
+wandb_project: bacterial # ProteomeTools | {choose your exp.}
+wandb_entity: kall # kall | joellapin
 log_wandb: 1
-num_workers: 16
+num_workers: 8
 matmul_precision: high
 precision: 32-true
 
@@ -12,22 +12,22 @@ precision: 32-true
 save_top_k: 0
 save_last: 0
 every_n_epochs: 0
-every_n_train_steps: 10000 # utils.py:329
+every_n_train_steps: # utils.py:329
 
 # Models
-encoder_model: encoder_base_arch # encoder_base_arch | dc_encoder_base | encoder_pairwise
+encoder_model: encoder_pairwise # encoder_base_arch | dc_encoder_base | encoder_pairwise
 decoder_model: dc_decoder_base # decoder_greedy_base | dc_decoder_base
 
 #### Training hyperparameters
-batch_size: 100
+batch_size: 70
 max_peaks: 100
 seed: 0
 
 # Tasks
 pretrain: 0
 encoder_weights:
-pretrain_config: configs/pretrain/joel.yaml
-pretraining_task: trinary_mz
+pretrain_config: configs/pretrain/joel.yaml # joel.yaml | dc.yaml
+pretraining_task: trinary_mz # trinary_mz | dino | masked_ae
 trinary_type: 'mz'
 mask_ratio: 0.75
 # De novo
@@ -35,3 +35,4 @@ downstream_config: configs/downstream/joel.yaml
 downstream_task: denovo_tf # none | denovo_tf
 downstream_root_dir: /proj/bedrock/datasets/9_species_xy
 limit_train_batches: 1.0
+limit_val_batches: 1.0

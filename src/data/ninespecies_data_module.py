@@ -32,10 +32,10 @@ class NinespeciesDataModule(pl.LightningDataModule):
             self.datasets[0],
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            pin_memory=self.pin_mem,
-            #drop_last=True,
+            #pin_memory=self.pin_mem,
+            drop_last=True,
             collate_fn=self.collate_fn,
-            persistent_workers=self.num_workers > 0,
+            #persistent_workers=self.num_workers > 0, # memory error
             #shuffle=self.shuffle,
         )
 
@@ -43,7 +43,7 @@ class NinespeciesDataModule(pl.LightningDataModule):
         return DataLoader(
             self.datasets[1],
             batch_size=self.batch_size,
-            #num_workers=self.num_workers,
+            num_workers=1,#self.num_workers,
             #pin_memory=self.pin_mem,
             drop_last=True,
             collate_fn=self.collate_fn,
@@ -54,7 +54,7 @@ class NinespeciesDataModule(pl.LightningDataModule):
         return DataLoader(
             self.datasets[2],
             batch_size=self.batch_size,
-            #num_workers=self.num_workers,
+            num_workers=1,#self.num_workers,
             #pin_memory=self.pin_mem,
             drop_last=False,
             collate_fn=self.collate_fn,
