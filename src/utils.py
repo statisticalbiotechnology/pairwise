@@ -263,14 +263,15 @@ def get_ninespecies_HF_data_module(
     include_hidden=False,
 ):
     
-    never_changing_path = "/proj/bedrock/datasets/9_species_InstaDeepAI"
+    #never_changing_path = "/proj/bedrock/datasets/9_species_InstaDeepAI"
     
-    dataset_directory = os.path.join(never_changing_path, "parquet/processed")
-    dictionary_path = os.path.join(never_changing_path, "ns_dictionary.txt")
+    dataset_directory = os.path.join(data_root_dir, "parquet/processed")
+    dictionary_path = os.path.join(data_root_dir, "ns_dictionary.txt")
     loader = LoaderHF(
         dataset_directory=dataset_directory,
         val_species=ds_config['val_species'],
         dictionary_path=dictionary_path,
+        tokenizer_path=data_root_dir,
         top_peaks=ds_config['top_peaks'],
         num_workers=global_args.num_workers,#ds_config['num_workers'],
         pep_length=ds_config['pep_length'],

@@ -23,7 +23,7 @@
 task: denovo
 dataset_name: ninespecies_hf
 val_species: apis_mellifera
-top_peaks: 300 # separate from max_peaks
+top_peaks: 100 # separate from max_peaks
 pep_length: [0, 30]
 charge: [0, 10]
 buffer_size: 100

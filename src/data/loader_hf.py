@@ -3,10 +3,10 @@ from torch.utils.data import DataLoader
 import torch as th
 import os
 import re
-from utils2 import partition_modified_sequence
 from copy import deepcopy
+import sys
 
-def map_fn(example, dic=None, top=100, max_seq=50):
+def map_fn(example, tokenizer, dic=None, top=100, max_seq=50):
     ab = th.tensor(example['intensity_array'])
     ab_sort = (-ab).argsort()[:top]
     ab = ab[ab_sort]
@@ -23,7 +23,7 @@ def map_fn(example, dic=None, top=100, max_seq=50):
     example['precursor_charge'] = th.tensor(example['precursor_charge'], dtype=th.int32)
     example['precursor_mass'] = th.tensor(example['precursor_mass'], dtype=th.float32)
     example['spectrum_length'] = th.tensor(len(example['mz_array']), dtype=th.int32)
-    tokenized_sequence = partition_modified_sequence(example['modified_sequence'])
+    tokenized_sequence = tokenizer(example['modified_sequence'])
     peptide_length = len(tokenized_sequence)
     example['tokenized_sequence'] = th.tensor([dic[m] for m in tokenized_sequence] + (max_seq-peptide_length)*[dic['X']], dtype=th.int32)
     example['peptide_length'] = th.tensor(peptide_length, dtype=th.int32)
@@ -59,6 +59,7 @@ class LoaderHF:
         val_species: str,
         dictionary_path: str=None,
         add_start_token: bool=True,
+        tokenizer_path: str=None,
         top_peaks: int=100,
         batch_size: int=100,
         num_workers: int=0,
@@ -87,6 +88,11 @@ class LoaderHF:
             self.input_dic = deepcopy(self.amod_dic)
             if add_start_token:
                 self.input_dic["<SOS>"] = len(self.amod_dic)
+
+        # Tokenizer
+        sys.path.append(tokenizer_path)
+        from enumerate_tokens import partition_modified_sequence
+        self.tokenizer = partition_modified_sequence
         
         # Dataset
         dataset_path = {
@@ -109,6 +115,7 @@ class LoaderHF:
             lambda example:
             map_fn(
                 example,
+                self.tokenizer,
                 self.amod_dic,
                 top=top_peaks, 
                 max_seq=kwargs['pep_length'][1]
