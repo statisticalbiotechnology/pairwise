@@ -3,7 +3,7 @@ output_dir: /proj/bedrock/checkpoints/checkpoint
 log_dir: /proj/bedrock/logs/log
 wandb_project: bacterial # ProteomeTools | {choose your exp.}
 wandb_entity: kall # kall | joellapin
-log_wandb: 0
+log_wandb: 1
 num_workers: 8
 matmul_precision: high
 precision: 32-true
@@ -33,6 +33,6 @@ mask_ratio: 0.75
 # De novo
 downstream_config: configs/downstream/joel.yaml
 downstream_task: denovo_tf # none | denovo_tf
-downstream_root_dir: /proj/bedrock/datasets/9_species_InstaDeepAI
+downstream_root_dir: /proj/bedrock/datasets/9_species_V1
 limit_train_batches: 1.0
 limit_val_batches: 1.0

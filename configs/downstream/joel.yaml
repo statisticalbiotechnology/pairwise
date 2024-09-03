@@ -1,16 +1,7 @@
 
-#paths:
-#  train:
-#    - train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet
-#    - train-00000-of-00002-ca1fbc3de7c99259.parquet
-#  val: 
-#    - validation-00000-of-00001-b84568f5bf3ba95d.parquet
-#  test: 
-#    - test-00000-of-00001-15be7bb3864037e7.parquet
-#add_mass: True
-
 # Must set these options for the HF dataset. There are no global arguments for them.
 # See utils.py:get_ninespecies_HF_data_module
+#
 # apis_mellifera 196222
 # homo_sapiens 44925
 # bacillus_subtilis 1359692
@@ -22,8 +13,8 @@
 # vigna_mungo 1103314
 task: denovo
 dataset_name: ninespecies_hf
-val_species: apis_mellifera
-top_peaks: 100 # separate from max_peaks
+val_species: saccharomyces_cerevisiae
+top_peaks: 200 # separate from max_peaks
 pep_length: [0, 30]
 charge: [0, 10]
 buffer_size: 100
