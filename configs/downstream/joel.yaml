@@ -13,11 +13,11 @@
 # vigna_mungo 1103314
 task: denovo
 dataset_name: ninespecies_hf
-val_species: saccharomyces_cerevisiae
-top_peaks: 200 # separate from max_peaks
-pep_length: [0, 30]
+val_species: solanum_lycopersicum
+top_peaks: 150 # independent of max_peaks
+pep_length: [0, 100]
 charge: [0, 10]
-buffer_size: 100
+buffer_size: 10000
 
 denovo_tf:
   # DeNovoTeacherForcing specific hparams

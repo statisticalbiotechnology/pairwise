@@ -256,6 +256,8 @@ def main(global_args, pretrain_config=None, ds_config=None):
                 include_hidden=global_args.downstream_task == "denovo_random",
             )
         elif config['downstream_config']['dataset_name'] == "ninespecies_hf":
+            # OVERRIDE MAX_LENGTH GLOBAL ARGMENT
+            global_args.max_length = config['downstream_config']['pep_length'][-1]
             ds_data_module, token_dicts = utils.get_ninespecies_HF_data_module(
                 global_args.downstream_root_dir,
                 config["downstream_config"],
@@ -286,6 +288,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
                 "decoder_dropout"
             ],
             cross_attend=global_args.cross_attend,
+            max_seq_len=global_args.max_length+1, # +1 because of added EOS token
         )
 
         pl_downstream = DOWNSTREAM_TASK_DICT[global_args.downstream_task](

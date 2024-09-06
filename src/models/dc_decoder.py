@@ -282,7 +282,14 @@ def dc_decoder_tiny(amod_dict, d_model=256, dropout=0, cross_attend=True, **kwar
     return model
 
 
-def dc_decoder_base(amod_dict, d_model=256, dropout=0, cross_attend=True, **kwargs):
+def dc_decoder_base(
+    amod_dict, 
+    d_model=256, 
+    dropout=0, 
+    cross_attend=True, 
+    max_seq_len=31,
+    **kwargs
+):
     model = PeptideTransformerDecoder(
         amod_dict,
         d_model,
@@ -295,6 +302,7 @@ def dc_decoder_base(amod_dict, d_model=256, dropout=0, cross_attend=True, **kwar
         use_charge=True,
         dropout=dropout,
         cross_attend=cross_attend,
+        max_seq_len=max_seq_len,
     )
     return model
 
