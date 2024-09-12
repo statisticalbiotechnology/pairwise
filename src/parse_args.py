@@ -229,6 +229,12 @@ def get_args_parser(conf_parser):
         default=500,
         help="Maximum number of batches to run in validation",
     )
+    parser.add_argument(
+        "--validate_every_n_epochs",
+        type=int,
+        default=1,
+        help="Limit validation frequency; used as argument to downstream trainer",
+    )
 
     # Dataset parameters
     parser.add_argument(

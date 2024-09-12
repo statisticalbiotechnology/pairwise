@@ -351,6 +351,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
             # num_sanity_val_steps=0,
             limit_train_batches=config['limit_train_batches'],
             limit_val_batches=config['limit_val_batches'],
+            check_val_every_n_epoch=config['validate_every_n_epochs'],
         )
 
         start_time = time.time()
