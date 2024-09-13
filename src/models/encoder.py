@@ -412,7 +412,7 @@ class Encoder(nn.Module):
         Following MAE: https://github.com/facebookresearch/mae/blob/main/util/lr_decay.py
         """
 
-        if param_name.startswith("MzSeq") or param_name.startswith("first") or param_name.startswith("cls_token"):
+        if param_name.startswith("MzSeq") or param_name.startswith("first") or param_name.startswith("cls_token") or param_name.startswith("MzpwSeq") or param_name.startswith("pwfirst") or param_name.startswith("PwSeq"):
             return 0
         elif param_name.startswith("main."):
             return int(param_name.split(".")[1])
