@@ -109,6 +109,7 @@ class Encoder(nn.Module):
         # compat
         self.dim_feedforward = ffn_multiplier * running_units
         self.encode_peaks = self.MzAb
+        self.n_layers=depth
 
         # Position modulation
         
@@ -404,6 +405,19 @@ class Encoder(nn.Module):
             )
 
         return output
+
+    def get_layer_id(self, param_name):
+        """
+        Assign a parameter with its layer id
+        Following MAE: https://github.com/facebookresearch/mae/blob/main/util/lr_decay.py
+        """
+
+        if param_name.startswith("MzSeq") or param_name.startswith("first") or param_name.startswith("cls_token") or param_name.startswith("MzpwSeq") or param_name.startswith("pwfirst") or param_name.startswith("PwSeq"):
+            return 0
+        elif param_name.startswith("main."):
+            return int(param_name.split(".")[1])
+        else:
+            return self.n_layers
 
 
 def encoder_tiny(

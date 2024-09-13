@@ -263,7 +263,8 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         }
 
     def on_train_epoch_start(self):
-        self.trainer.datamodule.datasets[0].set_epoch(self.trainer.current_epoch)
+        if hasattr(self.trainer.datamodule.datasets[0], "set_epoch"):
+            self.trainer.datamodule.datasets[0].set_epoch(self.trainer.current_epoch)
 
 class DeNovoRandom(DeNovoTeacherForcing):
     def __init__(
