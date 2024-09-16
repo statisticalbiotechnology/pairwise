@@ -150,9 +150,9 @@ class LoaderHF:
                 (example['precursor_charge'] <= kwargs['charge'][1])
             )
         # Split val into val/test
-        #dataset['test'] = dataset['train'].filter(lambda x, idx: idx % 10 == 0, with_indices=True)
-        dataset['test'] = dataset['val'].filter(lambda x, idx: idx % 2 == 0, with_indices=True)
-        dataset['val'] = dataset['val'].filter(lambda x, idx: idx % 2 == 1, with_indices=True)
+        dataset['test'] = dataset['train'].filter(lambda x, idx: idx % 10 == 0, with_indices=True)
+        #dataset['test'] = dataset['val'].filter(lambda x, idx: idx % 2 == 0, with_indices=True)
+        #dataset['val'] = dataset['val'].filter(lambda x, idx: idx % 2 == 1, with_indices=True)
         
         # Shuffle the dataset
         if 'buffer_size' in kwargs.keys():

@@ -267,6 +267,7 @@ def get_ninespecies_HF_data_module(
     
     dataset_directory = os.path.join(data_root_dir, "parquet/processed")
     dictionary_path = os.path.join(data_root_dir, "ns_dictionary.txt")
+    masses_path = os.path.join(data_root_dir, "ns_masses.txt")
     loader = LoaderHF(
         dataset_directory=dataset_directory,
         val_species=ds_config['val_species'],
@@ -295,7 +296,7 @@ def get_ninespecies_HF_data_module(
         "output_dict": output_dict,
     }
 
-    token_dicts["residues"] = RESIDUES_NINESPECIES_IDAI
+    token_dicts["residues"] = {line.split()[0]:float(line.split()[1]) for line in open(masses_path)}
     amod_dict = token_dicts["amod_dict"]
     dataset_train = loader.dataset['train']
     dataset_val = loader.dataset['val']
