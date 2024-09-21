@@ -210,10 +210,10 @@ class DeNovoTeacherForcing(BaseDownstreamWrapper):
         )
 
         """Accuracy might have little meaning if we are dynamically sizing the sequence length"""
-        naive_metrics = NaiveAccRecPrec(targ, preds, self.NT, self.EOS)
+        #naive_metrics = NaiveAccRecPrec(targ, preds, self.NT, self.EOS)
 
         deepnovo_metrics = self.deepnovo_metrics(preds_ffill, targ)
-        stats = {"loss": loss, **naive_metrics, **deepnovo_metrics}
+        stats = {"loss": loss, **deepnovo_metrics}
         return stats
 
     def _replace_eos_with_null(self, tensor: torch.Tensor):

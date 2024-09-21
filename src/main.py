@@ -8,6 +8,7 @@ import random
 from data.lance_data_module import LanceDataModule
 from parse_args import parse_args_and_config, create_output_dirs
 import time
+import shutil
 
 from wrappers.downstream_wrappers import DeNovoRandom, DeNovoTeacherForcing
 from wrappers.pretrain_wrappers import (
@@ -238,7 +239,7 @@ def main(global_args, pretrain_config=None, ds_config=None):
         ds_callbacks = utils.configure_callbacks(
             global_args,
             config["downstream_config"][global_args.downstream_task],
-            global_args.downstream_task + "_val_aa_prec_epoch",
+            global_args.downstream_task + "_val_pep_prec_epoch",
             metric_mode="max",
         )
 
@@ -370,6 +371,9 @@ def main(global_args, pretrain_config=None, ds_config=None):
     # Flag the run as finished to the wandb server
     if run is not None and utils.get_rank() == 0:
         wandb.finish()
+
+    if global_args.remove_ckpt:
+        shutil.rmtree(global_args.output_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

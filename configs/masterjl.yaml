@@ -9,10 +9,11 @@ matmul_precision: high
 precision: 32-true
 
 # Checkpointing
-save_top_k: 0
+save_top_k: 1
 save_last: 0
-every_n_epochs: 0
+every_n_epochs: 1
 every_n_train_steps: # utils.py:329
+remove_ckpt: 1
 
 # Models
 encoder_model: encoder_pairwise # encoder_base_arch | dc_encoder_base | encoder_pairwise
@@ -36,5 +37,5 @@ downstream_task: denovo_tf # none | denovo_tf
 downstream_root_dir: /proj/bedrock/datasets/9_species_V1
 downstream_weights:
 limit_train_batches: 1.0
-limit_val_batches: 1.0
-validate_every_n_epochs: 2
+limit_val_batches: 200
+validate_every_n_epochs: 1

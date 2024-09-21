@@ -13,7 +13,7 @@
 # vigna_mungo 1103314
 task: denovo
 dataset_name: ninespecies_hf
-val_species: solanum_lycopersicum
+val_species: mus_musculus
 top_peaks: 150 # independent of max_peaks
 pep_length: [0, 100]
 charge: [0, 10]

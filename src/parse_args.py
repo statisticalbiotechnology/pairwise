@@ -289,6 +289,9 @@ def get_args_parser(conf_parser):
     parser.add_argument(
         "--resume", default=0, type=int, help="Bool (0/1): resume from checkpoint"
     )
+    parser.add_argument(
+        "--remove_ckpt", default=0, type=int, help="Bool (0/1): remove final checkpoint to save space"
+    )
     # parser.add_argument("--start_epoch", default=0, type=int, help="start epoch") # I think lightning detects the starting epoch from the checkpoint
     parser.add_argument(
         "--num_workers",
