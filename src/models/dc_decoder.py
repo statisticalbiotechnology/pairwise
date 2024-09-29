@@ -323,7 +323,7 @@ def dc_decoder_deeper(amod_dict, d_model=256, dropout=0.25, cross_attend=True, *
     )
     return model
 
-def dc_decoder_jl(amod_dict, d_model=256, dropout=0.1, cross_attend=True, **kwargs):
+def dc_decoder_jl(amod_dict, d_model=256, dropout=0.1, cross_attend=True, max_seq_len=100, **kwargs):
     model = PeptideTransformerDecoder(
         amod_dict,
         d_model,
@@ -336,10 +336,11 @@ def dc_decoder_jl(amod_dict, d_model=256, dropout=0.1, cross_attend=True, **kwar
         use_mass=True,
         use_charge=True,
         cross_attend=cross_attend,
+        max_seq_len=max_seq_len,
     )
     return model
 
-def casanovo_decoder(amod_dict, d_model=256, dropout=0, cross_attend=True, **kwargs):
+def casanovo_decoder(amod_dict, d_model=512, dropout=0, cross_attend=True, max_seq_len=100, **kwargs):
     model = PeptideTransformerDecoder(
         amod_dict,
         d_model,
@@ -352,5 +353,6 @@ def casanovo_decoder(amod_dict, d_model=256, dropout=0, cross_attend=True, **kwa
         use_charge=True,
         dropout=dropout,
         cross_attend=cross_attend,
+        max_seq_len=max_seq_len,
     )
     return model

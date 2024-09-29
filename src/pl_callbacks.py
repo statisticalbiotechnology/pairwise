@@ -59,7 +59,7 @@ class CosineAnnealLRCallback(pl.Callback):
 
     def on_train_batch_start(self, trainer, pl_module, batch, batch_idx):
         if self.anneal_per_step:
-            current_step = trainer.global_step
+            current_step = trainer.global_step // 2 # 2 separate optimizers tick the global_step twice
             total_steps = trainer.estimated_stepping_batches  # TODO: fix: * max_epochs
             lr_temp = self._calculate_lr(current_step, total_steps)
             self._update_optimizer_lr(trainer, lr_temp)

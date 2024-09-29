@@ -13,7 +13,7 @@
 # vigna_mungo 1103314
 task: denovo
 dataset_name: ninespecies_hf
-val_species: mus_musculus
+val_species: saccharomyces_cerevisiae
 top_peaks: 150 # independent of max_peaks
 pep_length: [0, 100]
 charge: [0, 10]
@@ -23,16 +23,12 @@ denovo_tf:
   # DeNovoTeacherForcing specific hparams
   conf_threshold: 0
   # Training hparams
-  blr: 2.0e-4
   anneal_lr: True
   anneal_per_step: True
   lr_start: 1.0e-7
+  blr: 2.0e-4
   lr_end: 2.0e-4
   warmup_duration: 20000
-  lr_decay: 0
-  lr_decay_start_step: 5000
-  lr_decay_end_step: 25000
-  lr_decay_rate: 0.9999
   batch_size: 100
   ref_batch_size: 100
   label_smoothing: 0
@@ -42,19 +38,3 @@ denovo_tf:
   decoder_dropout: 0.25
   decoder_use_cls: False
 
-denovo_random:
-  # DeNovoTeacherRandom specific hparams
-  conf_threshold: 0
-  # Training hparams
-  blr: 5.0e-5
-  lr_warmup: 0
-  lr_start: 1.0e-7
-  lr_end: 2.0e-4
-  lr_warmup_steps: 20000
-  batch_size: 100
-  ref_batch_size: 100
-  weight_decay: 0
-  epochs: 30
-  subset: 0
-  num_workers: 16
-  decoder_dropout: 0
