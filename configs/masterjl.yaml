@@ -17,7 +17,7 @@ remove_ckpt: 1
 
 # Models
 encoder_model: encoder_pairwise # encoder_base_arch | dc_encoder_base | encoder_pairwise
-decoder_model: dc_decoder_base # decoder_greedy_base | dc_decoder_base
+decoder_model: casanovo_decoder # decoder_greedy_base | dc_decoder_base
 
 #### Training hyperparameters
 batch_size: 100
