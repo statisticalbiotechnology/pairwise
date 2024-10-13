@@ -358,6 +358,8 @@ def configure_callbacks(
                 blr=task_args["blr"],
                 lr_end=task_args["lr_end"],
                 warmup_duration=task_args["warmup_duration"],
+                decay_delay=task_args["decay_delay"],
+                decay_duration=task_args['decay_duration'],
                 anneal_per_step=task_args["anneal_per_step"],
             )
         ]

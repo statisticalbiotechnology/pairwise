@@ -1,7 +1,7 @@
 data_root_dir: /proj/bedrock/datasets/bacteria_PXD010000__PXD010613/no_labels/
 output_dir: /proj/bedrock/checkpoints/checkpoint
 log_dir: /proj/bedrock/logs/log
-wandb_project: bacterial # ProteomeTools | {choose your exp.}
+wandb_project: initialize # ProteomeTools | {choose your exp.}
 wandb_entity: kall # kall | joellapin
 log_wandb: 1
 num_workers: 8
@@ -13,7 +13,7 @@ save_top_k: 1
 save_last: 0
 every_n_epochs: 1
 every_n_train_steps: # utils.py:329
-remove_ckpt: 1
+remove_ckpt: 0
 
 # Models
 encoder_model: encoder_pairwise # encoder_base_arch | dc_encoder_base | encoder_pairwise
@@ -34,7 +34,7 @@ mask_ratio: 0.75
 # De novo
 downstream_config: configs/downstream/joel.yaml
 downstream_task: denovo_tf # none | denovo_tf
-downstream_root_dir: /proj/bedrock/datasets/9_species_V1
+downstream_root_dir: /proj/bedrock/datasets/9_species_MSV000090982
 downstream_weights:
 limit_train_batches: 1.0
 limit_val_batches: 200

@@ -19,26 +19,44 @@ class CosineAnnealLRCallback(pl.Callback):
         anneal_per_step (bool): Whether to anneal the learning rate per step. If False, anneal per epoch. Default is False.
     """
 
-    def __init__(self, lr_start, blr, lr_end, warmup_duration, anneal_per_step=False):
+    def __init__(self, lr_start, blr, lr_end, warmup_duration, decay_delay=0, decay_duration=100000, anneal_per_step=False):
         self.lr_start = lr_start
         self.blr = blr
         self.lr_end = lr_end
         self.warmup_duration = warmup_duration
         self.anneal_per_step = anneal_per_step
+        self.decay_delay = decay_delay
+        self.decay_duration = decay_duration
+        self.delay_ticker = 0
+        self.decay_ticker = 0
 
     def _calculate_lr(self, current, total):
         if current < self.warmup_duration:
             fac = current / self.warmup_duration
             lr_temp = self.blr * fac + self.lr_start * (1 - fac)
-        else:
+        elif (self.decay_duration > 0) & (self.delay_ticker >= self.decay_delay):
+            
+            if self.anneal_per_step:
+                if self.decay_ticker >= self.decay_duration:
+                    return self.lr_end
+                else:
+                    denominator = self.decay_duration
+                    self.decay_ticker += 1
+            else:
+                denominator = total - self.decay_delay - self.warmup_duration
+            
             lr_temp = self.lr_end + (self.blr - self.lr_end) * 0.5 * (
                 1.0
                 + math.cos(
                     math.pi
-                    * (current - self.warmup_duration)
-                    / (total - self.warmup_duration)
+                    * (current - self.decay_delay - self.warmup_duration)
+                    / denominator
                 )
             )
+        else:
+            lr_temp = self.blr
+            self.delay_ticker += 1
+
         return lr_temp
 
     def _update_optimizer_lr(self, trainer, lr_temp):

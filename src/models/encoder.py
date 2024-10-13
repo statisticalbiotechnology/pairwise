@@ -16,7 +16,7 @@ def init_encoder_weights(module):
         # limit = 0.5*np.sqrt(6 / (module.indim*module.d + module.indim*module.h))
         # module.qkv.weight = I.uniform_(module.qkv.weight, -limit, limit)
         module.qkv.weight = I.normal_(
-            module.qkv.weight, 0.0, (2 / 3) * module.indim**-0.5
+            module.qkv.weight, 0.0, (1 / 3) * module.indim**-0.5
         )
         # limit = 0.5*np.sqrt(6 / (module.h*module.d + module.h*module.out_units))
         # module.Wo.weight = I.uniform_(module.Wo.weight, -limit, limit)
@@ -35,7 +35,7 @@ def init_encoder_weights(module):
     elif isinstance(module, mp.FFN):
         # module.W1.weight = I.xavier_uniform_(module.W1.weight)
         module.W1.weight = I.normal_(
-            module.W1.weight, 0.0, (2 / 3) * (module.indim) ** -0.5
+            module.W1.weight, 0.0, (1 / 3) * (module.indim) ** -0.5
         )
         module.W1.bias = I.zeros_(module.W1.bias)
         module.W2.weight = I.normal_(
@@ -112,10 +112,6 @@ class Encoder(nn.Module):
         self.n_layers=depth
 
         # Position modulation
-        
-
-
-
         mdim = mz_units // 4 if subdivide else mz_units
         self.mdim = mdim
         self.MzSeq = nn.Identity()  # nn.Sequential(nn.Linear(mdim, mdim), nn.SiLU())

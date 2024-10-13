@@ -406,11 +406,6 @@ class ActModule(nn.Module):
 def FourierFeatures(t, min_lam, max_lam, embedsz):
     x = th.arange(embedsz // 2).type(th.float32).to(t.device)
     x /= embedsz // 2 - 1
-    """embed = ( 
-        t[..., None] * 
-        th.exp(-x*log(max_lam / min_lam) )[None] /
-        (min_lam / 6.2831853)
-    )"""
     denom = (min_lam / twopi) * (max_lam / min_lam) ** x
     embed = t[..., None] / denom[None]
 
