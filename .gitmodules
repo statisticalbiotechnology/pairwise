@@ -1,0 +1,4 @@
+[submodule "depthcharge"]
+	path = depthcharge
+	url = git@github.com:Alfred-N/depthcharge.git
+	branch = main

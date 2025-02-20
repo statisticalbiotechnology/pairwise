@@ -1,0 +1,88 @@
+
+task: denovo
+dataset_name: massivekb
+top_peaks: 300
+pep_length: [0, 100]
+charge: [0, 10]
+buffer_size: 10000
+
+denovo_tf:
+  # DeNovoTeacherForcing specific hparams
+  conf_threshold: 0
+  # Training hparams
+  anneal_lr: True
+  anneal_per_step: True
+  lr_start: 1.0e-11
+  blr: 5.0e-4
+  lr_end: 1.0e-4
+  warmup_duration: 100000
+  decay_delay: 0
+  decay_duration: 1200000
+  batch_size: 32
+  ref_batch_size: 32
+  label_smoothing: 0.01
+  weight_decay: 1.0e-5
+  epochs: 50 # 50
+  subset: 0
+  decoder_dropout: 0.0
+  decoder_use_cls: False
+
+
+
+casanovo_tf:
+  ###
+  # Casanovo configuration.
+  # Blank entries are interpreted as "None".
+  ###
+
+  ###
+  # The following parameters can be modified when running inference or when
+  # fine-tuning an existing Casanovo model.
+  ###
+
+  # Max absolute difference allowed with respect to observed precursor m/z.
+  # Predictions outside the tolerance range are assigned a negative peptide score.
+  precursor_mass_tol: 50  # ppm
+  # Isotopes to consider when comparing predicted and observed precursor m/z's.
+  isotope_error_range: [0, 1]
+  # The minimum length of predicted peptides.
+  min_peptide_len: 6
+  # # Number of spectra in one inference batch.
+  # predict_batch_size: 1024
+  # Number of beams used in beam search.
+  n_beams: 1
+  # Number of PSMs for each spectrum.
+  top_match: 1
+
+  # OUTPUT OPTIONS
+  # Logging frequency in training steps.
+  n_log: 1
+
+  decoder_dropout: 0.25
+  # Max decoded peptide length.
+  max_length: 100
+  # The number of iterations for the linear warm-up of the learning rate.
+  warmup_iters: 100_000
+  # The number of iterations for the cosine half period of the learning rate.
+  cosine_schedule_period_iters: 600_000
+  # Learning rate for weight updates during training.
+  learning_rate: 2.0e-4
+  # Regularization term for weight updates.
+  weight_decay: 0
+  # Amount of label smoothing when computing the training loss.
+  train_label_smoothing: 0
+
+  # TRAINING/INFERENCE OPTIONS
+  # Number of spectra in one training batch.
+  batch_size: 100
+  # Max number of training epochs.
+  epochs: 5
+
+  # Calculate peptide and amino acid precision during training.
+  # This is expensive, so we recommend against it.
+  calculate_precision: True
+
+  # Print predictions to file (global_args.log_dir)
+  log_predictions: True
+
+  reverse: True
