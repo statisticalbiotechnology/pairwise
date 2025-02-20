@@ -1,6 +1,6 @@
 #### Recursively clone repo
 We attach depthcharge as a submodule due to the latest version not being available on pip. Therefore, this repository needs to be recursively cloned:
-`git clone --recursive git@github.com:statisticalbiotechnology/bedrock.git`
+`git clone --recursive git@github.com:statisticalbiotechnology/pairwise.git`
 
 `cd bedrock`
 
