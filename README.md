@@ -3,7 +3,7 @@ We attach depthcharge as a submodule due to the latest version not being availab
 
 `git clone --recursive git@github.com:statisticalbiotechnology/pairwise.git`
 
-`cd bedrock`
+`cd pairwise`
 
 #### Install dependencies (Conda)
 `conda env create -f environment.yml`
