@@ -1,21 +1,41 @@
-#### Recursively clone repo
-We attach depthcharge as a submodule due to the latest version not being available on pip. Therefore, this repository needs to be recursively cloned:
+### Install
+
+#### **Recursively clone repo**
+We attach our fork of the Depthcharge package as a submodule. Therefore, this repository needs to be recursively cloned:
 
 `git clone --recursive git@github.com:statisticalbiotechnology/pairwise.git`
 
 `cd pairwise`
 
-#### Install dependencies (Conda)
-`conda env create -f environment.yml`
+#### **Install environment (Conda)**
+1. **Create environment:**
 
-`conda activate Foundation`
+    `conda create --name Pairwise python=3.10 -y`
 
-#### Install Depthcharge
-`conda activate Foundation`
+    `conda activate Pairwise`
 
-`cd depthcharge`
+2. **Install PyTorch**
 
-`pip install .`
+    Follow the official PyTorch installation guide and install the appropriate version for your system (with or without CUDA), since PyTorch's Conda channel is no longer officially supported:
+
+    - Find the latest install command at: https://pytorch.org/get-started/locally/
+    - Example for CUDA 12.1 support
+
+        ```bash
+        python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+3. **Install further dependecies:**
+    ```bash
+    conda env update --file environment.yml --prune
+
+
+4. **Install local Depthcharge**
+
+    `conda activate Pairwise`
+
+    `cd depthcharge`
+
+    `pip install .`
 
 ### Framework/structure
 We utilize Pytorch Lightning. We define the models in `src/models/`, and wrap them with Lightning modules that contain the training code. The training wrappers are found in `src/pl_wrappers.py`.

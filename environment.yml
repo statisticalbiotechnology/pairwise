@@ -1,22 +1,22 @@
-# create a conda env with 'conda env create -f environment.yml'
-# or 'mamba env create -f environment.yml'
-name: FoundationV2
+# update your env with 'conda env update --file environment.yml --prune'
+# or 'mamba env update --file environment.yml --prune'
+name: Pairwise
 channels:
   - defaults
   - conda-forge
-  - pytorch
-  - nvidia
 dependencies:
+  - python=3.10
   - scikit-learn
   - pytorch-lightning
   - pandas
   - scipy
+  - numpy
   - pip
   - pip:
-    - matplotlib
-    - wandb
-    - path
-    - pathlib
-    - jiwer
-    - pylance==0.10.10
-    - datasets
+      - matplotlib
+      - wandb
+      - path
+      - pathlib
+      - jiwer
+      - pylance==0.10.10
+      - datasets
