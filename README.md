@@ -35,7 +35,7 @@ We attach our fork of the Depthcharge package as a submodule. Therefore, this re
 
     `cd depthcharge`
 
-    `pip install .`
+    `python -m pip install .`
 
 ### Framework/structure
 We utilize Pytorch Lightning. We define the models in `src/models/`, and wrap them with Lightning modules that contain the training code. The training wrappers are found in `src/pl_wrappers.py`.
