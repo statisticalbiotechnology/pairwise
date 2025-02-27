@@ -23,7 +23,7 @@ encoder_model: encoder_pairwise # encoder_base_arch | dc_encoder_base | encoder_
 decoder_model: casanovo_decoder # decoder_greedy_base | dc_decoder_base
 
 #### Training hyperparameters
-batch_size: 32
+batch_size: 100
 max_peaks: 300
 seed: 0
 

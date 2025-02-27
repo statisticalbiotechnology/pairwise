@@ -22,7 +22,6 @@ from pl_callbacks import (
 
 from collate_functions import pad_peaks, pad_peptides
 
-from loader_parquet import PeptideDataset, PeptideParser
 
 RESIDUES_MSKB = {
     "G": 57.021464,
@@ -231,60 +230,6 @@ def get_mskb_data_module(
         token_dicts,
     )
 
-
-def get_ninespecies_data_module(
-    ds_config,
-    global_args,
-    seed=0,
-):
-    path_dict = ds_config["paths"]
-
-    for split in ["train", "val", "test"]:
-        path_list = path_dict[split]
-        for i, path in enumerate(path_list):
-            path_list[i] = os.path.join(global_args.downstream_root_dir, path)
-        path_dict[split] = path_list
-
-    parser = PeptideParser(ds_config)
-    dfs, token_dicts = parser.get_data()
-    token_dicts["residues"] = RESIDUES_NINESPECIES
-    amod_dict = token_dicts["amod_dict"]
-    dataset_train = PeptideDataset(dfs["train"], amod_dict)
-    dataset_val = PeptideDataset(dfs["val"], amod_dict)
-    dataset_test = PeptideDataset(dfs["test"], amod_dict)
-
-    batch_size = (
-        ds_config[global_args.downstream_task]["batch_size"]
-        if global_args.batch_size < 0
-        else global_args.batch_size
-    )
-    num_workers = (
-        ds_config["num_workers"]
-        if global_args.num_workers < 0
-        else global_args.num_workers
-    )
-    data_module = NinespeciesDataModule(
-        (dataset_train, dataset_val, dataset_test),
-        batch_size=batch_size,
-        num_workers=num_workers,
-        collate_fn=partial(
-            pad_peptides,
-            max_peaks=ds_config["top_peaks"],
-            max_length=ds_config["pep_length"][1],
-            null_token_idx=amod_dict["X"],
-            # Peak filter settings
-            filter_method=global_args.peak_filter_method,
-            min_mz=global_args.min_mz,
-            max_mz=global_args.max_mz,
-            min_intensity=global_args.min_intensity,
-            remove_precursor_tol=global_args.remove_precursor_tol,
-        ),
-        pin_mem=global_args.pin_mem,
-    )
-
-    return (data_module, token_dicts)
-
-
 def get_ninespecies_HF_data_module(
     ds_config,
     global_args,
@@ -394,9 +339,6 @@ def configure_callbacks(
     if task_args.get("log_predictions", False):
         callbacks += [MztabOutputCallback(args.log_dir, args)]
 
-    # measure FLOPs on the first train batch
-    if args.profile_flops:
-        callbacks += [FLOPProfilerCallback()]
 
     if args.early_stop > 0:
         callbacks += [EarlyStopping(val_metric_name, patience=args.early_stop)]

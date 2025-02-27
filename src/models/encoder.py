@@ -3,7 +3,6 @@ import models.model_parts as mp
 import models.model_parts_pw as pw
 import torch as th
 from torch import nn
-from models.pw_perceiver_features import PairwisePerceiverFeatures
 
 I = nn.init
 

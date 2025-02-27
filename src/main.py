@@ -33,7 +33,7 @@ DECODER_DICT = {
     **casanovo_decoders.__dict__,
 }
 
-DOWNSTREAM_TASK_DICT = {
+TRAINING_WRAPPERS = {
     "denovo_tf": DeNovoTeacherForcing,
     "casanovo_tf": DeNovoSpec2Pep,
 }
@@ -54,14 +54,6 @@ def main(global_args, pretrain_config=None, ds_config=None):
         "pretrain_config": pretrain_config,
     }
 
-    if global_args.subset:
-        if global_args.downstream_task != "none":
-            config["downstream_config"][global_args.downstream_task][
-                "subset"
-            ] = global_args.subset
-        config["pretrain_config"][global_args.pretraining_task][
-            "subset"
-        ] = global_args.subset
 
     # Wandb stuff
     run = None
@@ -87,7 +79,6 @@ def main(global_args, pretrain_config=None, ds_config=None):
         dropout=config["pretrain_config"][global_args.pretraining_task].get(
             "dropout", 0
         ),
-        cls_token=global_args.cls_token,
     )
 
     distributed = global_args.num_devices > 1 or global_args.num_nodes > 1
@@ -139,11 +130,10 @@ def main(global_args, pretrain_config=None, ds_config=None):
             dropout=config["downstream_config"][global_args.downstream_task][
                 "decoder_dropout"
             ],
-            cross_attend=global_args.cross_attend,
             max_seq_len=global_args.max_length + 1,  # +1 because of added EOS token
         )
 
-        pl_downstream = DOWNSTREAM_TASK_DICT[global_args.downstream_task](
+        pl_downstream = TRAINING_WRAPPERS[global_args.downstream_task](
             encoder,
             decoder,
             global_args=global_args,

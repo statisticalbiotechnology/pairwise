@@ -449,17 +449,18 @@ class BeamSearchInterface:
         # get padding after stop token.
         active_mask[:, :beam] = 1e-8
 
-        # Figure out the top K decodings.
         _, top_idx = torch.topk(step_scores.nanmean(dim=1) * active_mask, beam)
-        v_idx, s_idx = np.unravel_index(top_idx.cpu(), (vocab, beam))
+        v_idx, s_idx = np.unravel_index(top_idx.cpu().numpy(), (vocab, beam))
+        s_idx = torch.tensor(s_idx, dtype=torch.long)
         s_idx = einops.rearrange(s_idx, "B S -> (B S)")
         b_idx = einops.repeat(torch.arange(batch), "B -> (B S)", S=beam)
 
-        # Record the top K decodings.
+        tokens=tokens.clone()
         tokens[:, :step, :] = einops.rearrange(
             prev_tokens[b_idx, :, 0, s_idx], "(B S) L -> B L S", S=beam
         )
-        tokens[:, step, :] = torch.tensor(v_idx)
+        tokens[:, step, :] = torch.tensor(v_idx, dtype=torch.long)
+        scores = scores.clone()
         scores[:, : step + 1, :, :] = einops.rearrange(
             scores[b_idx, : step + 1, :, s_idx], "(B S) L V -> B L V S", S=beam
         )

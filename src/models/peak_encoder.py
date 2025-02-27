@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 from depthcharge.encoders.sinusoidal import FloatEncoder as DcFloatEncoder
 from depthcharge.encoders.sinusoidal import PositionalEncoder as DcPosEncoder
-from models.pw_perceiver_features import PairwisePerceiverFeatures
 from models.casanovo.encoders import PeakEncoder
 
 
