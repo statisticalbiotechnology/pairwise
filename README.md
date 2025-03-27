@@ -22,7 +22,7 @@ We attach our fork of the Depthcharge package as a submodule. Therefore, this re
     - Example for CUDA 12.1 support
 
         ```bash
-        python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+        python -m pip install torch torchvision torchaudio
 
 3. **Install further dependecies:**
     ```bash
