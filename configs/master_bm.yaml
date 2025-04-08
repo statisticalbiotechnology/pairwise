@@ -1,0 +1,43 @@
+output_dir: outs/checkpoints/checkpoint
+log_dir: outs/logs/log
+wandb_project: null
+wandb_entity: null
+log_wandb: 0
+num_workers: 8
+matmul_precision: high
+precision: 32-true
+
+# Checkpointing
+save_top_k: 0
+save_last: 0
+every_n_epochs: 1
+every_n_train_steps: # utils.py:329
+remove_ckpt: 0
+
+# Peak filtering
+peak_filter_method: default
+
+# Models
+encoder_model: encoder_pairwise # encoder_base_arch | dc_encoder_base | encoder_pairwise
+decoder_model: casanovo_decoder # decoder_greedy_base | dc_decoder_base
+
+#### Training hyperparameters
+batch_size: 100
+max_peaks: 300
+seed: 0
+
+# set it to prediction mode
+predict_only: 1
+
+# placeholder stuff
+pretrain_config: configs/pretrain/dummy.yaml
+pretraining_task: trinary_mz
+
+# De novo
+downstream_config: configs/downstream/casanovo_bm.yaml
+downstream_task: casanovo_tf # none | denovo_tf
+downstream_root_dir: /proj/bedrock/datasets/MassIVE_KB/
+downstream_weights:
+# limit_train_batches: 1.0
+# limit_val_batches: 200
+validate_every_n_epochs: 1
