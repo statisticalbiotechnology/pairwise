@@ -11,7 +11,7 @@ import torch
 from functools import partial
 
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
-from data.lance_data_module import LanceDataModule
+from data.lance_data_module import BenchmarkDataModule, LanceDataModule
 from pl_callbacks import (
     FLOPProfilerCallback,
     CosineAnnealLRCallback,
@@ -230,6 +230,52 @@ def get_mskb_data_module(
         token_dicts,
     )
 
+
+def get_benchmark_data_module(
+    ds_config,
+    global_args,
+    seed=0,
+):
+
+    tokenizer = MSKBTokenizer(
+        RESIDUES_MSKB,
+        n_terminal=N_TERMINAL_MSKB,
+        reverse=ds_config[global_args.downstream_task]["reverse"],
+    )
+    token_dicts = get_token_dicts_mskb(tokenizer.index)
+    token_dicts["tokenizer"] = tokenizer
+
+    collate_fn = partial(
+        pad_peaks,
+        max_peaks=ds_config["top_peaks"],
+        # Dataset specific setting for grabbing the correct precursor mass/mz
+        precursor_mz_name=False,
+        precursor_mass_name="precursor_mz",
+        # Peak filter settings
+        filter_method=global_args.peak_filter_method,
+        min_mz=global_args.min_mz,
+        max_mz=global_args.max_mz,
+        min_intensity=global_args.min_intensity,
+        remove_precursor_tol=global_args.remove_precursor_tol,
+    )
+
+    batch_size = (
+        ds_config[global_args.downstream_task]["batch_size"]
+        if global_args.batch_size < 0
+        else global_args.batch_size
+    )
+
+    return (
+        BenchmarkDataModule(
+            global_args.downstream_root_dir,
+            batch_size,
+            collate_fn,
+            seed=seed,
+        ),
+        token_dicts,
+    )
+
+
 def get_ninespecies_HF_data_module(
     ds_config,
     global_args,
@@ -338,7 +384,6 @@ def configure_callbacks(
 
     if task_args.get("log_predictions", False):
         callbacks += [MztabOutputCallback(args.log_dir, args)]
-
 
     if args.early_stop > 0:
         callbacks += [EarlyStopping(val_metric_name, patience=args.early_stop)]

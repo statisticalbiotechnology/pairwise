@@ -10,7 +10,12 @@ from data.lance_helper_fns import LanceDataset, _to_batch_dict
 
 class LanceDataModule(pl.LightningDataModule):
     def __init__(
-        self, data_dir: Path, batch_size: int, collate_fn: Callable, seed: int = 0, include_test=True
+        self,
+        data_dir: Path,
+        batch_size: int,
+        collate_fn: Callable,
+        seed: int = 0,
+        include_test=True,
     ):
         super().__init__()
 
@@ -93,4 +98,49 @@ class LanceDataModule(pl.LightningDataModule):
         return self.val_dataset
 
     def test_dataloader(self):
+        return self.test_dataset
+
+
+class BenchmarkDataModule(pl.LightningDataModule):
+    def __init__(
+        self,
+        test_dataset: Path,
+        batch_size: int,
+        collate_fn: Callable,
+        seed: int = 0,
+    ):
+        super().__init__()
+
+        self.data_path = test_dataset
+        self.batch_size = batch_size
+        self.to_tensor_fn = partial(_to_batch_dict, collate_fn=collate_fn)
+        self.seed = seed
+
+    def setup(self, stage=None):
+        test_sampler = ShardedBatchSampler(
+            rank=self.trainer.global_rank,
+            world_size=self.trainer.world_size,
+            randomize=False,
+            seed=self.seed,
+        )
+
+        if stage == "test" or stage == "predict" or stage is None:
+            self.test_dataset = LanceDataset(
+                self.data_path,
+                batch_size=self.batch_size,
+                to_tensor_fn=self.to_tensor_fn,
+                sampler=test_sampler,
+                with_row_id=None,
+            )
+
+    def train_dataloader(self):
+        return None
+
+    def val_dataloader(self):
+        return None
+
+    def test_dataloader(self):
+        return self.test_dataset
+
+    def predict_dataloader(self):
         return self.test_dataset

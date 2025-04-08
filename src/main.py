@@ -54,7 +54,6 @@ def main(global_args, pretrain_config=None, ds_config=None):
         "pretrain_config": pretrain_config,
     }
 
-
     # Wandb stuff
     run = None
     logger = None
@@ -117,6 +116,11 @@ def main(global_args, pretrain_config=None, ds_config=None):
             )
         elif config["downstream_config"]["dataset_name"] == "massivekb":
             ds_data_module, token_dicts = utils.get_mskb_data_module(
+                config["downstream_config"], global_args, seed=global_args.seed
+            )
+
+        elif config["downstream_config"]["dataset_name"] == "bm":
+            ds_data_module, token_dicts = utils.get_benchmark_data_module(
                 config["downstream_config"], global_args, seed=global_args.seed
             )
 
@@ -200,6 +204,9 @@ def main(global_args, pretrain_config=None, ds_config=None):
             print("'--eval_only' specified - skipping training")
             # ds_trainer.validate(pl_downstream, datamodule=ds_data_module)
             ds_trainer.test(pl_downstream, datamodule=ds_data_module)
+        elif global_args.predict_only:
+            print("'--predict_only' specified - skipping training")
+            ds_trainer.predict(pl_downstream, datamodule=ds_data_module)
         else:
             if global_args.resume:
                 print(

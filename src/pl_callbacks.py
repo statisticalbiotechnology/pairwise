@@ -245,6 +245,56 @@ class MztabOutputCallback(pl.Callback):
 
             self.writer.flush()
 
+    def on_predict_batch_end(
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0
+    ):
+        all_outputs = self._gather_outputs(outputs, pl_module)
+
+        if trainer.is_global_zero:
+            predictions = all_outputs["predictions"]
+
+            for idx, prediction in enumerate(predictions):
+                peptide = prediction["peptide"]
+                peak_file = prediction["peak_file"]
+                scan_id = prediction["scan_id"]
+                charge = prediction["precursor_charge"]
+                precursor_mz = prediction["precursor_mz"]
+                peptide_score = prediction["peptide_score"]
+                aa_scores = prediction["aa_scores"]
+                calc_mz = pl_module.peptide_mass_calculator.mass(peptide, charge)
+
+                # Convert list fields to strings
+                if isinstance(peptide, list):
+                    peptide = ",".join(peptide)
+                if isinstance(aa_scores, (list, np.ndarray)):
+                    aa_scores = ",".join(f"{score:.5f}" for score in aa_scores)
+
+                psm_entry = {
+                    "sequence": peptide,
+                    "PSM_ID": None,
+                    "accession": "null",
+                    "unique": "null",
+                    "database": "null",
+                    "database_version": "null",
+                    "search_engine": "[MS, MS:1001456, CustomModel, 1.0]",
+                    "search_engine_score[1]": peptide_score,
+                    "modifications": "null",
+                    "retention_time": "null",
+                    "charge": charge,
+                    "exp_mass_to_charge": precursor_mz,
+                    "calc_mass_to_charge": calc_mz,
+                    "spectra_ref": f"{peak_file}:{scan_id}",
+                    "pre": "null",
+                    "post": "null",
+                    "start": "null",
+                    "end": "null",
+                    "opt_ms_run[1]_aa_scores": aa_scores,
+                    "opt_ms_run[1]_ground_truth_sequence": "null",
+                }
+                self.writer.write_psm(psm_entry)
+
+            self.writer.flush()
+
     def _gather_outputs(self, outputs, pl_module):
         if pl_module.trainer.world_size > 1:
             gathered_predictions = pl_module.all_gather(outputs["predictions"])

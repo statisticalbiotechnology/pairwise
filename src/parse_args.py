@@ -213,6 +213,12 @@ def get_args_parser(conf_parser):
         help="Bool (0/1): skip training and do downstream eval",
     )
     parser.add_argument(
+        "--predict_only",
+        default=0,
+        type=int,
+        help="Bool (0/1): skip training and do downstream prediction",
+    )
+    parser.add_argument(
         "--remove_ckpt",
         default=0,
         type=int,
@@ -291,6 +297,7 @@ def sanity_checks(args):
     args.scale_lr_by_batchsize = bool(args.scale_lr_by_batchsize)
     args.resume = bool(args.resume)
     args.eval_only = bool(args.eval_only)
+    args.predict_only = bool(args.predict_only)
     args.pin_mem = bool(args.pin_mem)
     # args.data_in_memory = bool(args.data_in_memory)
     args.watch_model = bool(args.watch_model)

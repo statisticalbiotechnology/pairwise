@@ -54,6 +54,8 @@ class DeNovoSpec2Pep(pl.LightningModule, BeamSearchInterface):
         # Task and token dictionaries
         self.global_args = global_args
 
+        self.predict_mode = getattr(global_args, "predict_only", False)
+
         self.input_dict = token_dicts["input_dict"]
         self.output_dict = token_dicts["output_dict"]
         self.int_to_aa = {b: a for a, b in self.output_dict.items()}
@@ -149,6 +151,13 @@ class DeNovoSpec2Pep(pl.LightningModule, BeamSearchInterface):
         charge = batch["precursor_charge"].to(self.device)  # Shape: [batch_size]
         mz = batch["precursor_mz"].to(self.device)  # Shape: [batch_size]
         precursors = torch.stack([mass, charge, mz], dim=1)  # Shape: [batch_size, 3]
+
+        if self.predict_mode:
+            return {
+                "spectra": spectra,
+                "precursors": precursors,
+                "spectrum_padding_mask": spectrum_padding_mask,
+            }, None
 
         # Extract tokens and peptide lengths
         tokens = batch["intseq"].to(self.device)  # Shape: [batch_size, seq_len]
@@ -461,6 +470,68 @@ class DeNovoSpec2Pep(pl.LightningModule, BeamSearchInterface):
 
         # Return predictions and peptides_true
         return {"predictions": predictions, "peptides_true": peptides_true}
+
+    def predict_step(self, batch: Dict[str, Any], batch_idx: int) -> Dict[str, Any]:
+        # Parse the batch
+        parsed_batch, _ = self._parse_batch(batch)
+        spectra = parsed_batch["spectra"]
+        precursors = parsed_batch["precursors"]
+        spectrum_padding_mask = parsed_batch["spectrum_padding_mask"]
+
+        predictions = []
+
+        # Get peak_file and scan_id if present
+        if "peak_file" in batch:
+            peak_files = batch["peak_file"]  # List[str] of length batch_size
+        else:
+            peak_files = ["unknown"] * len(spectra)
+        if "scan_id" in batch:
+            scan_ids = batch["scan_id"]  # Tensor of shape [batch_size]
+        else:
+            scan_ids = [-1] * len(spectra)
+
+        # Generate predictions
+        model_outputs = self.forward(spectra, precursors, spectrum_padding_mask)
+
+        for idx, spectrum_preds in enumerate(model_outputs):
+            peak_file = peak_files[idx]
+            scan_id = (
+                int(scan_ids[idx].item())
+                if isinstance(scan_ids[idx], torch.Tensor)
+                else scan_ids[idx]
+            )
+            precursor_charge = float(precursors[idx, 1].cpu().numpy())
+            precursor_mz = float(precursors[idx, 2].cpu().numpy())
+
+            _pred_dict = {
+                "peak_file": peak_file,  # Peak file name
+                "scan_id": scan_id,  # Scan ID
+                "precursor_charge": precursor_charge,  # Precursor Charge
+                "precursor_mz": precursor_mz,  # Precursor m/z
+            }
+            if spectrum_preds:
+                # We're only considering the top match
+                peptide_score, aa_scores, peptide = spectrum_preds[0]
+                peptide = [aa for aa in peptide if aa != "$"]
+                prediction = {
+                    **_pred_dict,
+                    "peptide": peptide,
+                    "peptide_score": peptide_score,
+                    "aa_scores": aa_scores,
+                }
+                predictions.append(prediction)
+            else:
+                peptide = []
+                prediction = {
+                    **_pred_dict,
+                    "peptide": peptide,
+                    "peptide_score": "null",
+                    "aa_scores": "null",
+                }
+                predictions.append(prediction)
+
+        # Return predictions and peptides_true
+        return {"predictions": predictions, "peptides_true": None}
 
     def configure_optimizers(
         self,
