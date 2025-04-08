@@ -10,13 +10,13 @@ We attach our fork of the Depthcharge package as a submodule. Therefore, this re
 #### **Install environment (Conda)**
 1. **Create environment:**
 
-    `conda create --name Pairwise python=3.10 -y`
+    `conda env create -f environment.yml`
 
-    `conda activate Pairwise`
+    `conda activate pairwise_env`
 
 2. **Install local Depthcharge**
 
-    `conda activate Pairwise`
+    `conda activate pairwise_env`
 
     `cd depthcharge`
 
@@ -58,7 +58,7 @@ Example sbatch script for multi-node/multi-gpu training
 #SBATCH --cpus-per-task=16
 
 module load Anaconda/2021.05-nsc1
-conda activate MS2transformers
+conda activate pairwise_env
 export OMP_NUM_THREADS=16
 
 srun python src/main.py --config=configs/example.yaml \
