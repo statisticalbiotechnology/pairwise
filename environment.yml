@@ -1,22 +1,23 @@
-# update your env with 'conda env update --file environment.yml --prune'
-# or 'mamba env update --file environment.yml --prune'
-name: Pairwise
+# update your env with 'conda env create -f environment.yml'
+# or 'mamba env create -f environment.yml'
+name: pairwise_env
 channels:
-  - defaults
   - conda-forge
 dependencies:
   - python=3.10
-  - scikit-learn
-  - pytorch-lightning
-  - pandas
-  - scipy
-  - numpy
   - pip
   - pip:
-      - matplotlib
-      - wandb
-      - path
-      - pathlib
-      - jiwer
+      - scikit-learn==1.3.2
+      - pytorch-lightning==2.1.1
+      - pandas==2.1.3
+      - scipy==1.11.4
+      - numpy==1.26.2
+      - matplotlib==3.8.2
+      - wandb==0.16.1
+      - path==16.9.0
+      - pathlib==1.0.1
+      - jiwer==3.0.3
       - pylance==0.10.10
-      - datasets
+      - datasets==2.21.0
+      - torch==2.1.2
+      - torchvision==0.16.2

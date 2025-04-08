@@ -14,22 +14,7 @@ We attach our fork of the Depthcharge package as a submodule. Therefore, this re
 
     `conda activate Pairwise`
 
-2. **Install PyTorch**
-
-    Follow the official PyTorch installation guide and install the appropriate version for your system (with or without CUDA), since PyTorch's Conda channel is no longer officially supported:
-
-    - Find the latest install command at: https://pytorch.org/get-started/locally/
-    - Example for CUDA 12.1 support
-
-        ```bash
-        python -m pip install torch torchvision torchaudio
-
-3. **Install further dependecies:**
-    ```bash
-    conda env update --file environment.yml --prune
-
-
-4. **Install local Depthcharge**
+2. **Install local Depthcharge**
 
     `conda activate Pairwise`
 
