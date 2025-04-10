@@ -167,6 +167,12 @@ def get_args_parser(conf_parser):
         help="dataset path for the denovo task",
     )
     parser.add_argument(
+        "--fixed_output_dir",
+        type=int,
+        default=0,
+        help="Bool (0/1): if 1, don't append a datetime str to the output dirs",
+    )
+    parser.add_argument(
         "--output_dir",
         default="outs/checkpoint",
         help="path where to save",
@@ -301,6 +307,7 @@ def sanity_checks(args):
     args.pin_mem = bool(args.pin_mem)
     # args.data_in_memory = bool(args.data_in_memory)
     args.watch_model = bool(args.watch_model)
+    args.fixed_output_dir = bool(args.fixed_output_dir)
 
 
 def uniquify_path(path):
@@ -373,14 +380,15 @@ def parse_args_and_config():
 
 def create_output_dirs(args, is_main_process=True):
     if is_main_process:
-        # append datetime str to output dirs
-        now = datetime.datetime.now()
-        cur_time = now.strftime("_%H_%M_%S_%f__%d_%m_%y")
-        args.output_dir = args.output_dir + cur_time
-        args.output_dir = uniquify_path(args.output_dir)
+        if not args.fixed_output_dir:
+            # append datetime str to output dirs
+            now = datetime.datetime.now()
+            cur_time = now.strftime("_%H_%M_%S_%f__%d_%m_%y")
+            args.output_dir += cur_time
+            args.output_dir = uniquify_path(args.output_dir)
+            args.log_dir += cur_time
+            args.log_dir = uniquify_path(args.log_dir)
         os.makedirs(args.output_dir, exist_ok=False)
-        args.log_dir = args.log_dir + cur_time
-        args.log_dir = uniquify_path(args.log_dir)
         os.makedirs(args.log_dir, exist_ok=False)
 
 

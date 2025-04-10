@@ -28,6 +28,7 @@ seed: 0
 
 # set it to prediction mode
 predict_only: 1
+fixed_output_dir: 1
 
 # placeholder stuff
 pretrain_config: configs/pretrain/dummy.yaml
