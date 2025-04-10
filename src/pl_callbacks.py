@@ -210,6 +210,7 @@ class MztabOutputCallback(pl.Callback):
                 aa_scores = prediction["aa_scores"]
                 ground_truth_sequence = peptides_true[idx]
                 calc_mz = pl_module.peptide_mass_calculator.mass(peptide, charge)
+                title = prediction["title"]
 
                 # Convert list fields to strings
                 if isinstance(peptide, list):
@@ -240,6 +241,7 @@ class MztabOutputCallback(pl.Callback):
                     "end": "null",
                     "opt_ms_run[1]_aa_scores": aa_scores,
                     "opt_ms_run[1]_ground_truth_sequence": ground_truth_sequence,
+                    "title": title,
                 }
                 self.writer.write_psm(psm_entry)
 
@@ -262,6 +264,7 @@ class MztabOutputCallback(pl.Callback):
                 peptide_score = prediction["peptide_score"]
                 aa_scores = prediction["aa_scores"]
                 calc_mz = pl_module.peptide_mass_calculator.mass(peptide, charge)
+                title = prediction["title"]
 
                 # Convert list fields to strings
                 if isinstance(peptide, list):
@@ -290,6 +293,7 @@ class MztabOutputCallback(pl.Callback):
                     "end": "null",
                     "opt_ms_run[1]_aa_scores": aa_scores,
                     "opt_ms_run[1]_ground_truth_sequence": "null",
+                    "title": title,
                 }
                 self.writer.write_psm(psm_entry)
 

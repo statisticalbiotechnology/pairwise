@@ -27,6 +27,7 @@ class MztabWriter:
             "end",
             "opt_ms_run[1]_aa_scores",
             "opt_ms_run[1]_ground_truth_sequence",
+            "title",
         ]
         self.file_handle = None
         self.writer = None
@@ -75,7 +76,7 @@ class MztabWriter:
             return f"{value:.6f}"
         else:
             return str(value)
-        
+
     def flush(self):
         if self.file_handle:
             self.file_handle.flush()

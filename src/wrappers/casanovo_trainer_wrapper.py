@@ -408,6 +408,11 @@ class DeNovoSpec2Pep(pl.LightningModule, BeamSearchInterface):
         else:
             scan_ids = [-1] * len(spectra)
 
+        if "title" in batch:
+            titles = batch["title"]
+        else:
+            titles = ["unknown"] * len(spectra)
+
         # Generate predictions
         model_outputs = self.forward(spectra, precursors, spectrum_padding_mask)
 
@@ -420,12 +425,13 @@ class DeNovoSpec2Pep(pl.LightningModule, BeamSearchInterface):
             )
             precursor_charge = float(precursors[idx, 1].cpu().numpy())
             precursor_mz = float(precursors[idx, 2].cpu().numpy())
-
+            title = titles[idx]
             _pred_dict = {
                 "peak_file": peak_file,  # Peak file name
                 "scan_id": scan_id,  # Scan ID
                 "precursor_charge": precursor_charge,  # Precursor Charge
                 "precursor_mz": precursor_mz,  # Precursor m/z
+                "title": title,
             }
             if spectrum_preds:
                 # We're only considering the top match
@@ -490,6 +496,11 @@ class DeNovoSpec2Pep(pl.LightningModule, BeamSearchInterface):
         else:
             scan_ids = [-1] * len(spectra)
 
+        if "title" in batch:
+            titles = batch["title"]
+        else:
+            titles = ["unknown"] * len(spectra)
+
         # Generate predictions
         model_outputs = self.forward(spectra, precursors, spectrum_padding_mask)
 
@@ -502,12 +513,13 @@ class DeNovoSpec2Pep(pl.LightningModule, BeamSearchInterface):
             )
             precursor_charge = float(precursors[idx, 1].cpu().numpy())
             precursor_mz = float(precursors[idx, 2].cpu().numpy())
-
+            title = titles[idx]
             _pred_dict = {
                 "peak_file": peak_file,  # Peak file name
                 "scan_id": scan_id,  # Scan ID
                 "precursor_charge": precursor_charge,  # Precursor Charge
                 "precursor_mz": precursor_mz,  # Precursor m/z
+                "title": title,
             }
             if spectrum_preds:
                 # We're only considering the top match

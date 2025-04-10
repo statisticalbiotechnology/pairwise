@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 from depthcharge.data import SpectrumDataset
+import pyarrow as pa
 
 
 def main():
@@ -28,6 +29,7 @@ def main():
         path=output_path,
         batch_size=args.batch_size,
         min_peaks=0,
+        custom_fields=[pa.field("title", pa.string())],
     )
 
     print(f"Lance dataset created at {output_path}")
