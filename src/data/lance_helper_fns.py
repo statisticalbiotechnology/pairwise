@@ -9,11 +9,12 @@ Any = object()
 
 
 class LanceDataset(_LanceDataset):
-    def __len__(self):
-        num_rows = floor(
-            self.dataset.count_rows() / (self.batch_size * self.sampler._world_size)
-        )
-        return max(1, num_rows - 1)
+    # def __len__(self):
+    #     num_rows = floor(
+    #         self.dataset.count_rows() / (self.batch_size * self.sampler._world_size)
+    #     )
+    #     return max(1, num_rows - 1)
+    pass
 
 
 def _tensorize(obj: Any, dtype: torch.dtype = torch.float32) -> Any:  # noqa: ANN401
