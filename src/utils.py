@@ -249,8 +249,8 @@ def get_benchmark_data_module(
         pad_peaks,
         max_peaks=ds_config["top_peaks"],
         # Dataset specific setting for grabbing the correct precursor mass/mz
-        precursor_mz_name=False,
-        precursor_mass_name="precursor_mz",
+        precursor_mz_name="precursor_mz",
+        precursor_mass_name=False,
         # Peak filter settings
         filter_method=global_args.peak_filter_method,
         min_mz=global_args.min_mz,
