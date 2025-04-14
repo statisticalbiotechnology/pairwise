@@ -149,6 +149,7 @@ class DeNovoSpec2Pep(pl.LightningModule, BeamSearchInterface):
         # Extract precursor information
         mass = batch["precursor_mass"].to(self.device)  # Shape: [batch_size]
         charge = batch["precursor_charge"].to(self.device)  # Shape: [batch_size]
+        charge = torch.clamp(charge, 1, 10)
         mz = batch["precursor_mz"].to(self.device)  # Shape: [batch_size]
         precursors = torch.stack([mass, charge, mz], dim=1)  # Shape: [batch_size, 3]
 
