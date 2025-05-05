@@ -75,3 +75,10 @@ The full list of arguments and their descriptions can be found in `src/parse_arg
 
 ### Datasets
 TODO
+
+### Reproducing 9 species cross validation results
+1. Download checkpoint for specific species and 9 species version (1 or 2)
+2. Checkout to branch "9_species_cross_validation"
+3. Run script roc_curve.py with following command:
+   python roc_curve.py path_to_checkpoint species_name output_name_extension
+   - Output is a roc curve in a two column csv file
