@@ -26,7 +26,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Will save file {outname}.csv")
 
 import yaml
-with open(os.path.join(code_path, "configs/downstream/9_species_config.yaml")) as f:
+with open(os.path.join(code_path, "configs/denovo/9_species_config.yaml")) as f:
     ds_config = yaml.safe_load(f)
 
 # Dataloader
@@ -135,6 +135,7 @@ pl_downstream.eval()
 # Scale
 import utils
 ms = utils.RESIDUES_MSKB
+# Special exception for alternate 9 species V2 dataset
 if data_root_dir.split("_")[-1] == "MSV000090982":
     ms = {
         line.split()[0] : float(line.split()[1]) 
