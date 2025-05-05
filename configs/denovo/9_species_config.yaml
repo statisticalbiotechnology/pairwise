@@ -40,17 +40,3 @@ denovo_tf:
   decoder_dropout: 0.25
   decoder_use_cls: False
 
-#dataset_name: ninespecies
-#task: denovo
-#top_pks: 150
-#pep_length: [0, 100]
-#charge: [0, 10]
-#add_mass: True 
-paths:
-  train:
-    - train-00001-of-00002-fb1cb1b5c4a4ef4f.parquet
-    - train-00000-of-00002-ca1fbc3de7c99259.parquet
-  val:
-    - validation-00000-of-00001-b84568f5bf3ba95d.parquet
-  test:
-    - test-00000-of-00001-15be7bb3864037e7.parquet
