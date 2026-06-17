@@ -115,12 +115,6 @@ PA is API-compatible with Casanovo's *task* but not its I/O. The key differences
   rewrites tokens to ProForma Unimod (`C+57.021`→`C[UNIMOD:4]`,
   `M+15.995`→`M[UNIMOD:35]`, …; `output_mapper.py:20-30`). Casanovo emits mzTab
   natively, with `C[Carbamidomethyl]`-style residue labels.
-- **No per-step token probability distributions** are written by the container or
-  `make_predictions.sh`. The mzTab carries only scalar per-residue confidences,
-  and `outputs.csv` even *simulates* those by repeating the peptide score per
-  token (`output_mapper.py:191`). A consumer that needs the full distributions
-  (e.g. a borgonovo-style backend) must call the model directly — see
-  [docs/backend_notes.md](docs/backend_notes.md).
 
 ### Framework/structure
 We utilize Pytorch Lightning. We define the models in `src/models/`, and wrap them with Lightning modules that contain the training code. The training wrappers are found in `src/pl_wrappers.py`.
